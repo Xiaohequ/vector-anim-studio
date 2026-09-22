@@ -26,6 +26,8 @@ jobs:
     defaults:
       run:
         working-directory: app
+    outputs:
+      version: ${{ steps.version.outputs.value }}
 
     steps:
       - name: Checkout
@@ -113,17 +115,25 @@ jobs:
           name: app-release-aab
           path: dist
 
+      - name: Préparer les notes de release
+        run: |
+          mkdir -p dist
+          {
+            cat RELEASE_NOTES.md
+            echo
+            echo '---'
+            echo
+            echo "_Version ${{ needs.build.outputs.version }} · build #${{ github.run_number }} · commit \`${{ github.sha }}\` · $(date -u '+%Y-%m-%d %H:%M UTC')_"
+          } > dist/release_notes.md
+          echo '--- notes générées ---'
+          cat dist/release_notes.md
+
       - name: Créer la release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v0.1.{0}', github.run_number) }}
           name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('Vector Anim Studio — build {0}', github.run_number) }}
-          body: |
-            APK Android généré automatiquement depuis `${{ github.sha }}`.
-
-            Installation : télécharge le fichier `.apk` ci-dessous, transfère-le sur ton téléphone Android et ouvre-le (autorise « Installer des applications inconnues » pour ton navigateur ou ton gestionnaire de fichiers).
-
-            Build signé avec la clé debug de Flutter — destiné aux tests, pas à la publication sur le Play Store.
+          body_path: dist/release_notes.md
           files: |
             dist/*.apk
             dist/*.aab
