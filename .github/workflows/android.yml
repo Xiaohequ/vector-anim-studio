@@ -3,6 +3,7 @@ name: Android
 on:
   push:
     branches: [main]
+    tags: ['v*']
     paths-ignore:
       - '**.md'
       - 'docs/**'
@@ -45,6 +46,13 @@ jobs:
       - name: Version de Flutter
         run: flutter --version
 
+      - name: Version de l'application
+        id: version
+        working-directory: .
+        run: |
+          version=$(grep '^version:' app/pubspec.yaml | awk '{print $2}' | cut -d'+' -f1)
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+
       - name: Dépendances
         run: flutter pub get
 
@@ -60,16 +68,65 @@ jobs:
       - name: Build App Bundle release
         run: flutter build appbundle --release
 
+      - name: Renommer l'APK
+        working-directory: .
+        run: |
+          mkdir -p dist
+          cp app/build/app/outputs/flutter-apk/app-release.apk \
+             "dist/vector-anim-studio-${{ steps.version.outputs.value }}.apk"
+          cp app/build/app/outputs/bundle/release/app-release.aab \
+             "dist/vector-anim-studio-${{ steps.version.outputs.value }}.aab"
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: app-release-apk
-          path: app/build/app/outputs/flutter-apk/app-release.apk
+          path: dist/*.apk
           if-no-files-found: error
 
       - name: Upload App Bundle
         uses: actions/upload-artifact@v4
         with:
           name: app-release-aab
-          path: app/build/app/outputs/bundle/release/app-release.aab
+          path: dist/*.aab
           if-no-files-found: error
+
+  release:
+    name: Publier la release
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Récupérer l'APK
+        uses: actions/download-artifact@v4
+        with:
+          name: app-release-apk
+          path: dist
+
+      - name: Récupérer l'App Bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: app-release-aab
+          path: dist
+
+      - name: Créer la release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v0.1.{0}', github.run_number) }}
+          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('Vector Anim Studio — build {0}', github.run_number) }}
+          body: |
+            APK Android généré automatiquement depuis `${{ github.sha }}`.
+
+            Installation : télécharge le fichier `.apk` ci-dessous, transfère-le sur ton téléphone Android et ouvre-le (autorise « Installer des applications inconnues » pour ton navigateur ou ton gestionnaire de fichiers).
+
+            Build signé avec la clé debug de Flutter — destiné aux tests, pas à la publication sur le Play Store.
+          files: |
+            dist/*.apk
+            dist/*.aab
+          generate_release_notes: false
+          draft: false
+          prerelease: false
