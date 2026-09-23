@@ -57,7 +57,7 @@ scripts/flutter_docker.sh bash -lc "flutter pub get && flutter analyze && flutte
 scripts/flutter_docker.sh flutter build apk --release
 ```
 
-Le build Android de référence est fait par **GitHub Actions** (`.github/workflows/android.yml`) : `flutter analyze`, `flutter test`, APK + AAB release, puis publication d'une release GitHub contenant les deux artefacts.
+Le build Android de référence est fait par **GitHub Actions** (`.github/workflows/android.yml`) : `flutter analyze`, `flutter test`, build de l'APK release, puis publication d'une release GitHub contenant l'APK. Le workflow ne produit volontairement **pas** d'App Bundle (`.aab`).
 
 ## Contraintes d'environnement
 
@@ -73,6 +73,6 @@ Le build Android de référence est fait par **GitHub Actions** (`.github/workfl
 - [x] Menus Formes / Animations / Calques / Export
 - [x] Timeline à rectangles d'affichage empilés en lignes parallèles
 - [x] Export MP4 et GIF
-- [x] CI : analyse, tests, APK, AAB, release GitHub
+- [x] CI : analyse, tests, APK release, release GitHub (pas d'App Bundle)
 - [ ] Validation de l'export MP4 sur un appareil réel (MediaCodec)
 - [ ] Build iOS (runner macOS)

@@ -26,7 +26,7 @@ Studio d'animation vectorielle complet pour Android : projets multiples, formes 
 ## À savoir
 
 - Build **signé avec la clé debug** de Flutter : destiné aux tests, refusé par le Play Store.
-- Le fichier `.aab` est fourni pour un futur envoi sur le Play Store.
+- La CI ne produit que l'APK (pas d'App Bundle `.aab`).
 - L'export MP4 utilise l'encodeur natif du téléphone : le rendu peut varier selon l'appareil.
 
 <!--
