@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -11,12 +12,17 @@ import '../data/project_repository.dart';
 import '../engine/animation_presets.dart';
 import '../engine/export_service.dart';
 import '../engine/scene_painter.dart';
+import '../engine/selection_geometry.dart';
 import '../engine/timeline_controller.dart';
 import '../models/animation.dart';
 import 'shape_editor_screen.dart';
+import 'shape_properties_sheet.dart';
 import 'timeline_view.dart';
 
-/// Éditeur d'un projet : canvas, inspecteur, timeline, menus Formes/Animations.
+/// Geste en cours sur le canvas.
+enum _CanvasGesture { none, move, scale, rotate }
+
+/// Éditeur d'un projet : canvas, timeline, menus Formes/Animations.
 class StudioScreen extends StatefulWidget {
   const StudioScreen({
     super.key,
@@ -40,6 +46,19 @@ class _StudioScreenState extends State<StudioScreen>
   String? _selectedId;
   String? _error;
   Timer? _saveTimer;
+
+  // Option : aimanter la rotation aux multiples de 90° (bouton de la barre).
+  bool _snapRotation = false;
+
+  // Geste en cours sur le canvas (déplacement, pinch, rotation par poignée).
+  _CanvasGesture _gesture = _CanvasGesture.none;
+  int _activePointers = 0;
+  double _gestureBaseX = 0;
+  double _gestureBaseY = 0;
+  double _gestureBaseRotation = 0;
+  double _gestureBaseScale = 1;
+  double _gestureStartAngle = 0;
+  Offset _gestureStartPoint = Offset.zero;
 
   VectorShape? get _selected => _project?.shapeById(_selectedId);
 
@@ -257,6 +276,185 @@ class _StudioScreenState extends State<StudioScreen>
     await _flushSave();
   }
 
+  /// Ouvre la bottom sheet « Propriétés de la forme ».
+  Future<void> _showPropertiesSheet() async {
+    final project = _project;
+    final controller = _controller;
+    final shape = _selected;
+    if (project == null || controller == null || shape == null) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      backgroundColor: const Color(0xFF151922),
+      builder: (sheetContext) => ShapePropertiesSheet(
+        project: project,
+        shape: shape,
+        controller: controller,
+        onPropertyChanged: _setProperty,
+        onToggleKeyframe: _toggleKeyframe,
+        onKeyframeEasing: _setKeyframeEasing,
+        onEditLayers: () => _editShape(shape),
+      ),
+    );
+    if (mounted) setState(() {});
+  }
+
+  // ----------------------------------------------------------- gestes canvas
+
+  void _pointerDown() => _activePointers++;
+
+  void _pointerUp() => _activePointers = math.max(0, _activePointers - 1);
+
+  /// Écrit une propriété pendant un geste (auto-key : pose au curseur).
+  void _applyGestureValue(
+    VectorShape shape,
+    TimelineController controller,
+    AnimatableProperty property,
+    double value,
+  ) {
+    setState(() => shape.applyValue(
+          property,
+          value,
+          controller.timeMs,
+          autoKey: true,
+          toleranceMs: controller.snapToleranceMs,
+        ));
+  }
+
+  void _onCanvasGestureStart(
+    ScaleStartDetails details,
+    AnimationProject project,
+    TimelineController controller,
+    Size canvasSize,
+  ) {
+    _gestureStartPoint = details.localFocalPoint;
+    final shape = _selected;
+    final bounds = shape == null
+        ? null
+        : ScenePainter.shapeBounds(shape, controller.timeMs);
+    if (shape == null || bounds == null) {
+      _gesture = _CanvasGesture.none;
+      return;
+    }
+    final geo = SceneGeometry.fitFor(project, canvasSize);
+    if (_activePointers >= 2) {
+      // Pinch : échelle de la forme sélectionnée.
+      _gesture = _CanvasGesture.scale;
+    } else if (SelectionGeometry.hitRotationHandle(
+      details.localFocalPoint,
+      SelectionGeometry.rotationHandleCanvas(
+        bounds,
+        shape,
+        controller.timeMs,
+        geo,
+      ),
+    )) {
+      // Poignée de rotation.
+      _gesture = _CanvasGesture.rotate;
+      final center =
+          SelectionGeometry.centerCanvas(shape, controller.timeMs, geo);
+      _gestureStartAngle = math.atan2(
+        details.localFocalPoint.dy - center.dy,
+        details.localFocalPoint.dx - center.dx,
+      );
+    } else if (SelectionGeometry.hitShape(
+      bounds,
+      shape,
+      controller.timeMs,
+      geo,
+      details.localFocalPoint,
+    )) {
+      // Corps de la forme : déplacement.
+      _gesture = _CanvasGesture.move;
+    } else {
+      _gesture = _CanvasGesture.none;
+    }
+    _gestureBaseX = shape.valueAt(AnimatableProperty.x, controller.timeMs);
+    _gestureBaseY = shape.valueAt(AnimatableProperty.y, controller.timeMs);
+    _gestureBaseRotation =
+        shape.valueAt(AnimatableProperty.rotation, controller.timeMs);
+    _gestureBaseScale =
+        shape.valueAt(AnimatableProperty.scale, controller.timeMs);
+  }
+
+  void _onCanvasGestureUpdate(
+    ScaleUpdateDetails details,
+    AnimationProject project,
+    TimelineController controller,
+    Size canvasSize,
+  ) {
+    final shape = _selected;
+    if (shape == null || _gesture == _CanvasGesture.none) return;
+    switch (_gesture) {
+      case _CanvasGesture.move:
+        final geo = SceneGeometry.fitFor(project, canvasSize);
+        final sceneDelta = geo.canvasToScene(details.localFocalPoint) -
+            geo.canvasToScene(_gestureStartPoint);
+        _applyGestureValue(shape, controller, AnimatableProperty.x,
+            _gestureBaseX + sceneDelta.dx);
+        _applyGestureValue(shape, controller, AnimatableProperty.y,
+            _gestureBaseY + sceneDelta.dy);
+      case _CanvasGesture.scale:
+        final next = (_gestureBaseScale * details.scale).clamp(0.05, 4.0);
+        _applyGestureValue(
+            shape, controller, AnimatableProperty.scale, next.toDouble());
+      case _CanvasGesture.rotate:
+        final geo = SceneGeometry.fitFor(project, canvasSize);
+        final center =
+            SelectionGeometry.centerCanvas(shape, controller.timeMs, geo);
+        final angle = math.atan2(
+          details.localFocalPoint.dy - center.dy,
+          details.localFocalPoint.dx - center.dx,
+        );
+        var next = _gestureBaseRotation + (angle - _gestureStartAngle);
+        if (_snapRotation) next = _snapAngle(next);
+        _applyGestureValue(
+            shape, controller, AnimatableProperty.rotation, next);
+      case _CanvasGesture.none:
+        break;
+    }
+  }
+
+  /// Option : aimante la rotation aux multiples de 90° à ±3°.
+  double _snapAngle(double angle) {
+    const step = math.pi / 2;
+    const tolerance = 3 * math.pi / 180;
+    final snapped = (angle / step).roundToDouble() * step;
+    return (angle - snapped).abs() <= tolerance ? snapped : angle;
+  }
+
+  void _onCanvasGestureEnd(ScaleEndDetails details) {
+    if (_gesture != _CanvasGesture.none) _scheduleSave();
+    _gesture = _CanvasGesture.none;
+  }
+
+  /// Tap sur une forme : la sélectionne (du premier plan vers l'arrière-plan).
+  void _onCanvasTapUp(
+    TapUpDetails details,
+    AnimationProject project,
+    TimelineController controller,
+    Size canvasSize,
+  ) {
+    final geo = SceneGeometry.fitFor(project, canvasSize);
+    for (final shape in project.shapes.reversed) {
+      if (!shape.isVisibleAt(controller.timeMs)) continue;
+      final bounds = ScenePainter.shapeBounds(shape, controller.timeMs);
+      if (bounds == null) continue;
+      if (SelectionGeometry.hitShape(
+        bounds,
+        shape,
+        controller.timeMs,
+        geo,
+        details.localPosition,
+      )) {
+        setState(() => _selectedId = shape.id);
+        return;
+      }
+    }
+  }
+
   // ----------------------------------------------------------------- export
 
   Future<void> _exportVideo(VideoFormat format) async {
@@ -405,7 +603,6 @@ class _StudioScreenState extends State<StudioScreen>
             return Column(
               children: <Widget>[
                 Expanded(child: _buildCanvas(project, controller)),
-                _buildInspector(project, controller),
                 _buildTimeline(project, controller),
                 _buildPlaybar(project, controller),
               ],
@@ -425,161 +622,87 @@ class _StudioScreenState extends State<StudioScreen>
         border: Border.all(color: const Color(0xFF232733)),
       ),
       clipBehavior: Clip.antiAlias,
-      child: InteractiveViewer(
-        maxScale: 5,
-        child: Center(
-          child: AspectRatio(
-            aspectRatio: project.width / project.height,
-            child: CustomPaint(
-              painter: ScenePainter(
-                project: project,
-                timeMs: controller.timeMs,
-                selectedShapeId: _selectedId,
-              ),
-              child: const SizedBox.expand(),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInspector(AnimationProject project, TimelineController controller) {
-    final shape = _selected;
-    if (shape == null) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Text('Aucune forme — commence par « Formes › Ajouter une forme ».'),
-      );
-    }
-    final keyframe = controller.nearestKeyframe(shape);
-    final hasKeyframes = shape.hasKeyframes;
-    return SizedBox(
-      height: 196,
-      child: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        children: <Widget>[
-          Row(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final canvasSize = constraints.biggest;
+          final shape = _selected;
+          return Stack(
             children: <Widget>[
-              Expanded(
-                child: Text(
-                  shape.name,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-              IconButton(
-                tooltip: keyframe == null
-                    ? 'Ajouter une keyframe au curseur'
-                    : 'Retirer la keyframe au curseur',
-                iconSize: 20,
-                icon: Icon(
-                  keyframe == null ? Icons.diamond_outlined : Icons.diamond,
-                  color: hasKeyframes ? const Color(0xFFF2C94C) : null,
-                ),
-                onPressed: _toggleKeyframe,
-              ),
-              TextButton.icon(
-                onPressed: () => _editShape(shape),
-                icon: const Icon(Icons.edit, size: 16),
-                label: const Text('Couches'),
-              ),
-            ],
-          ),
-          Text(
-            'Affichée de ${(shape.startMs / 1000).toStringAsFixed(2)} s à '
-            '${(shape.endMs / 1000).toStringAsFixed(2)} s'
-            '${shape.visible ? '' : ' · masquée'}'
-            '${hasKeyframes ? '' : ' · aucune keyframe'}',
-            style: const TextStyle(fontSize: 11, color: Colors.white70),
-          ),
-          const SizedBox(height: 4),
-          for (final property in AnimatableProperty.values)
-            _buildPropertyRow(shape, property, controller),
-          Row(
-            children: <Widget>[
-              const SizedBox(
-                width: 92,
-                child: Text('Interpolation', style: TextStyle(fontSize: 12)),
-              ),
-              Expanded(
-                child: DropdownButton<EasingKind>(
-                  isExpanded: true,
-                  value: keyframe?.easing ?? EasingKind.easeInOut,
-                  onChanged: keyframe == null
-                      ? null
-                      : (value) {
-                          if (value != null) _setKeyframeEasing(value);
-                        },
-                  items: <DropdownMenuItem<EasingKind>>[
-                    for (final easing in EasingKind.values)
-                      DropdownMenuItem<EasingKind>(
-                        value: easing,
-                        child: Text(
-                          easingLabel(easing),
-                          style: const TextStyle(fontSize: 12),
-                        ),
+              Positioned.fill(
+                child: Listener(
+                  onPointerDown: (_) => _pointerDown(),
+                  onPointerUp: (_) => _pointerUp(),
+                  onPointerCancel: (_) => _pointerUp(),
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onScaleStart: (details) => _onCanvasGestureStart(
+                        details, project, controller, canvasSize),
+                    onScaleUpdate: (details) => _onCanvasGestureUpdate(
+                        details, project, controller, canvasSize),
+                    onScaleEnd: _onCanvasGestureEnd,
+                    onTapUp: (details) =>
+                        _onCanvasTapUp(details, project, controller, canvasSize),
+                    child: CustomPaint(
+                      painter: ScenePainter(
+                        project: project,
+                        timeMs: controller.timeMs,
+                        selectedShapeId: _selectedId,
+                        showFrame: true,
                       ),
-                  ],
+                      child: const SizedBox.expand(),
+                    ),
+                  ),
                 ),
               ),
+              if (shape != null && shape.isVisibleAt(controller.timeMs))
+                _buildPropertiesButton(shape, controller, canvasSize),
             ],
-          ),
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Text(
-              hasKeyframes
-                  ? 'Forme animée : toute modification écrit une keyframe au curseur.'
-                  : 'Ajoute une keyframe (◆) pour animer toutes les propriétés.',
-              style: const TextStyle(fontSize: 11, color: Colors.white54),
-            ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
 
-  Widget _buildPropertyRow(
+  /// Bouton « propriétés » ancré au coin bas-gauche du rectangle de sélection.
+  Widget _buildPropertiesButton(
     VectorShape shape,
-    AnimatableProperty property,
     TimelineController controller,
+    Size canvasSize,
   ) {
-    final value = shape.valueAt(property, controller.timeMs);
-    final (min, max, step) = switch (property) {
-      AnimatableProperty.x => (0.0, _project!.width, 1.0),
-      AnimatableProperty.y => (0.0, _project!.height, 1.0),
-      AnimatableProperty.rotation => (-3.15, 3.15, 0.01),
-      AnimatableProperty.scale => (0.05, 4.0, 0.01),
-      AnimatableProperty.opacity => (0.0, 1.0, 0.01),
-      AnimatableProperty.strokeWidth => (0.0, 6.0, 0.05),
-    };
-    final animated = shape.isAnimated(property);
-    return Row(
-      children: <Widget>[
-        SizedBox(
-          width: 92,
-          child: Text(propertyLabel(property), style: const TextStyle(fontSize: 12)),
+    final project = _project;
+    final bounds = ScenePainter.shapeBounds(shape, controller.timeMs);
+    if (project == null || bounds == null || canvasSize.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final geo = SceneGeometry.fitFor(project, canvasSize);
+    final center = SelectionGeometry.propertiesButtonCanvas(
+      bounds,
+      shape,
+      controller.timeMs,
+      geo,
+    );
+    const size = 38.0;
+    final left = (center.dx - size / 2)
+        .clamp(0.0, math.max(0.0, canvasSize.width - size))
+        .toDouble();
+    final top = (center.dy - size / 2)
+        .clamp(0.0, math.max(0.0, canvasSize.height - size))
+        .toDouble();
+    return Positioned(
+      left: left,
+      top: top,
+      width: size,
+      height: size,
+      child: IconButton(
+        tooltip: 'Propriétés de la forme',
+        padding: EdgeInsets.zero,
+        style: IconButton.styleFrom(
+          backgroundColor: const Color(0xCC151922),
+          foregroundColor: const Color(0xFF7DD3FC),
         ),
-        Expanded(
-          child: Slider(
-            min: min,
-            max: max,
-            divisions: ((max - min) / step).round().clamp(1, 2000),
-            value: value.clamp(min, max),
-            onChanged: (next) => _setProperty(property, next),
-          ),
-        ),
-        SizedBox(
-          width: 32,
-          child: Tooltip(
-            message: animated ? 'Propriété animée' : 'Valeur fixe',
-            child: Icon(
-              animated ? Icons.diamond : Icons.diamond_outlined,
-              size: 16,
-              color: animated ? const Color(0xFFF2C94C) : Colors.white24,
-            ),
-          ),
-        ),
-      ],
+        icon: const Icon(Icons.tune, size: 20),
+        onPressed: _showPropertiesSheet,
+      ),
     );
   }
 
@@ -648,6 +771,13 @@ class _StudioScreenState extends State<StudioScreen>
           IconButton(
             onPressed: () => controller.setLoop(!controller.loop),
             icon: Icon(controller.loop ? Icons.repeat_on : Icons.repeat),
+          ),
+          IconButton(
+            tooltip: 'Snap rotation 90°',
+            isSelected: _snapRotation,
+            onPressed: () => setState(() => _snapRotation = !_snapRotation),
+            icon: const Icon(Icons.rotate_90_degrees_ccw_outlined),
+            selectedIcon: const Icon(Icons.rotate_90_degrees_ccw),
           ),
           const Spacer(),
           Text('${project.shapes.length} forme(s)', style: const TextStyle(fontSize: 12)),

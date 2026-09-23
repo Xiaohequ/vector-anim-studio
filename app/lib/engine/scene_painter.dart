@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import '../models/animation.dart';
+import 'selection_geometry.dart';
 
 /// Dessine la scène vectorielle à un instant donné.
 class ScenePainter extends CustomPainter {
@@ -13,12 +14,16 @@ class ScenePainter extends CustomPainter {
     required this.timeMs,
     this.selectedShapeId,
     this.transparentBackground = false,
+    this.showFrame = false,
   });
 
   final AnimationProject project;
   final int timeMs;
   final String? selectedShapeId;
   final bool transparentBackground;
+
+  /// Dessine la bordure du cadre projet (édition uniquement, jamais en export).
+  final bool showFrame;
 
   /// Facteur d'échelle permettant d'inscrire la scène dans [size].
   static double scaleFor(AnimationProject project, Size size) => math.min(
@@ -28,13 +33,11 @@ class ScenePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final scale = scaleFor(project, size);
-    final dx = (size.width - project.width * scale) / 2;
-    final dy = (size.height - project.height * scale) / 2;
+    final geo = SceneGeometry.fitFor(project, size);
 
     canvas.save();
-    canvas.translate(dx, dy);
-    canvas.scale(scale);
+    canvas.translate(geo.dx, geo.dy);
+    canvas.scale(geo.scale);
 
     if (!transparentBackground) {
       canvas.drawRect(
@@ -46,10 +49,37 @@ class ScenePainter extends CustomPainter {
     for (final shape in project.shapes) {
       if (!shape.isVisibleAt(timeMs)) continue;
       _paintShape(canvas, shape);
-      if (shape.id == selectedShapeId) _paintSelection(canvas, shape);
     }
 
     canvas.restore();
+
+    // Bordure du cadre projet (édition uniquement : jamais en export).
+    if (showFrame) {
+      final topLeft = geo.sceneToCanvas(Offset.zero);
+      final bottomRight =
+          geo.sceneToCanvas(Offset(project.width, project.height));
+      canvas.drawRect(
+        Rect.fromPoints(topLeft, bottomRight),
+        Paint()
+          ..color = const Color(0xFF3A4050)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1
+          ..isAntiAlias = true,
+      );
+    }
+
+    // Sélection + poignées en espace écran : épaisseur constante quelle que
+    // soit l'échelle de la forme.
+    VectorShape? selected;
+    if (selectedShapeId != null) {
+      for (final shape in project.shapes) {
+        if (shape.id == selectedShapeId && shape.isVisibleAt(timeMs)) {
+          selected = shape;
+          break;
+        }
+      }
+    }
+    if (selected != null) _paintSelectionOverlay(canvas, selected, geo);
   }
 
   void _paintShape(Canvas canvas, VectorShape shape) {
@@ -147,28 +177,35 @@ class ScenePainter extends CustomPainter {
     canvas.restore();
   }
 
-  void _paintSelection(Canvas canvas, VectorShape shape) {
+  /// Rectangle de sélection + poignée de rotation, dessinés en espace écran
+  /// (le trait garde 2 px quelles que soient les échelles forme/vue).
+  void _paintSelectionOverlay(
+    Canvas canvas,
+    VectorShape shape,
+    SceneGeometry geo,
+  ) {
     final bounds = shapeBounds(shape, timeMs);
     if (bounds == null) return;
 
-    final x = shape.valueAt(AnimatableProperty.x, timeMs);
-    final y = shape.valueAt(AnimatableProperty.y, timeMs);
-    final rotation = shape.valueAt(AnimatableProperty.rotation, timeMs);
-    final scale = shape.valueAt(AnimatableProperty.scale, timeMs);
+    final corners = SelectionGeometry.cornersCanvas(bounds, shape, timeMs, geo);
+    final border = Paint()
+      ..color = const Color(0xFF7DD3FC)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..isAntiAlias = true;
+    canvas.drawPath(Path()..addPolygon(corners, true), border);
 
-    canvas.save();
-    canvas.translate(x, y);
-    canvas.rotate(rotation);
-    canvas.scale(scale <= 0 ? 0.0001 : scale);
-    canvas.drawRect(
-      bounds.inflate(6),
-      Paint()
-        ..color = const Color(0xFF7DD3FC)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.5
-        ..isAntiAlias = true,
+    final topCenter =
+        SelectionGeometry.topCenterCanvas(bounds, shape, timeMs, geo);
+    final handle =
+        SelectionGeometry.rotationHandleCanvas(bounds, shape, timeMs, geo);
+    canvas.drawLine(topCenter, handle, border..strokeWidth = 1.5);
+    canvas.drawCircle(
+      handle,
+      SelectionGeometry.handleRadius,
+      Paint()..color = const Color(0xFF0B0D12),
     );
-    canvas.restore();
+    canvas.drawCircle(handle, SelectionGeometry.handleRadius, border);
   }
 
   /// Boîte englobante de la forme en coordonnées locales (avant transformation).
