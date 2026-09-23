@@ -74,6 +74,6 @@ Après export, `share_plus` partage le fichier (feuille de partage système).
 
 ## 8. Reste à faire
 
-- Valider l'export MP4 sur un appareil réel (encodeur natif non testable sur le serveur) — **fait** : validé par l'utilisateur le 2026-09-23 sur l'APK `0.2.0` (build 7).
+- Valider l'export MP4 sur un appareil réel (encodeur natif non testable sur le serveur) — **fait** : validé par l'utilisateur le 2026-09-23 sur l'APK `0.2.0` (build 7). Export GIF et timeline (poignées début/fin, empilement des lignes) également validés le même jour.
 - Job iOS sur runner macOS dans le workflow GitHub Actions.
 - Backlog fonctionnel : import SVG, édition de courbes de Bézier, export SVG animé, calques imbriqués, partage cloud.

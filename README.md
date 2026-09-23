@@ -75,4 +75,5 @@ Le build Android de référence est fait par **GitHub Actions** (`.github/workfl
 - [x] Export MP4 et GIF
 - [x] CI : analyse, tests, APK release, release GitHub (pas d'App Bundle)
 - [x] Validation de l'export MP4 sur un appareil réel (MediaCodec) — validé par l'utilisateur le 2026-09-23
+- [x] Validation de l'export GIF et de la timeline sur appareil réel (poignées début/fin, empilement des lignes) — validé par l'utilisateur le 2026-09-23
 - [ ] Build iOS (runner macOS)
