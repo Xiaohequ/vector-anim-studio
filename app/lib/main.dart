@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
 
-import 'ui/studio_screen.dart';
+import 'data/project_repository.dart';
+import 'ui/home_screen.dart';
 
-void main() => runApp(const VectorAnimStudioApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(VectorAnimStudioApp(repository: ProjectRepository()));
+}
 
 class VectorAnimStudioApp extends StatelessWidget {
-  const VectorAnimStudioApp({super.key});
+  const VectorAnimStudioApp({super.key, required this.repository});
+
+  final ProjectRepository repository;
 
   @override
   Widget build(BuildContext context) {
@@ -17,7 +23,7 @@ class VectorAnimStudioApp extends StatelessWidget {
         brightness: Brightness.dark,
         colorSchemeSeed: const Color(0xFF5B8DEF),
       ),
-      home: const StudioScreen(),
+      home: HomeScreen(repository: repository),
     );
   }
 }
