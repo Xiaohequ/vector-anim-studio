@@ -13,10 +13,15 @@ PROJECT_DIR="${PROJECT_DIR:-/root/.nanobot/workspace/vector_anim_studio}"
 # dépendances : la config de paquets pointerait vers un cache disparu).
 PUB_CACHE_DIR="${PUB_CACHE_DIR:-$PROJECT_DIR/tmp/pub-cache}"
 mkdir -p "$PUB_CACHE_DIR"
+# Idem pour Gradle (~200 Mo de distribution + caches AGP) : sans ce montage,
+# chaque invocation de gradlew retélécharge la distribution complète.
+GRADLE_CACHE_DIR="${GRADLE_CACHE_DIR:-$PROJECT_DIR/tmp/gradle-cache}"
+mkdir -p "$GRADLE_CACHE_DIR"
 
 exec docker run --rm -i \
   -e GRADLE_OPTS="-Dorg.gradle.jvmargs=-Xmx512m -Dorg.gradle.daemon=false -Dorg.gradle.workers.max=1" \
   -v "${PROJECT_DIR}":/work \
   -v "${PUB_CACHE_DIR}":/root/.pub-cache \
+  -v "${GRADLE_CACHE_DIR}":/root/.gradle \
   -w /work/app \
   "${IMAGE}" "$@"
