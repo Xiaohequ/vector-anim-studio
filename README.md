@@ -1,51 +1,78 @@
 # vector_anim_studio
 
-Application Flutter (Android + iOS) pour **créer des animations vectorielles** : scène, formes vectorielles, timeline à keyframes, lecture et export.
+Application Flutter (Android, iOS configuré) pour **créer des animations vectorielles** : projets multiples, formes composées de couches, keyframes par propriété, timeline à rectangles d'affichage, lecture et export MP4 / GIF / PNG / JSON.
 
-## Objectif
+## Fonctionnalités
 
-Un studio d'animation vectorielle mobile : on dessine des formes, on les anime dans le temps avec des keyframes, on prévisualise en boucle, puis on exporte (projet JSON, séquence d'images, GIF).
+**Écran d'accueil** — liste des projets enregistrés (nom, format, durée, fps, nombre de formes, date de modification), création d'un nouveau projet (nom, format portrait/paysage/carré, durée, fps), projet d'exemple, renommage, duplication, suppression.
 
-## Périmètre MVP
+**Éditeur de projet** — quatre menus :
+- **Formes** : liste des formes, sélection, édition, suppression, bouton « Ajouter » qui ouvre la création de forme.
+- **Animations** (forme sélectionnée requise) : six presets — apparition, disparition, déplacement, rotation, pulsation, fondu — plus la gestion des keyframes par propriété (position, rotation, échelle, opacité, épaisseur) avec courbes linéaire, easeIn, easeOut, easeInOut, step.
+- **Calques** : ordre de rendu, visibilité, suppression.
+- **Export** : MP4 (H.264 via `flutter_quick_video_encoder`), GIF animé, PNG de la frame courante, JSON du projet — puis partage via `share_plus`.
 
-1. **Scène** : canvas 2D avec zoom/pan, grille optionnelle, fond couleur/dégradé.
-2. **Formes vectorielles** : cercle, rectangle, ligne, chemin (multi-points), groupe.
-3. **Propriétés animables** : position, rotation, échelle, opacité, couleur, épaisseur de trait.
-4. **Timeline** : durée, lecture/pause/scrub, keyframes par propriété, interpolation linéaire puis easing.
-5. **Lecture** : aperçu temps réel, boucle, onglet calques.
-6. **Export** : sauvegarde/chargement de projet (JSON), export PNG par frame, export GIF.
+**Timeline** — chaque forme est un rectangle : bord gauche = début d'affichage, bord droit = fin, poignées déplaçables. Deux formes qui se chevauchent dans le temps occupent automatiquement deux lignes parallèles. Tête de lecture scrubbable, lecture/pause, boucle, règle temporelle et losanges de keyframes.
 
-Hors MVP (backlog) : import SVG, édition de courbes de Bézier, export SVG animé, partage cloud, calques imbriqués.
+**Création de forme** — aperçu en haut de l'écran, liste des couches en bas : ajout de formes basiques (rectangle, cercle, ligne, chemin) comme nouvelles couches, changement de couche, réglage taille / position / couleur / rotation / opacité / épaisseur, et fenêtre d'affichage (début–fin) sur la timeline.
 
 ## Pile technique
 
-- Flutter stable / Dart 3 — cibles `android` et `ios`
-- Rendu vectoriel via `CustomPainter` (pas d'assets images)
-- État : `ChangeNotifier` + `InheritedNotifier` (dépendances minimales)
-- Export : rendu offscreen `ui.PictureRecorder` → PNG ; assemblage GIF via package dédié
-- Organisation cible : `lib/models` (scène, forme, keyframe), `lib/engine` (timeline, interpolation, renderer), `lib/ui` (canvas, timeline, inspecteur)
-
-## Contraintes d'environnement (importantes)
-
-- Le projet est généré et compilé **dans le conteneur officiel Flutter** `ghcr.io/cirruslabs/flutter:stable`, lancé sur l'hôte Docker via le socket monté dans le conteneur nanobot.
-- Hôte : Ubuntu 24.04, 2 vCPU, **~954 Mo de RAM** → build Android bridé (Gradle `-Xmx512m`, `-j1`, `--no-daemon`) ou déporté sur GitHub Actions.
-- **Pas de macOS** disponible : l'app est configurée pour iOS (`ios/`, bundle id), mais la compilation iOS doit passer par un runner macOS (GitHub Actions / Codemagic).
+- Flutter stable / Dart 3 — cible `android` (iOS configuré mais non compilé : pas de macOS ici)
+- Rendu vectoriel 100 % `CustomPainter`, aucun asset image
+- État : `ChangeNotifier` + `InheritedNotifier`
+- Persistance : **sqflite** (projet, formes, couches, pistes de keyframes) + images/JSON exportés dans le dossier documents de l'application
+- Export : rendu offscreen `ui.PictureRecorder` → PNG / frames RGBA → encodeur MP4 natif ou GIF pur Dart
 
 ## Structure
 
 ```
 vector_anim_studio/
-├── app/        # projet Flutter (généré dans le conteneur Flutter)
-├── docs/       # plan, décisions techniques
-├── scripts/    # helpers de build/run via Docker
-└── tmp/        # artefacts temporaires (non versionnés)
+├─ app/
+│  ├─ lib/
+│  │  ├─ models/animation.dart          # projet, forme, couche, keyframes, presets de format
+│  │  ├─ data/project_repository.dart   # schéma et accès sqflite
+│  │  ├─ data/project_store.dart        # état de l'écran d'accueil
+│  │  ├─ engine/scene_painter.dart      # rendu vectoriel (CustomPainter)
+│  │  ├─ engine/timeline_controller.dart# temps courant, lecture, boucle, keyframes
+│  │  ├─ engine/timeline_layout.dart    # empilement des rectangles sur la timeline
+│  │  ├─ engine/animation_presets.dart  # presets d'animation
+│  │  ├─ engine/export_service.dart     # MP4, GIF, PNG, JSON
+│  │  └─ ui/                            # home_screen, studio_screen, shape_editor_screen, timeline_view, palette
+│  └─ test/                             # repository, timeline layout, modèle, widgets
+├─ docs/PLAN.md                         # décisions techniques
+├─ scripts/flutter_docker.sh            # CLI Flutter via le conteneur cirruslabs
+└─ tmp/                                 # artefacts de build (non versionné)
 ```
+
+## Travail sur le projet
+
+Aucune toolchain Flutter n'est installée dans le conteneur nanobot : tout passe par l'image `ghcr.io/cirruslabs/flutter:stable` lancée sur le démon Docker de l'hôte.
+
+```bash
+# Dépendances + analyse + tests (le cache pub est partagé via tmp/pub-cache)
+scripts/flutter_docker.sh bash -lc "flutter pub get && flutter analyze && flutter test"
+
+# Build local (bridé : ~950 Mio de RAM sur l'hôte)
+scripts/flutter_docker.sh flutter build apk --release
+```
+
+Le build Android de référence est fait par **GitHub Actions** (`.github/workflows/android.yml`) : `flutter analyze`, `flutter test`, APK + AAB release, puis publication d'une release GitHub contenant les deux artefacts.
+
+## Contraintes d'environnement
+
+- Hôte : 2 vCPU, ~950 Mio de RAM → builds Gradle limités (`-Xmx512m`, `-j1`, `--no-daemon`) ou déportés sur GitHub Actions.
+- Pas de macOS disponible : la compilation iOS (bundle id déjà configuré) doit passer par un runner macOS.
+- Pas d'émulateur Android possible sur le serveur (pas de `/dev/kvm`) : la validation visuelle se fait en installant l'APK sur un téléphone.
 
 ## Statut
 
-- [x] Workspace créé
-- [x] Accès Docker externe validé (Engine 28.0.1 via socket monté)
-- [ ] Scaffold Flutter (`flutter create --platforms=android,ios`) dans le conteneur
-- [ ] Implémentation MVP
-- [ ] Build Android de validation
-- [ ] Push repo public
+- [x] MVP : scène, formes, keyframes, timeline, export JSON/PNG
+- [x] Projets multiples persistés (sqflite) + écran d'accueil
+- [x] Formes composées de couches + écran de création de forme (aperçu + couches)
+- [x] Menus Formes / Animations / Calques / Export
+- [x] Timeline à rectangles d'affichage empilés en lignes parallèles
+- [x] Export MP4 et GIF
+- [x] CI : analyse, tests, APK, AAB, release GitHub
+- [ ] Validation de l'export MP4 sur un appareil réel (MediaCodec)
+- [ ] Build iOS (runner macOS)
