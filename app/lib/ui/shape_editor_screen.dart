@@ -114,6 +114,21 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
     });
   }
 
+  void _duplicateLayer(ShapeLayer layer) {
+    setState(() {
+      final index = _draft.layers.indexOf(layer);
+      final clone = layer.copy(
+        id: generateId('layer'),
+        name: '${layer.name} (copie)',
+      );
+      clone
+        ..x = layer.x + 16
+        ..y = layer.y + 16;
+      _draft.layers.insert(index + 1, clone);
+      _selectedLayerId = clone.id;
+    });
+  }
+
   void _removeLayer(ShapeLayer layer) {
     if (_draft.layers.length <= 1) {
       _snack('Une forme doit garder au moins une couche.');
@@ -192,6 +207,7 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
               selectedLayer: layer,
               onSelect: (value) => setState(() => _selectedLayerId = value.id),
               onAdd: _addLayer,
+              onDuplicate: _duplicateLayer,
               onMove: _moveLayer,
               onChanged: () => setState(() {}),
             ),
@@ -453,6 +469,7 @@ class LayerPanel extends StatelessWidget {
     required this.selectedLayer,
     required this.onSelect,
     required this.onAdd,
+    required this.onDuplicate,
     required this.onMove,
     required this.onChanged,
   });
@@ -462,6 +479,7 @@ class LayerPanel extends StatelessWidget {
   final ShapeLayer? selectedLayer;
   final ValueChanged<ShapeLayer> onSelect;
   final ValueChanged<ShapeKind> onAdd;
+  final ValueChanged<ShapeLayer> onDuplicate;
   final void Function(int index, int delta) onMove;
   final VoidCallback onChanged;
 
@@ -557,6 +575,12 @@ class LayerPanel extends StatelessWidget {
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
+            IconButton(
+              tooltip: 'Dupliquer',
+              iconSize: 18,
+              onPressed: () => onDuplicate(layer),
+              icon: const Icon(Icons.copy),
+            ),
             IconButton(
               tooltip: layer.visible ? 'Masquer' : 'Afficher',
               iconSize: 18,

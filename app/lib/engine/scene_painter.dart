@@ -200,9 +200,99 @@ class ScenePainter extends CustomPainter {
           path.close();
         }
         canvas.drawPath(path, paint);
+      case ShapeKind.triangle:
+      case ShapeKind.star:
+      case ShapeKind.hexagon:
+      case ShapeKind.cross:
+      case ShapeKind.heart:
+      case ShapeKind.arrow:
+        canvas.drawPath(_kindPath(layer), paint);
     }
 
     canvas.restore();
+  }
+
+  /// Chemin paramétrique des formes géométriques, défini dans la boîte
+  /// [(-w/2, w/2) × (-h/2, h/2)] centrée sur l'origine de la couche.
+  Path _kindPath(ShapeLayer layer) {
+    final w = math.max(1.0, layer.width);
+    final h = math.max(1.0, layer.height);
+    final path = Path();
+    switch (layer.kind) {
+      case ShapeKind.triangle:
+        path.moveTo(0, -h / 2);
+        path.lineTo(w / 2, h / 2);
+        path.lineTo(-w / 2, h / 2);
+        path.close();
+      case ShapeKind.star:
+        const points = 5;
+        const innerRatio = 0.45;
+        for (var i = 0; i < points * 2; i++) {
+          final angle = -math.pi / 2 + i * math.pi / points;
+          final radius = i.isEven ? 1.0 : innerRatio;
+          final x = math.cos(angle) * (w / 2) * radius;
+          final y = math.sin(angle) * (h / 2) * radius;
+          if (i == 0) {
+            path.moveTo(x, y);
+          } else {
+            path.lineTo(x, y);
+          }
+        }
+        path.close();
+      case ShapeKind.hexagon:
+        for (var i = 0; i < 6; i++) {
+          final angle = -math.pi / 2 + i * math.pi / 3;
+          final x = math.cos(angle) * w / 2;
+          final y = math.sin(angle) * h / 2;
+          if (i == 0) {
+            path.moveTo(x, y);
+          } else {
+            path.lineTo(x, y);
+          }
+        }
+        path.close();
+      case ShapeKind.cross:
+        final a = w / 2;
+        final b = h / 2;
+        final tx = w / 6;
+        final ty = h / 6;
+        path.addPolygon(<Offset>[
+          Offset(-tx, -b),
+          Offset(tx, -b),
+          Offset(tx, -ty),
+          Offset(a, -ty),
+          Offset(a, ty),
+          Offset(tx, ty),
+          Offset(tx, b),
+          Offset(-tx, b),
+          Offset(-tx, ty),
+          Offset(-a, ty),
+          Offset(-a, -ty),
+          Offset(-tx, -ty),
+        ], true);
+      case ShapeKind.heart:
+        final cw = w / 2;
+        final ch = h / 2;
+        path.moveTo(0, ch);
+        path.cubicTo(-cw, ch * 0.25, -cw * 0.55, -ch, 0, -ch * 0.35);
+        path.cubicTo(cw * 0.55, -ch, cw, ch * 0.25, 0, ch);
+        path.close();
+      case ShapeKind.arrow:
+        final a = w / 2;
+        final b = h / 2;
+        path.addPolygon(<Offset>[
+          Offset(-a, -h * 0.2),
+          Offset(w * 0.05, -h * 0.2),
+          Offset(w * 0.05, -b),
+          Offset(a, 0),
+          Offset(w * 0.05, b),
+          Offset(w * 0.05, h * 0.2),
+          Offset(-a, h * 0.2),
+        ], true);
+      default:
+        path.addRect(Rect.fromCenter(center: Offset.zero, width: w, height: h));
+    }
+    return path;
   }
 
   /// Rectangle de sélection + poignée de rotation, dessinés en espace écran

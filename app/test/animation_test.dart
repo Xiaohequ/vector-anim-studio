@@ -200,4 +200,55 @@ void main() {
       expect(shape.keyframes, isEmpty);
     });
   });
+
+  group('formes basiques étendues', () {
+    const newKinds = <ShapeKind>[
+      ShapeKind.triangle,
+      ShapeKind.star,
+      ShapeKind.hexagon,
+      ShapeKind.cross,
+      ShapeKind.heart,
+      ShapeKind.arrow,
+    ];
+
+    test('chaque nouveau type a un label non vide', () {
+      for (final kind in newKinds) {
+        expect(shapeKindLabel(kind), isNotEmpty);
+      }
+    });
+
+    test('aller-retour JSON conserve le type et les dimensions', () {
+      for (final kind in newKinds) {
+        final layer = ShapeLayer(name: 'L', kind: kind, width: 80, height: 60);
+        final back = ShapeLayer.fromJson(layer.toJson());
+        expect(back.kind, kind);
+        expect(back.width, 80);
+        expect(back.height, 60);
+      }
+    });
+
+    test('copy de couche : nouvel id, contenu identique, points copiés', () {
+      final layer = ShapeLayer(
+        name: 'Étoile',
+        kind: ShapeKind.star,
+        x: 12,
+        y: -4,
+        colorValue: 0xFFFF5C5C,
+        filled: false,
+        strokeWidth: 6,
+        points: const <Offset>[Offset(1, 2), Offset(3, 4)],
+      );
+      final clone = layer.copy(id: generateId('layer'), name: 'Étoile (copie)');
+      expect(clone.id, isNot(layer.id));
+      expect(clone.name, 'Étoile (copie)');
+      expect(clone.kind, ShapeKind.star);
+      expect(clone.x, 12);
+      expect(clone.y, -4);
+      expect(clone.colorValue, 0xFFFF5C5C);
+      expect(clone.filled, isFalse);
+      expect(clone.strokeWidth, 6);
+      expect(clone.points, layer.points);
+      expect(identical(clone.points, layer.points), isFalse);
+    });
+  });
 }

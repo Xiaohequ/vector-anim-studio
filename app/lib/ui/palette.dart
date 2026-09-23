@@ -20,4 +20,10 @@ IconData shapeKindIcon(ShapeKind kind) => switch (kind) {
       ShapeKind.circle => Icons.circle_outlined,
       ShapeKind.line => Icons.horizontal_rule,
       ShapeKind.path => Icons.polyline,
+      ShapeKind.triangle => Icons.change_history,
+      ShapeKind.star => Icons.star_border,
+      ShapeKind.hexagon => Icons.hexagon_outlined,
+      ShapeKind.cross => Icons.add,
+      ShapeKind.heart => Icons.favorite_border,
+      ShapeKind.arrow => Icons.arrow_forward,
     };

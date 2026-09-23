@@ -2,13 +2,19 @@ import 'dart:math' as math;
 import 'dart:ui' show Offset;
 
 /// Type de forme basique dessinable dans une couche.
-enum ShapeKind { rect, circle, line, path }
+enum ShapeKind { rect, circle, line, path, triangle, star, hexagon, cross, heart, arrow }
 
 String shapeKindLabel(ShapeKind kind) => switch (kind) {
       ShapeKind.rect => 'Rectangle',
       ShapeKind.circle => 'Cercle',
       ShapeKind.line => 'Ligne',
       ShapeKind.path => 'Chemin',
+      ShapeKind.triangle => 'Triangle',
+      ShapeKind.star => 'Étoile',
+      ShapeKind.hexagon => 'Hexagone',
+      ShapeKind.cross => 'Croix',
+      ShapeKind.heart => 'Cœur',
+      ShapeKind.arrow => 'Flèche',
     };
 
 /// Propriétés animables d'une forme complète (transformation de groupe).
