@@ -8,11 +8,11 @@ Application Flutter (Android, iOS configuré) pour **créer des animations vecto
 
 **Éditeur de projet** — quatre menus :
 - **Formes** : liste des formes, sélection, édition, suppression, bouton « Ajouter » qui ouvre la création de forme.
-- **Animations** (forme sélectionnée requise) : six presets — apparition, disparition, déplacement, rotation, pulsation, fondu — plus la gestion des keyframes par propriété (position, rotation, échelle, opacité, épaisseur) avec courbes linéaire, easeIn, easeOut, easeInOut, step.
+- **Animations** (forme sélectionnée requise) : six presets — apparition, disparition, déplacement, rotation, pulsation, fondu — plus la gestion des keyframes. Une keyframe est une **pose** : elle enregistre toutes les propriétés de la forme (position, rotation, échelle, opacité, épaisseur) à un instant, et l'interpolation entre deux poses s'applique à toutes ces propriétés. Dès qu'une forme est animée, toute modification de propriété écrit automatiquement une keyframe au curseur (auto-key). La courbe du segment (linéaire, easeIn, easeOut, easeInOut, step) se règle dans l'inspecteur.
 - **Calques** : ordre de rendu, visibilité, suppression.
 - **Export** : MP4 (H.264 via `flutter_quick_video_encoder`), GIF animé, PNG de la frame courante, JSON du projet — puis partage via `share_plus`.
 
-**Timeline** — chaque forme est un rectangle : bord gauche = début d'affichage, bord droit = fin, poignées déplaçables. Deux formes qui se chevauchent dans le temps occupent automatiquement deux lignes parallèles. Tête de lecture scrubbable, lecture/pause, boucle, règle temporelle et losanges de keyframes.
+**Timeline** — chaque forme est un rectangle : bord gauche = début d'affichage, bord droit = fin, poignées déplaçables. Deux formes qui se chevauchent dans le temps occupent automatiquement deux lignes parallèles. Tête de lecture scrubbable, lecture/pause, boucle, règle temporelle et losanges de keyframes. Quand la tête de lecture approche d'une keyframe, celle-ci devient un bouton ✕ rouge qui la supprime.
 
 **Création de forme** — aperçu en haut de l'écran, liste des couches en bas : ajout de formes basiques (rectangle, cercle, ligne, chemin) comme nouvelles couches, changement de couche, réglage taille / position / couleur / rotation / opacité / épaisseur, et fenêtre d'affichage (début–fin) sur la timeline.
 
@@ -30,7 +30,7 @@ Application Flutter (Android, iOS configuré) pour **créer des animations vecto
 vector_anim_studio/
 ├─ app/
 │  ├─ lib/
-│  │  ├─ models/animation.dart          # projet, forme, couche, keyframes, presets de format
+│  │  ├─ models/animation.dart          # projet, forme, couche, keyframes (poses), presets de format
 │  │  ├─ data/project_repository.dart   # schéma et accès sqflite
 │  │  ├─ data/project_store.dart        # état de l'écran d'accueil
 │  │  ├─ engine/scene_painter.dart      # rendu vectoriel (CustomPainter)
@@ -72,6 +72,7 @@ Le build Android de référence est fait par **GitHub Actions** (`.github/workfl
 - [x] Formes composées de couches + écran de création de forme (aperçu + couches)
 - [x] Menus Formes / Animations / Calques / Export
 - [x] Timeline à rectangles d'affichage empilés en lignes parallèles
+- [x] Keyframes « pose » : interpolation de toutes les propriétés, auto-key, suppression contextuelle sur la timeline, courbe par segment (v0.3.0)
 - [x] Export MP4 et GIF
 - [x] CI : analyse, tests, APK release, release GitHub (pas d'App Bundle)
 - [x] Validation de l'export MP4 sur un appareil réel (MediaCodec) — validé par l'utilisateur le 2026-09-23

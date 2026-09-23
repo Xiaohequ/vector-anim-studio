@@ -55,11 +55,25 @@ void main() {
         ShapeLayer(name: 'Cercle', kind: ShapeKind.circle, filled: false),
       ],
     );
-    shape.tracks[AnimatableProperty.opacity] = AnimTrack(
-      AnimatableProperty.opacity,
-    )
-      ..setKey(200, 0, easing: EasingKind.easeOut)
-      ..setKey(1200, 1, easing: EasingKind.linear);
+    final pose = shape.poseAt(0);
+    shape.setKeyframes(<ShapeKeyframe>[
+      ShapeKeyframe(
+        timeMs: 200,
+        easing: EasingKind.easeOut,
+        values: <AnimatableProperty, double>{
+          ...pose,
+          AnimatableProperty.opacity: 0,
+        },
+      ),
+      ShapeKeyframe(
+        timeMs: 1200,
+        easing: EasingKind.linear,
+        values: <AnimatableProperty, double>{
+          ...pose,
+          AnimatableProperty.opacity: 1,
+        },
+      ),
+    ]);
     project.shapes.add(shape);
 
     await repository.save(project);
@@ -84,11 +98,14 @@ void main() {
     expect(loadedShape.layers.first.points.first, const Offset(0, 0));
     expect(loadedShape.layers[1].filled, isFalse);
 
-    final track = loadedShape.tracks[AnimatableProperty.opacity]!;
-    expect(track.keys.length, 2);
-    expect(track.keys.first.timeMs, 200);
-    expect(track.keys.first.easing, EasingKind.easeOut);
-    expect(track.sample(1200, 0), 1);
+    expect(loadedShape.keyframes.length, 2);
+    expect(loadedShape.keyframes.first.timeMs, 200);
+    expect(loadedShape.keyframes.first.easing, EasingKind.easeOut);
+    expect(loadedShape.valueAt(AnimatableProperty.opacity, 1200), 1);
+    expect(
+      loadedShape.valueAt(AnimatableProperty.opacity, 700),
+      closeTo(0.5, 0.01),
+    );
   });
 
   test('une seconde sauvegarde remplace les formes sans les dupliquer', () async {

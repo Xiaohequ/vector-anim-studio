@@ -184,11 +184,12 @@ class ScenePainter extends CustomPainter {
     return bounds;
   }
 
+  /// Le projet est un objet **mutable** partagé : comparer `oldDelegate.project`
+  /// ne détecte rien lorsqu'une valeur change au repos (le canvas ne serait pas
+  /// repeint). On repeint donc à chaque reconstruction, ce qui reflète
+  /// immédiatement toute édition de propriété ou de keyframe.
   @override
-  bool shouldRepaint(covariant ScenePainter oldDelegate) =>
-      oldDelegate.timeMs != timeMs ||
-      oldDelegate.project != project ||
-      oldDelegate.selectedShapeId != selectedShapeId;
+  bool shouldRepaint(covariant ScenePainter oldDelegate) => true;
 }
 
 /// Rend la scène en image (export PNG, vignettes, frames vidéo).

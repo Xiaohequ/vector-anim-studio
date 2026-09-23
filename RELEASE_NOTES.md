@@ -1,21 +1,25 @@
-# Vector Anim Studio 0.2.0
+# Vector Anim Studio 0.3.0
 
-Studio d'animation vectorielle complet pour Android : projets multiples, formes composées de couches, keyframes, timeline à rectangles d'affichage, export MP4 et GIF.
+Studio d'animation vectorielle complet pour Android : projets multiples, formes composées de couches, keyframes « pose », timeline à rectangles d'affichage, export MP4 et GIF.
 
 ## Nouveautés
 
-- **Écran d'accueil** : liste des projets enregistrés (nom, format, durée, fps, nombre de formes, date), création d'un projet (nom, format portrait / paysage / carré, durée, fps), projet d'exemple, renommage, duplication, suppression.
-- **Menus de l'éditeur** : Formes, Animations, Calques, Export.
-- **Formes et couches** : une forme est un ensemble de couches (rectangle, cercle, ligne, chemin) ; l'écran de création affiche l'aperçu en haut et la liste des couches en bas, avec ajout de formes basiques, changement de couche, taille, position, couleur, rotation, opacité, épaisseur.
-- **Animations** : six presets (apparition, disparition, déplacement, rotation, pulsation, fondu) + gestion des keyframes par propriété avec courbes linéaire, easeIn, easeOut, easeInOut, step.
-- **Timeline** : chaque forme est un rectangle (bord gauche = début d'affichage, bord droit = fin, poignées déplaçables) ; les formes qui se chevauchent occupent automatiquement des lignes parallèles.
-- **Export vidéo** : MP4 (H.264, encodeur natif du téléphone, sans ffmpeg embarqué) et GIF animé, plus PNG de la frame courante et JSON du projet, puis partage système.
-- **Persistance** : les projets sont enregistrés localement (sqflite) et rechargés au démarrage.
+- **Keyframes « pose »** : une keyframe porte désormais **toutes les propriétés** de la forme (position, rotation, échelle, opacité, épaisseur) au lieu d'une seule. L'interpolation entre deux keyframes s'applique à toutes les propriétés et est immédiatement visible dans l'aperçu.
+- **Auto-key** : dès qu'une forme possède au moins une keyframe, toute modification de propriété écrit une keyframe à la position du curseur (plus besoin de créer la keyframe à part).
+- **Aperçu réactif** : au repos, bouger un réglage repeint immédiatement le canvas (le comparateur de repaint comparait un objet mutable partagé et ignorait les changements de valeur).
+- **Bouton de suppression contextuel** : quand la tête de lecture passe près d'une keyframe sur la timeline, celle-ci affiche un bouton ✕ rouge pour la supprimer.
+- **Snap des keyframes** : l'ajout d'une keyframe à proximité d'une existante (≈ 8 px) la remplace au lieu d'en créer une seconde à quelques millisecondes d'écart.
+- **Sélecteur d'interpolation** : la courbe du segment (linéaire, entrée, sortie, entrée/sortie, palier) se règle dans l'inspecteur pour la keyframe sous le curseur.
+- **Inspecteur simplifié** : les curseurs affichent la valeur interpolée à la tête de lecture ; une seule keyframe (losange) est gérée par forme, et les propriétés réellement animées sont marquées d'un losange jaune.
 
 ## Corrections
 
-- Le ticker de l'éditeur ne tourne plus en permanence : il ne produit des frames que pendant la lecture (batterie, fluidité).
-- Analyse statique : plus aucun avertissement (`flutter analyze` propre), 25 tests verts.
+- Interpolation invisible dans l'aperçu : cause identifiée (repaint du canvas ignoré lorsque seule une valeur changeait, et écriture des curseurs dans la valeur de base plutôt que dans les keyframes).
+- Analyse statique : plus aucun avertissement (`flutter analyze` propre), 27 tests verts.
+
+## Migration
+
+- La base locale passe en **schéma v2** : les anciennes pistes par propriété sont automatiquement regroupées en poses complètes au premier lancement. Aucune perte de projet.
 
 ## Installation
 

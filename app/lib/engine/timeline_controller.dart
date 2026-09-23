@@ -66,21 +66,24 @@ class TimelineController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Ajoute/retire une keyframe pour la forme et la propriété données.
-  void toggleKeyframe(VectorShape shape, AnimatableProperty property) {
-    final track = shape.tracks[property];
-    if (track != null && track.keys.any((k) => k.timeMs == _timeMs)) {
-      track.removeKeyAt(_timeMs);
-      if (track.isEmpty) shape.tracks.remove(property);
+  /// Tolérance de proximité des keyframes pour le projet courant (≈ 8 px).
+  int get snapToleranceMs => keyframeSnapToleranceMs(project.durationMs);
+
+  /// Keyframe la plus proche du curseur, dans la tolérance.
+  ShapeKeyframe? nearestKeyframe(VectorShape shape) =>
+      shape.keyframeNear(_timeMs, snapToleranceMs);
+
+  /// Ajoute une pose au curseur, ou la retire si le curseur est dessus.
+  void toggleKeyframe(VectorShape shape) {
+    final near = nearestKeyframe(shape);
+    if (near != null) {
+      shape.removeKeyframeAt(near.timeMs);
     } else {
-      shape.addKeyframeAt(property, _timeMs);
+      shape.addKeyframeAt(_timeMs);
     }
     notifyListeners();
   }
 
-  bool hasKeyframeAtPlayhead(VectorShape shape, AnimatableProperty property) {
-    final track = shape.tracks[property];
-    if (track == null) return false;
-    return track.keys.any((k) => k.timeMs == _timeMs);
-  }
+  bool hasKeyframeAtPlayhead(VectorShape shape) =>
+      nearestKeyframe(shape) != null;
 }

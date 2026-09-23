@@ -16,35 +16,51 @@ Toolchain :
 AnimationProject { id, name, format (portrait/landscape/square), width, height,
                    durationMs, fps, background, createdAt, updatedAt, coverPath }
  └─ VectorShape   { id, name, startMs, endMs, visible, z,
-                    x, y, rotation, scale, opacity, strokeWidth, tracks }
-     ├─ ShapeLayer { id, name, kind (rect/circle/line/path), x, y, width, height,
-     │               rotation, scale, opacity, strokeWidth, color, filled, points }
-     └─ AnimTrack  { property (x, y, rotation, scale, opacity, strokeWidth) }
-         └─ Keyframe { timeMs, value, easing (linear, easeIn, easeOut, easeInOut, step) }
+                     x, y, rotation, scale, opacity, strokeWidth, keyframes }
+     ├─ ShapeLayer    { id, name, kind (rect/circle/line/path), x, y, width, height,
+     │                  rotation, scale, opacity, strokeWidth, color, filled, points }
+     └─ ShapeKeyframe { timeMs, easing, values { x, y, rotation, scale, opacity,
+                                                 strokeWidth } }
 ```
 
 Deux niveaux de transformation : la **forme** (groupe) porte la fenêtre d'affichage
 (`startMs` / `endMs`) et les keyframes ; ses **couches** portent la géométrie et le style.
 Une couche est une forme basique, une forme est donc un agrégat de formes basiques.
 
+Une keyframe est une **pose** : elle fige les six propriétés de la forme à un instant.
+`valueAt(propriété, t)` échantillonne la pose précédente et la suivante et interpole la
+propriété avec la courbe (`easing`) de la pose d'arrivée — l'interpolation porte sur
+*toutes* les propriétés. `applyValue()` est le point d'entrée unique de l'édition : sans
+keyframe il écrit la valeur de base, avec keyframes il écrit (et crée si besoin) la pose au
+curseur (**auto-key**), avec un snap de ~8 px sur une pose voisine
+(`keyframeSnapToleranceMs`).
+
+Conséquence assumée : deux presets ne se combinent pas (appliquer un preset remplace les
+poses de la forme), et une pose fige les six propriétés.
+
 ## 3. Persistance
 
-sqflite, base `vector_anim_studio.db` (schéma v1) dans le dossier documents de l'application.
+sqflite, base `vector_anim_studio.db` (schéma v2) dans le dossier documents de l'application.
 
 - `projects` : métadonnées du projet (dont `cover_path`, `created_at`, `updated_at`)
 - `shapes` : forme, fenêtre d'affichage, transformation de groupe, ordre (`z`)
 - `layers` : formes basiques rattachées à une forme
-- `tracks` / `keyframes` : pistes par propriété et points de contrôle
+- `shape_keyframes` : poses (`time_ms`, `easing`, `values_json` — les six propriétés)
 - `PRAGMA foreign_keys = ON` + `ON DELETE CASCADE` pour supprimer proprement un projet
+
+Le schéma est en **v2**. `onUpgrade` migre un schéma v1 (`tracks` + `keyframes` par
+propriété) : chaque ancienne keyframe est échantillonnée sur les six propriétés pour
+produire une pose, puis les tables `tracks` / `keyframes` sont supprimées. Piège SQLite :
+`values` est un mot réservé, la colonne s'appelle donc `values_json`.
 
 L'écriture est différée de 600 ms côté éditeur (`_scheduleSave`) pour ne pas écrire à chaque frame ; un `flush` a lieu avant chaque export.
 
 ## 4. Moteur
 
-- `TimelineController` : temps courant, lecture/pause, boucle, `advance(dt)` ; le ticker de l'éditeur ne tourne **que pendant la lecture** (au repos, aucun frame n'est produit).
+- `TimelineController` : temps courant, lecture/pause, boucle, `advance(dt)` ; le ticker de l'éditeur ne tourne **que pendant la lecture** (au repos, aucun frame n'est produit). Il expose aussi la tolérance de snap et la keyframe la plus proche du curseur.
 - `TimelineLayout.packLanes` : algorithme glouton d'empilement — les formes sont triées par début, une forme dont le début est postérieur à la fin de la dernière forme d'une ligne réutilise cette ligne, sinon une nouvelle ligne est créée.
-- `ScenePainter` : construit un `Path` par couche, applique la transformation du groupe au temps courant, dessine sur le `Canvas`.
-- `animation_presets.dart` : les six presets génèrent des keyframes calés sur la fenêtre d'affichage de la forme (et non sur la durée totale du projet).
+- `ScenePainter` : construit un `Path` par couche, applique la transformation du groupe au temps courant, dessine sur le `Canvas`. `shouldRepaint` renvoie **toujours vrai** : le projet est un objet mutable partagé, donc comparer les instances ne détecte pas un changement de valeur au repos (le canvas ne serait pas repeint).
+- `animation_presets.dart` : les six presets produisent une séquence de poses calées sur la fenêtre d'affichage de la forme (et non sur la durée totale du projet), en repartant des valeurs de base.
 - Rendu offscreen pour l'export : `PictureRecorder` → PNG, ou frames RGBA brutes pour l'encodage vidéo.
 
 ## 5. Export
@@ -63,17 +79,18 @@ Après export, `share_plus` partage le fichier (feuille de partage système).
 1. **Accueil** (`home_screen`) : liste des projets, nouvel projet, projet d'exemple, renommage, duplication, suppression, état vide explicite.
 2. **Éditeur** (`studio_screen`) : menus Formes / Animations / Calques / Export, canvas, inspecteur, timeline à rectangles, barre de lecture, sauvegarde différée.
 3. **Création de forme** (`shape_editor_screen`) : aperçu en haut, couches en bas, ajout de forme basique comme nouvelle couche, réglages taille / position / couleur, fenêtre d'affichage.
-4. **Timeline** (`timeline_view`) : règle temporelle, une piste par ligne, rectangles avec poignées gauche/droite, tête de lecture.
+3 bis. **Inspecteur** (`studio_screen`) : un curseur par propriété affichant la valeur **interpolée** à la tête de lecture (auto-key), un bouton keyframe unique (losange), un sélecteur de courbe pour le segment sous le curseur.
+4. **Timeline** (`timeline_view`) : règle temporelle, une piste par ligne, rectangles avec poignées gauche/droite, tête de lecture, un losange par pose. Quand la tête de lecture approche d'une keyframe (tolérance ≈ 8 px), le losange devient un bouton ✕ rouge de suppression ; le même seuil sert au snap à l'écriture.
 
 ## 7. Tests
 
-- `test/repository_test.dart` : persistance réelle (sqflite ffi), sauvegarde/rechargement à l'identique, remplacement sans duplication, suppression, duplication.
+- `test/repository_test.dart` : persistance réelle (sqflite ffi), sauvegarde/rechargement des poses à l'identique, remplacement sans duplication, suppression, duplication.
 - `test/timeline_layout_test.dart` : empilement des lignes (chevauchements, réutilisation de ligne).
-- `test/animation_test.dart` : interpolation et échantillonnage des pistes.
+- `test/animation_test.dart` : interpolation des poses (toutes propriétés), easing, remplacement au même temps, auto-key, snap, presets.
 - `test/widget_test.dart` : écran d'accueil (état vide, création de projet et retour à la liste). Ces tests utilisent un dépôt en mémoire : `sqflite_common_ffi` ne progresse pas dans la zone fake-async de `testWidgets`, donc la couche SQLite reste couverte par `repository_test.dart`.
 
 ## 8. Reste à faire
 
 - Valider l'export MP4 sur un appareil réel (encodeur natif non testable sur le serveur) — **fait** : validé par l'utilisateur le 2026-09-23 sur l'APK `0.2.0` (build 7). Export GIF et timeline (poignées début/fin, empilement des lignes) également validés le même jour.
 - Job iOS sur runner macOS dans le workflow GitHub Actions.
-- Backlog fonctionnel : import SVG, édition de courbes de Bézier, export SVG animé, calques imbriqués, partage cloud.
+- Backlog fonctionnel : import SVG, édition de courbes de Bézier, export SVG animé, calques imbriqués, partage cloud, test de migration v1 → v2 sur une base réelle.

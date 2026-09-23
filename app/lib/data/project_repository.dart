@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:ui' show Offset;
 
 import 'package:path/path.dart' as p;
@@ -38,7 +39,9 @@ class ProjectRepository {
       : _factory = factory ?? databaseFactory;
 
   static const String fileName = 'vector_anim_studio.db';
-  static const int schemaVersion = 1;
+
+  /// v2 : les keyframes sont des « poses » (toutes les propriétés à un temps).
+  static const int schemaVersion = 2;
 
   final DatabaseFactory _factory;
   final String? databasePath;
@@ -111,33 +114,161 @@ class ProjectRepository {
             )
           ''');
           await db.execute('''
-            CREATE TABLE tracks (
-              id TEXT PRIMARY KEY,
-              shape_id TEXT NOT NULL,
-              property TEXT NOT NULL,
-              FOREIGN KEY (shape_id) REFERENCES shapes (id) ON DELETE CASCADE
-            )
-          ''');
-          await db.execute('''
-            CREATE TABLE keyframes (
+            CREATE TABLE shape_keyframes (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
-              track_id TEXT NOT NULL,
+              shape_id TEXT NOT NULL,
               time_ms INTEGER NOT NULL,
-              value REAL NOT NULL,
               easing TEXT NOT NULL,
-              FOREIGN KEY (track_id) REFERENCES tracks (id) ON DELETE CASCADE
+              values_json TEXT NOT NULL,
+              FOREIGN KEY (shape_id) REFERENCES shapes (id) ON DELETE CASCADE
             )
           ''');
           await db.execute(
             'CREATE INDEX idx_shapes_project ON shapes (project_id)',
           );
           await db.execute('CREATE INDEX idx_layers_shape ON layers (shape_id)');
-          await db.execute('CREATE INDEX idx_tracks_shape ON tracks (shape_id)');
           await db.execute(
-            'CREATE INDEX idx_keyframes_track ON keyframes (track_id)',
+            'CREATE INDEX idx_shape_keyframes_shape ON shape_keyframes (shape_id)',
           );
         },
+        onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 2) await _migrateKeysToPoses(db);
+        },
       ),
+    );
+  }
+
+  /// Schéma v1 → v2 : les pistes par propriété sont regroupées en poses.
+  ///
+  /// Chaque ancienne keyframe est échantillonnée sur toutes les propriétés
+  /// (valeur de la piste si elle existe à cet instant, sinon valeur de base de
+  /// la forme) pour produire une pose complète.
+  Future<void> _migrateKeysToPoses(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS shape_keyframes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        shape_id TEXT NOT NULL,
+        time_ms INTEGER NOT NULL,
+        easing TEXT NOT NULL,
+        values_json TEXT NOT NULL,
+        FOREIGN KEY (shape_id) REFERENCES shapes (id) ON DELETE CASCADE
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_shape_keyframes_shape ON shape_keyframes (shape_id)',
+    );
+
+    final trackRows = await db.query('tracks');
+    final keyRows = await db.query('keyframes', orderBy: 'time_ms ASC');
+    final trackInfo = <String, (String, AnimatableProperty)>{};
+    for (final row in trackRows) {
+      final property = AnimatableProperty.values.firstWhere(
+        (p) => p.name == row['property'],
+        orElse: () => AnimatableProperty.x,
+      );
+      trackInfo[row['id'] as String] = (row['shape_id'] as String, property);
+    }
+
+    final legacy =
+        <String, Map<AnimatableProperty, List<(int, double, EasingKind)>>>{};
+    for (final row in keyRows) {
+      final info = trackInfo[row['track_id'] as String];
+      if (info == null) continue;
+      legacy
+          .putIfAbsent(info.$1, () => {})
+          .putIfAbsent(info.$2, () => [])
+          .add((
+        (row['time_ms'] as num).toInt(),
+        (row['value'] as num).toDouble(),
+        EasingKind.values.firstWhere(
+          (e) => e.name == row['easing'],
+          orElse: () => EasingKind.easeInOut,
+        ),
+      ));
+    }
+
+    for (final shapeRow in await db.query('shapes')) {
+      final shapeId = shapeRow['id'] as String;
+      final base = <AnimatableProperty, double>{
+        AnimatableProperty.x: (shapeRow['x'] as num).toDouble(),
+        AnimatableProperty.y: (shapeRow['y'] as num).toDouble(),
+        AnimatableProperty.rotation: (shapeRow['rotation'] as num).toDouble(),
+        AnimatableProperty.scale: (shapeRow['scale'] as num).toDouble(),
+        AnimatableProperty.opacity: (shapeRow['opacity'] as num).toDouble(),
+        AnimatableProperty.strokeWidth:
+            (shapeRow['stroke_width'] as num).toDouble(),
+      };
+      final perShape =
+          legacy[shapeId] ?? <AnimatableProperty, List<(int, double, EasingKind)>>{};
+      final times = <int>{
+        for (final list in perShape.values)
+          for (final entry in list) entry.$1,
+      }.toList()
+        ..sort();
+
+      for (final time in times) {
+        var easing = EasingKind.easeInOut;
+        final values = <AnimatableProperty, double>{};
+        for (final property in AnimatableProperty.values) {
+          final list = perShape[property];
+          values[property] = list == null
+              ? base[property]!
+              : _sampleLegacy(list, time, base[property]!);
+          if (list != null) {
+            for (final entry in list) {
+              if (entry.$1 == time) easing = entry.$3;
+            }
+          }
+        }
+        await db.insert('shape_keyframes', <String, Object?>{
+          'shape_id': shapeId,
+          'time_ms': time,
+          'easing': easing.name,
+          'values_json': jsonEncode(<String, double>{
+            for (final entry in values.entries) entry.key.name: entry.value,
+          }),
+        });
+      }
+    }
+
+    await db.execute('DROP TABLE IF EXISTS keyframes');
+    await db.execute('DROP TABLE IF EXISTS tracks');
+  }
+
+  static double _sampleLegacy(
+    List<(int, double, EasingKind)> keys,
+    int timeMs,
+    double fallback,
+  ) {
+    if (keys.isEmpty) return fallback;
+    if (timeMs <= keys.first.$1) return keys.first.$2;
+    if (timeMs >= keys.last.$1) return keys.last.$2;
+    for (var i = 0; i < keys.length - 1; i++) {
+      final a = keys[i];
+      final b = keys[i + 1];
+      if (timeMs >= a.$1 && timeMs <= b.$1) {
+        final span = math.max(1, b.$1 - a.$1);
+        final progress = applyEasing(b.$3, (timeMs - a.$1) / span);
+        return a.$2 + (b.$2 - a.$2) * progress;
+      }
+    }
+    return keys.last.$2;
+  }
+
+  static ShapeKeyframe _decodeKeyframe(Map<String, Object?> row) {
+    final raw =
+        (jsonDecode(row['values_json'] as String) as Map).cast<String, Object?>();
+    return ShapeKeyframe(
+      timeMs: (row['time_ms'] as num).toInt(),
+      easing: EasingKind.values.firstWhere(
+        (e) => e.name == row['easing'],
+        orElse: () => EasingKind.easeInOut,
+      ),
+      values: <AnimatableProperty, double>{
+        for (final property in AnimatableProperty.values)
+          if (raw[property.name] != null)
+            property: (raw[property.name] as num).toDouble(),
+      },
     );
   }
 
@@ -258,37 +389,14 @@ class ProjectRepository {
         );
       }
 
-      final trackRows = await db.query(
-        'tracks',
+      final keyRows = await db.query(
+        'shape_keyframes',
         where: 'shape_id = ?',
         whereArgs: <Object?>[shapeId],
+        orderBy: 'time_ms ASC',
       );
-      for (final trackRow in trackRows) {
-        final trackId = trackRow['id'] as String;
-        final property = AnimatableProperty.values.firstWhere(
-          (prop) => prop.name == trackRow['property'],
-          orElse: () => AnimatableProperty.x,
-        );
-        final track = AnimTrack(property);
-        final keyRows = await db.query(
-          'keyframes',
-          where: 'track_id = ?',
-          whereArgs: <Object?>[trackId],
-          orderBy: 'time_ms ASC',
-        );
-        for (final keyRow in keyRows) {
-          track.keys.add(
-            Keyframe(
-              (keyRow['time_ms'] as num).toInt(),
-              (keyRow['value'] as num).toDouble(),
-              easing: EasingKind.values.firstWhere(
-                (e) => e.name == keyRow['easing'],
-                orElse: () => EasingKind.easeInOut,
-              ),
-            ),
-          );
-        }
-        shape.tracks[property] = track;
+      for (final keyRow in keyRows) {
+        shape.keyframes.add(_decodeKeyframe(keyRow));
       }
 
       project.shapes.add(shape);
@@ -344,7 +452,7 @@ class ProjectRepository {
           row['id'] as String,
       ];
       for (final shapeId in shapeIds) {
-        await _deleteTrackTrees(txn, shapeId);
+        await _deleteShapeTrees(txn, shapeId);
       }
       await txn.delete(
         'shapes',
@@ -391,46 +499,24 @@ class ProjectRepository {
             'z': j,
           });
         }
-        for (final track in shape.tracks.values) {
-          if (track.isEmpty) continue;
-          final trackId = generateId('track');
-          await txn.insert('tracks', <String, Object?>{
-            'id': trackId,
+        for (final keyframe in shape.keyframes) {
+          await txn.insert('shape_keyframes', <String, Object?>{
             'shape_id': shape.id,
-            'property': track.property.name,
+            'time_ms': keyframe.timeMs,
+            'easing': keyframe.easing.name,
+            'values_json': jsonEncode(<String, double>{
+              for (final entry in keyframe.values.entries)
+                entry.key.name: entry.value,
+            }),
           });
-          for (final key in track.keys) {
-            await txn.insert('keyframes', <String, Object?>{
-              'track_id': trackId,
-              'time_ms': key.timeMs,
-              'value': key.value,
-              'easing': key.easing.name,
-            });
-          }
         }
       }
     });
   }
 
-  Future<void> _deleteTrackTrees(DatabaseExecutor txn, String shapeId) async {
-    final trackIds = <String>[
-      for (final row in await txn.query(
-        'tracks',
-        columns: <String>['id'],
-        where: 'shape_id = ?',
-        whereArgs: <Object?>[shapeId],
-      ))
-        row['id'] as String,
-    ];
-    for (final trackId in trackIds) {
-      await txn.delete(
-        'keyframes',
-        where: 'track_id = ?',
-        whereArgs: <Object?>[trackId],
-      );
-    }
+  Future<void> _deleteShapeTrees(DatabaseExecutor txn, String shapeId) async {
     await txn.delete(
-      'tracks',
+      'shape_keyframes',
       where: 'shape_id = ?',
       whereArgs: <Object?>[shapeId],
     );

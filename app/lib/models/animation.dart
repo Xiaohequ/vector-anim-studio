@@ -74,87 +74,73 @@ int _idSeed = 0;
 String generateId(String prefix) =>
     '$prefix-${DateTime.now().microsecondsSinceEpoch}-${_idSeed++}';
 
-/// Un point de contrôle temporel : valeur atteinte à `timeMs`.
-class Keyframe {
-  Keyframe(this.timeMs, this.value, {this.easing = EasingKind.easeInOut});
+/// Tolérance de proximité des keyframes : équivalent à ~8 px sur une timeline
+/// de référence large de 400 px. Sert au bouton de suppression contextuel et
+/// au snap lors de l'écriture d'une valeur.
+const double keyframeSnapTolerancePx = 8;
+const double keyframeNominalTimelineWidth = 400;
 
-  final int timeMs;
-  final double value;
-  final EasingKind easing;
-
-  Keyframe copyWith({int? timeMs, double? value, EasingKind? easing}) =>
-      Keyframe(timeMs ?? this.timeMs, value ?? this.value,
-          easing: easing ?? this.easing);
-
-  Map<String, Object?> toJson() => {
-        'timeMs': timeMs,
-        'value': value,
-        'easing': easing.name,
-      };
-
-  factory Keyframe.fromJson(Map<String, Object?> json) => Keyframe(
-        (json['timeMs'] as num).toInt(),
-        (json['value'] as num).toDouble(),
-        easing: EasingKind.values.firstWhere(
-          (e) => e.name == json['easing'],
-          orElse: () => EasingKind.easeInOut,
-        ),
-      );
-}
-
-/// Piste d'animation d'une propriété : suite de keyframes triées.
-class AnimTrack {
-  AnimTrack(this.property);
-
-  final AnimatableProperty property;
-  final List<Keyframe> keys = <Keyframe>[];
-
-  bool get isEmpty => keys.isEmpty;
-  bool get isNotEmpty => keys.isNotEmpty;
-
-  /// Ajoute (ou remplace) une keyframe au temps donné.
-  void setKey(int timeMs, double value, {EasingKind? easing}) {
-    keys.removeWhere((k) => k.timeMs == timeMs);
-    keys.add(Keyframe(timeMs, value, easing: easing ?? EasingKind.easeInOut));
-    keys.sort((a, b) => a.timeMs.compareTo(b.timeMs));
-  }
-
-  void removeKeyAt(int timeMs) => keys.removeWhere((k) => k.timeMs == timeMs);
-
-  /// Échantillonne la piste à l'instant `timeMs`.
-  double sample(int timeMs, double fallback) {
-    if (keys.isEmpty) return fallback;
-    if (timeMs <= keys.first.timeMs) return keys.first.value;
-    if (timeMs >= keys.last.timeMs) return keys.last.value;
-    for (var i = 0; i < keys.length - 1; i++) {
-      final a = keys[i];
-      final b = keys[i + 1];
-      if (timeMs >= a.timeMs && timeMs <= b.timeMs) {
-        final span = math.max(1, b.timeMs - a.timeMs);
-        final progress = applyEasing(b.easing, (timeMs - a.timeMs) / span);
-        return a.value + (b.value - a.value) * progress;
-      }
-    }
-    return keys.last.value;
-  }
-
-  Map<String, Object?> toJson() => {
-        'property': property.name,
-        'keys': keys.map((k) => k.toJson()).toList(),
-      };
-
-  factory AnimTrack.fromJson(Map<String, Object?> json) {
-    final track = AnimTrack(
-      AnimatableProperty.values.firstWhere(
-        (p) => p.name == json['property'],
-        orElse: () => AnimatableProperty.x,
-      ),
+int keyframeSnapToleranceMs(int durationMs) => math.max(
+      1,
+      (durationMs * keyframeSnapTolerancePx / keyframeNominalTimelineWidth)
+          .round(),
     );
-    for (final entry in (json['keys'] as List<Object?>? ?? const [])) {
-      track.keys.add(Keyframe.fromJson((entry as Map).cast<String, Object?>()));
-    }
-    track.keys.sort((a, b) => a.timeMs.compareTo(b.timeMs));
-    return track;
+
+/// Étiquette lisible d'une courbe d'interpolation (interface).
+String easingLabel(EasingKind easing) => switch (easing) {
+      EasingKind.linear => 'Linéaire',
+      EasingKind.easeIn => 'Entrée',
+      EasingKind.easeOut => 'Sortie',
+      EasingKind.easeInOut => 'Entrée/sortie',
+      EasingKind.step => 'Palier',
+    };
+
+/// Une keyframe « pose » : toutes les propriétés de la forme à `timeMs`.
+class ShapeKeyframe {
+  ShapeKeyframe({
+    required this.timeMs,
+    Map<AnimatableProperty, double>? values,
+    this.easing = EasingKind.easeInOut,
+  }) : values = values ?? <AnimatableProperty, double>{};
+
+  int timeMs;
+
+  /// Courbe d'interpolation du segment qui arrive sur cette keyframe.
+  EasingKind easing;
+
+  final Map<AnimatableProperty, double> values;
+
+  double? valueOf(AnimatableProperty property) => values[property];
+
+  ShapeKeyframe copy() => ShapeKeyframe(
+        timeMs: timeMs,
+        values: Map<AnimatableProperty, double>.from(values),
+        easing: easing,
+      );
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'timeMs': timeMs,
+        'easing': easing.name,
+        'values': <String, double>{
+          for (final entry in values.entries) entry.key.name: entry.value,
+        },
+      };
+
+  static ShapeKeyframe fromJson(Map<String, Object?> json) {
+    final raw = (json['values'] as Map?)?.cast<String, Object?>() ??
+        const <String, Object?>{};
+    return ShapeKeyframe(
+      timeMs: (json['timeMs'] as num).toInt(),
+      easing: EasingKind.values.firstWhere(
+        (e) => e.name == json['easing'],
+        orElse: () => EasingKind.easeInOut,
+      ),
+      values: <AnimatableProperty, double>{
+        for (final property in AnimatableProperty.values)
+          if (raw[property.name] != null)
+            property: (raw[property.name] as num).toDouble(),
+      },
+    );
   }
 }
 
@@ -340,10 +326,13 @@ class VectorShape {
   bool visible;
 
   final List<ShapeLayer> layers;
-  final Map<AnimatableProperty, AnimTrack> tracks =
-      <AnimatableProperty, AnimTrack>{};
+
+  /// Keyframes « pose » : chaque entrée porte toutes les propriétés de la forme.
+  final List<ShapeKeyframe> keyframes = <ShapeKeyframe>[];
 
   int get durationMs => math.max(0, endMs - startMs);
+
+  bool get hasKeyframes => keyframes.isNotEmpty;
 
   bool isVisibleAt(int timeMs) =>
       visible && timeMs >= startMs && timeMs <= endMs;
@@ -374,26 +363,113 @@ class VectorShape {
     }
   }
 
-  /// Valeur animée de la propriété à l'instant `timeMs`.
+  /// Valeur (interpolée) de la propriété à l'instant `timeMs`.
   double valueAt(AnimatableProperty property, int timeMs) {
-    final track = tracks[property];
     final base = baseOf(property);
-    if (track == null || track.isEmpty) return base;
-    return track.sample(timeMs, base);
+    if (keyframes.isEmpty) return base;
+    if (timeMs <= keyframes.first.timeMs) {
+      return keyframes.first.valueOf(property) ?? base;
+    }
+    if (timeMs >= keyframes.last.timeMs) {
+      return keyframes.last.valueOf(property) ?? base;
+    }
+    for (var i = 0; i < keyframes.length - 1; i++) {
+      final a = keyframes[i];
+      final b = keyframes[i + 1];
+      if (timeMs >= a.timeMs && timeMs <= b.timeMs) {
+        final span = math.max(1, b.timeMs - a.timeMs);
+        final progress = applyEasing(b.easing, (timeMs - a.timeMs) / span);
+        final from = a.valueOf(property) ?? base;
+        final to = b.valueOf(property) ?? base;
+        return from + (to - from) * progress;
+      }
+    }
+    return keyframes.last.valueOf(property) ?? base;
   }
 
+  /// Toutes les propriétés effectives à `timeMs` (base d'une nouvelle pose).
+  Map<AnimatableProperty, double> poseAt(int timeMs) =>
+      <AnimatableProperty, double>{
+        for (final property in AnimatableProperty.values)
+          property: valueAt(property, timeMs),
+      };
+
+  /// La propriété varie-t-elle entre les keyframes (indicateur d'UI) ?
   bool isAnimated(AnimatableProperty property) {
-    final track = tracks[property];
-    return track != null && track.isNotEmpty;
+    if (keyframes.length < 2) return false;
+    final reference = valueAt(property, keyframes.first.timeMs);
+    return keyframes.any((k) => (k.valueOf(property) ?? reference) != reference);
   }
 
-  /// Ajoute une keyframe à l'instant courant, avec la valeur courante.
-  void addKeyframeAt(AnimatableProperty property, int timeMs) {
-    final track = tracks.putIfAbsent(property, () => AnimTrack(property));
-    track.setKey(timeMs, valueAt(property, timeMs));
+  /// Keyframe la plus proche de `timeMs` dans la tolérance, ou `null`.
+  ShapeKeyframe? keyframeNear(int timeMs, int toleranceMs) {
+    ShapeKeyframe? best;
+    var bestDelta = toleranceMs;
+    for (final key in keyframes) {
+      final delta = (key.timeMs - timeMs).abs();
+      if (delta <= bestDelta) {
+        best = key;
+        bestDelta = delta;
+      }
+    }
+    return best;
   }
 
-  void removeTrack(AnimatableProperty property) => tracks.remove(property);
+  /// Ajoute ou remplace la pose à `timeMs`.
+  void upsertKeyframe(
+    int timeMs,
+    Map<AnimatableProperty, double> values, {
+    EasingKind? easing,
+  }) {
+    keyframes.removeWhere((k) => k.timeMs == timeMs);
+    keyframes.add(
+      ShapeKeyframe(
+        timeMs: timeMs,
+        values: Map<AnimatableProperty, double>.from(values),
+        easing: easing ?? EasingKind.easeInOut,
+      ),
+    );
+    keyframes.sort((a, b) => a.timeMs.compareTo(b.timeMs));
+  }
+
+  /// Ajoute une keyframe au temps donné, en capturant les valeurs courantes.
+  void addKeyframeAt(int timeMs) => upsertKeyframe(timeMs, poseAt(timeMs));
+
+  void removeKeyframeAt(int timeMs) =>
+      keyframes.removeWhere((k) => k.timeMs == timeMs);
+
+  /// Remplace toutes les keyframes (presets).
+  void setKeyframes(List<ShapeKeyframe> next) {
+    keyframes
+      ..clear()
+      ..addAll(next)
+      ..sort((a, b) => a.timeMs.compareTo(b.timeMs));
+  }
+
+  void setKeyframeEasing(int timeMs, EasingKind easing) {
+    for (final key in keyframes) {
+      if (key.timeMs == timeMs) key.easing = easing;
+    }
+  }
+
+  /// Écrit une propriété : dans la pose au curseur si la forme est déjà
+  /// animée, sinon dans la valeur de base.
+  void applyValue(
+    AnimatableProperty property,
+    double value,
+    int timeMs, {
+    required bool autoKey,
+    int toleranceMs = 0,
+  }) {
+    if (!autoKey || keyframes.isEmpty) {
+      setBase(property, value);
+      return;
+    }
+    final target = keyframeNear(timeMs, toleranceMs)?.timeMs ?? timeMs;
+    final pose = poseAt(target);
+    pose[property] = value;
+    upsertKeyframe(target, pose);
+  }
 
   VectorShape copy({String? id, String? name}) {
     final clone = VectorShape(
@@ -410,12 +486,8 @@ class VectorShape {
       endMs: endMs,
       visible: visible,
     );
-    for (final entry in tracks.entries) {
-      final track = AnimTrack(entry.key);
-      for (final key in entry.value.keys) {
-        track.keys.add(key.copyWith());
-      }
-      clone.tracks[entry.key] = track;
+    for (final key in keyframes) {
+      clone.keyframes.add(key.copy());
     }
     return clone;
   }
@@ -433,7 +505,7 @@ class VectorShape {
         'endMs': endMs,
         'visible': visible,
         'layers': layers.map((l) => l.toJson()).toList(),
-        'tracks': tracks.values.map((t) => t.toJson()).toList(),
+        'keyframes': keyframes.map((k) => k.toJson()).toList(),
       };
 
   factory VectorShape.fromJson(Map<String, Object?> json) {
@@ -453,10 +525,11 @@ class VectorShape {
           .map((l) => ShapeLayer.fromJson((l as Map).cast<String, Object?>()))
           .toList(),
     );
-    for (final entry in (json['tracks'] as List<Object?>? ?? const [])) {
-      final track = AnimTrack.fromJson((entry as Map).cast<String, Object?>());
-      shape.tracks[track.property] = track;
+    for (final entry in (json['keyframes'] as List<Object?>? ?? const [])) {
+      shape.keyframes
+          .add(ShapeKeyframe.fromJson((entry as Map).cast<String, Object?>()));
     }
+    shape.keyframes.sort((a, b) => a.timeMs.compareTo(b.timeMs));
     return shape;
   }
 }
@@ -587,16 +660,33 @@ class AnimationProject {
         ),
       ],
     );
-    square.tracks[AnimatableProperty.rotation] = AnimTrack(
-      AnimatableProperty.rotation,
-    )
-      ..setKey(0, 0)
-      ..setKey(2000, 3.14159)
-      ..setKey(4000, 6.28318);
-    square.tracks[AnimatableProperty.y] = AnimTrack(AnimatableProperty.y)
-      ..setKey(0, 240)
-      ..setKey(2000, 160)
-      ..setKey(4000, 240);
+    final squarePose = square.poseAt(0);
+    square.setKeyframes(<ShapeKeyframe>[
+      ShapeKeyframe(
+        timeMs: 0,
+        values: <AnimatableProperty, double>{
+          ...squarePose,
+          AnimatableProperty.rotation: 0,
+          AnimatableProperty.y: 240,
+        },
+      ),
+      ShapeKeyframe(
+        timeMs: 2000,
+        values: <AnimatableProperty, double>{
+          ...squarePose,
+          AnimatableProperty.rotation: 3.14159,
+          AnimatableProperty.y: 160,
+        },
+      ),
+      ShapeKeyframe(
+        timeMs: 4000,
+        values: <AnimatableProperty, double>{
+          ...squarePose,
+          AnimatableProperty.rotation: 6.28318,
+          AnimatableProperty.y: 240,
+        },
+      ),
+    ]);
 
     final circle = VectorShape(
       name: 'Cercle',
@@ -616,11 +706,22 @@ class AnimationProject {
         ),
       ],
     );
-    circle.tracks[AnimatableProperty.scale] = AnimTrack(AnimatableProperty.scale)
-      ..setKey(500, 0.6)
-      ..setKey(1500, 1.4)
-      ..setKey(3000, 0.6)
-      ..setKey(3500, 0.6);
+    final circlePose = circle.poseAt(0);
+    circle.setKeyframes(<ShapeKeyframe>[
+      for (final (time, scale) in <(int, double)>[
+        (500, 0.6),
+        (1500, 1.4),
+        (3000, 0.6),
+        (3500, 0.6),
+      ])
+        ShapeKeyframe(
+          timeMs: time,
+          values: <AnimatableProperty, double>{
+            ...circlePose,
+            AnimatableProperty.scale: scale,
+          },
+        ),
+    ]);
 
     project.shapes.addAll(<VectorShape>[square, circle]);
     return project;

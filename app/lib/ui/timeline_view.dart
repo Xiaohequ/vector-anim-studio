@@ -18,6 +18,7 @@ class TimelineView extends StatelessWidget {
     required this.onSelect,
     required this.onRangeChanged,
     required this.onSeek,
+    required this.onDeleteKeyframe,
   });
 
   final AnimationProject project;
@@ -26,6 +27,7 @@ class TimelineView extends StatelessWidget {
   final ValueChanged<VectorShape> onSelect;
   final void Function(VectorShape shape, int startMs, int endMs) onRangeChanged;
   final ValueChanged<int> onSeek;
+  final void Function(VectorShape shape, int timeMs) onDeleteKeyframe;
 
   static const double rulerHeight = 20;
   static const double laneHeight = 30;
@@ -86,12 +88,16 @@ class TimelineView extends StatelessWidget {
                   _ShapeBar(
                     shape: shape,
                     durationMs: _duration,
+                    timeMs: timeMs,
+                    toleranceMs: keyframeSnapToleranceMs(_duration),
                     laneTop: rulerHeight + lane * laneHeight,
                     width: width,
                     selected: shape.id == selectedShapeId,
                     onSelect: () => onSelect(shape),
                     onRangeChanged: (start, end) =>
                         onRangeChanged(shape, start, end),
+                    onDeleteKeyframe: (time) =>
+                        onDeleteKeyframe(shape, time),
                   ),
               Positioned(
                 left: (timeMs / _duration) * width - 1,
@@ -137,20 +143,26 @@ class _ShapeBar extends StatelessWidget {
   const _ShapeBar({
     required this.shape,
     required this.durationMs,
+    required this.timeMs,
+    required this.toleranceMs,
     required this.laneTop,
     required this.width,
     required this.selected,
     required this.onSelect,
     required this.onRangeChanged,
+    required this.onDeleteKeyframe,
   });
 
   final VectorShape shape;
   final int durationMs;
+  final int timeMs;
+  final int toleranceMs;
   final double laneTop;
   final double width;
   final bool selected;
   final VoidCallback onSelect;
   final void Function(int startMs, int endMs) onRangeChanged;
+  final ValueChanged<int> onDeleteKeyframe;
 
   @override
   Widget build(BuildContext context) {
@@ -158,9 +170,8 @@ class _ShapeBar extends StatelessWidget {
     final barWidth = math.max(24.0, ((shape.endMs - shape.startMs) / durationMs) * width);
     final color = Theme.of(context).colorScheme.primary;
     final keyTimes = <int>{
-      for (final track in shape.tracks.values)
-        for (final key in track.keys)
-          if (key.timeMs >= shape.startMs && key.timeMs <= shape.endMs) key.timeMs,
+      for (final key in shape.keyframes)
+        if (key.timeMs >= shape.startMs && key.timeMs <= shape.endMs) key.timeMs,
     }.toList()
       ..sort();
 
@@ -205,10 +216,35 @@ class _ShapeBar extends StatelessWidget {
                       1,
                   0.75,
                 ),
-                child: Transform.rotate(
-                  angle: 0.785398,
-                  child: Container(width: 7, height: 7, color: const Color(0xFFF2C94C)),
-                ),
+                child: (keyTime - timeMs).abs() <= toleranceMs
+                    ? GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => onDeleteKeyframe(keyTime),
+                        child: Tooltip(
+                          message: 'Supprimer la keyframe',
+                          child: Container(
+                            width: 16,
+                            height: 16,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFFF5C5C),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.close,
+                              size: 11,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      )
+                    : Transform.rotate(
+                        angle: 0.785398,
+                        child: Container(
+                          width: 7,
+                          height: 7,
+                          color: const Color(0xFFF2C94C),
+                        ),
+                      ),
               ),
             _Handle(
               alignment: Alignment.centerLeft,

@@ -220,21 +220,40 @@ class _StudioScreenState extends State<StudioScreen>
     await _flushSave();
   }
 
-  Future<void> _toggleKeyframe(AnimatableProperty property) async {
+  /// Ajoute ou retire la keyframe (pose complète) au curseur.
+  Future<void> _toggleKeyframe() async {
     final shape = _selected;
     final controller = _controller;
     if (shape == null || controller == null) return;
-    setState(() => controller.toggleKeyframe(shape, property));
+    setState(() => controller.toggleKeyframe(shape));
     await _flushSave();
   }
 
-  Future<void> _addAnimationKeyAt(
-    AnimatableProperty property,
-    int timeMs,
-  ) async {
+  /// Écrit une propriété : dans la pose au curseur si la forme est animée,
+  /// sinon dans la valeur de base (auto-key).
+  void _setProperty(AnimatableProperty property, double value) {
     final shape = _selected;
-    if (shape == null) return;
-    setState(() => shape.addKeyframeAt(property, timeMs));
+    final controller = _controller;
+    if (shape == null || controller == null) return;
+    setState(() {
+      shape.applyValue(
+        property,
+        value,
+        controller.timeMs,
+        autoKey: true,
+        toleranceMs: controller.snapToleranceMs,
+      );
+    });
+    _scheduleSave();
+  }
+
+  Future<void> _setKeyframeEasing(EasingKind easing) async {
+    final shape = _selected;
+    final controller = _controller;
+    if (shape == null || controller == null) return;
+    final near = controller.nearestKeyframe(shape);
+    if (near == null) return;
+    setState(() => shape.setKeyframeEasing(near.timeMs, easing));
     await _flushSave();
   }
 
@@ -433,8 +452,10 @@ class _StudioScreenState extends State<StudioScreen>
         child: Text('Aucune forme — commence par « Formes › Ajouter une forme ».'),
       );
     }
+    final keyframe = controller.nearestKeyframe(shape);
+    final hasKeyframes = shape.hasKeyframes;
     return SizedBox(
-      height: 168,
+      height: 196,
       child: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 12),
         children: <Widget>[
@@ -446,6 +467,17 @@ class _StudioScreenState extends State<StudioScreen>
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
               ),
+              IconButton(
+                tooltip: keyframe == null
+                    ? 'Ajouter une keyframe au curseur'
+                    : 'Retirer la keyframe au curseur',
+                iconSize: 20,
+                icon: Icon(
+                  keyframe == null ? Icons.diamond_outlined : Icons.diamond,
+                  color: hasKeyframes ? const Color(0xFFF2C94C) : null,
+                ),
+                onPressed: _toggleKeyframe,
+              ),
               TextButton.icon(
                 onPressed: () => _editShape(shape),
                 icon: const Icon(Icons.edit, size: 16),
@@ -456,7 +488,8 @@ class _StudioScreenState extends State<StudioScreen>
           Text(
             'Affichée de ${(shape.startMs / 1000).toStringAsFixed(2)} s à '
             '${(shape.endMs / 1000).toStringAsFixed(2)} s'
-            '${shape.visible ? '' : ' · masquée'}',
+            '${shape.visible ? '' : ' · masquée'}'
+            '${hasKeyframes ? '' : ' · aucune keyframe'}',
             style: const TextStyle(fontSize: 11, color: Colors.white70),
           ),
           const SizedBox(height: 4),
@@ -464,16 +497,41 @@ class _StudioScreenState extends State<StudioScreen>
             _buildPropertyRow(shape, property, controller),
           Row(
             children: <Widget>[
-              const Spacer(),
-              TextButton.icon(
-                onPressed: () => _addAnimationKeyAt(
-                  AnimatableProperty.opacity,
-                  controller.timeMs,
+              const SizedBox(
+                width: 92,
+                child: Text('Interpolation', style: TextStyle(fontSize: 12)),
+              ),
+              Expanded(
+                child: DropdownButton<EasingKind>(
+                  isExpanded: true,
+                  value: keyframe?.easing ?? EasingKind.easeInOut,
+                  onChanged: keyframe == null
+                      ? null
+                      : (value) {
+                          if (value != null) _setKeyframeEasing(value);
+                        },
+                  items: <DropdownMenuItem<EasingKind>>[
+                    for (final easing in EasingKind.values)
+                      DropdownMenuItem<EasingKind>(
+                        value: easing,
+                        child: Text(
+                          easingLabel(easing),
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ),
+                  ],
                 ),
-                icon: const Icon(Icons.add, size: 16),
-                label: const Text('Keyframe au curseur'),
               ),
             ],
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              hasKeyframes
+                  ? 'Forme animée : toute modification écrit une keyframe au curseur.'
+                  : 'Ajoute une keyframe (◆) pour animer toutes les propriétés.',
+              style: const TextStyle(fontSize: 11, color: Colors.white54),
+            ),
           ),
         ],
       ),
@@ -485,7 +543,7 @@ class _StudioScreenState extends State<StudioScreen>
     AnimatableProperty property,
     TimelineController controller,
   ) {
-    final value = shape.baseOf(property);
+    final value = shape.valueAt(property, controller.timeMs);
     final (min, max, step) = switch (property) {
       AnimatableProperty.x => (0.0, _project!.width, 1.0),
       AnimatableProperty.y => (0.0, _project!.height, 1.0),
@@ -494,7 +552,7 @@ class _StudioScreenState extends State<StudioScreen>
       AnimatableProperty.opacity => (0.0, 1.0, 0.01),
       AnimatableProperty.strokeWidth => (0.0, 6.0, 0.05),
     };
-    final hasKey = controller.hasKeyframeAtPlayhead(shape, property);
+    final animated = shape.isAnimated(property);
     return Row(
       children: <Widget>[
         SizedBox(
@@ -507,20 +565,19 @@ class _StudioScreenState extends State<StudioScreen>
             max: max,
             divisions: ((max - min) / step).round().clamp(1, 2000),
             value: value.clamp(min, max),
-            onChanged: (next) {
-              setState(() => shape.setBase(property, next));
-              _scheduleSave();
-            },
+            onChanged: (next) => _setProperty(property, next),
           ),
         ),
-        IconButton(
-          tooltip: hasKey ? 'Retirer la keyframe' : 'Ajouter une keyframe',
-          iconSize: 18,
-          icon: Icon(
-            hasKey ? Icons.diamond : Icons.diamond_outlined,
-            color: shape.isAnimated(property) ? const Color(0xFFF2C94C) : null,
+        SizedBox(
+          width: 32,
+          child: Tooltip(
+            message: animated ? 'Propriété animée' : 'Valeur fixe',
+            child: Icon(
+              animated ? Icons.diamond : Icons.diamond_outlined,
+              size: 16,
+              color: animated ? const Color(0xFFF2C94C) : Colors.white24,
+            ),
           ),
-          onPressed: () => _toggleKeyframe(property),
         ),
       ],
     );
@@ -558,6 +615,10 @@ class _StudioScreenState extends State<StudioScreen>
                     shape.startMs = start;
                     shape.endMs = end;
                   });
+                  _scheduleSave();
+                },
+                onDeleteKeyframe: (shape, timeMs) {
+                  setState(() => shape.removeKeyframeAt(timeMs));
                   _scheduleSave();
                 },
               ),
@@ -693,12 +754,8 @@ class _StudioScreenState extends State<StudioScreen>
           _applyPreset(preset);
           return;
         }
-        if (value.startsWith('key:')) {
-          final property = AnimatableProperty.values.firstWhere(
-            (p) => p.name == value.substring(4),
-            orElse: () => AnimatableProperty.opacity,
-          );
-          _toggleKeyframe(property);
+        if (value == 'keyframe') {
+          _toggleKeyframe();
         }
       },
       itemBuilder: (context) => <PopupMenuEntry<String>>[
@@ -723,15 +780,9 @@ class _StudioScreenState extends State<StudioScreen>
           ),
         const PopupMenuDivider(),
         const PopupMenuItem<String>(
-          enabled: false,
-          value: 'header2',
-          child: Text('Keyframe au curseur'),
+          value: 'keyframe',
+          child: Text('Ajouter/retirer la keyframe au curseur'),
         ),
-        for (final property in AnimatableProperty.values)
-          PopupMenuItem<String>(
-            value: 'key:${property.name}',
-            child: Text('Keyframe · ${propertyLabel(property)}'),
-          ),
         const PopupMenuDivider(),
         const PopupMenuItem<String>(
           value: 'clear',
