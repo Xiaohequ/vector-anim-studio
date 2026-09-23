@@ -251,4 +251,51 @@ void main() {
       expect(identical(clone.points, layer.points), isFalse);
     });
   });
+
+  group('instance d\'animation', () {
+    test('aller-retour JSON conserve le projet imbriqué', () {
+      final shape = VectorShape(
+        name: 'Instance',
+        embeddedProjectId: 'src-1',
+        embeddedWidth: 360,
+        embeddedHeight: 640,
+      );
+      final back = VectorShape.fromJson(shape.toJson());
+      expect(back.isInstance, isTrue);
+      expect(back.embeddedProjectId, 'src-1');
+      expect(back.embeddedWidth, 360);
+      expect(back.embeddedHeight, 640);
+    });
+
+    test('copy conserve l\'instance', () {
+      final shape = VectorShape(
+        name: 'Instance',
+        embeddedProjectId: 'src-1',
+        embeddedWidth: 360,
+        embeddedHeight: 640,
+      );
+      final clone = shape.copy();
+      expect(clone.isInstance, isTrue);
+      expect(clone.embeddedProjectId, 'src-1');
+      expect(clone.embeddedWidth, 360);
+    });
+
+    test('une forme classique n\'est pas une instance', () {
+      expect(VectorShape(name: 'F').isInstance, isFalse);
+    });
+
+    test('instanceTimeMs boucle sur la durée source', () {
+      // Avant la fenêtre : 0.
+      expect(instanceTimeMs(400, 500, 1000), 0);
+      // Début de fenêtre : 0.
+      expect(instanceTimeMs(500, 500, 1000), 0);
+      // Milieu : temps écoulé.
+      expect(instanceTimeMs(1900, 500, 1000), 400);
+      // Boucle : à début + durée exacte on repart de 0.
+      expect(instanceTimeMs(1500, 500, 1000), 0);
+      expect(instanceTimeMs(2600, 500, 1000), 100);
+      // Durée source nulle : figée à 0.
+      expect(instanceTimeMs(1500, 500, 0), 0);
+    });
+  });
 }

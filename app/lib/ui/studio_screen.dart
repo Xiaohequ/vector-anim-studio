@@ -47,6 +47,9 @@ class _StudioScreenState extends State<StudioScreen>
   String? _error;
   Timer? _saveTimer;
 
+  /// Projets imbriqués préchargés (instances d'animation), indexés par id.
+  final Map<String, AnimationProject> _embedded = <String, AnimationProject>{};
+
   // Option : aimanter la rotation aux multiples de 90° (bouton de la barre).
   bool _snapRotation = false;
 
@@ -72,6 +75,8 @@ class _StudioScreenState extends State<StudioScreen>
     try {
       final project = await widget.repository.load(widget.projectId);
       if (!mounted) return;
+      await _preloadEmbedded(project);
+      if (!mounted) return;
       setState(() {
         _project = project;
         _controller = TimelineController(project);
@@ -81,6 +86,109 @@ class _StudioScreenState extends State<StudioScreen>
     } catch (error) {
       if (!mounted) return;
       setState(() => _error = '$error');
+    }
+  }
+
+  /// Précharge les projets imbriqués (instances) : le painter est synchrone,
+  /// il a besoin des sous-projets en mémoire avant le premier rendu.
+  Future<void> _preloadEmbedded(AnimationProject project) async {
+    for (final shape in project.shapes) {
+      final id = shape.embeddedProjectId;
+      if (id == null || _embedded.containsKey(id)) continue;
+      try {
+        _embedded[id] = await widget.repository.load(id);
+      } catch (_) {
+        // Projet introuvable : l'instance affichera le cadre « manquant ».
+      }
+    }
+  }
+
+  /// Insère une instance d'animation : barre violette sur la timeline, la
+  /// source tourne en boucle sur la fenêtre d'affichage, début posé à la
+  /// tête de lecture.
+  Future<void> _insertAnimation() async {
+    final project = _project;
+    if (project == null) return;
+    final controller = _controller;
+    if (controller == null) return;
+    final summaries = await widget.repository.listSummaries();
+    if (!mounted) return;
+    final others = summaries.where((s) => s.id != widget.projectId).toList();
+    final picked = await showModalBottomSheet<ProjectSummary>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: <Widget>[
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                'Choisir le projet à imbriquer',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+            if (others.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: Text('Aucun autre projet.'),
+              ),
+            for (final summary in others)
+              ListTile(
+                leading: const Icon(Icons.movie_outlined),
+                title: Text(summary.name),
+                subtitle: Text(
+                  '${(summary.durationMs / 1000).toStringAsFixed(1)} s · '
+                  '${summary.shapeCount} forme(s)',
+                ),
+                onTap: () => Navigator.of(context).pop(summary),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    final sub = await widget.repository.load(picked.id);
+    if (!mounted) return;
+    final start = controller.timeMs;
+    final end = math.min(
+      project.durationMs,
+      math.max(start + sub.durationMs, start + 100),
+    );
+    final shape = VectorShape(
+      name: sub.name,
+      embeddedProjectId: sub.id,
+      embeddedWidth: sub.width,
+      embeddedHeight: sub.height,
+      x: project.width / 2,
+      y: project.height / 2,
+      startMs: start,
+      endMs: end,
+    );
+    setState(() {
+      project.shapes.add(shape);
+      _selectedId = shape.id;
+      _embedded[sub.id] = sub;
+    });
+    await _flushSave();
+  }
+
+  /// Ouvre le projet source d'une instance pour l'éditer, puis rafraîchit le
+  /// cache : l'instance rend automatiquement la version à jour.
+  Future<void> _openSourceProject(VectorShape instance) async {
+    final id = instance.embeddedProjectId;
+    if (id == null) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => StudioScreen(projectId: id, repository: widget.repository),
+      ),
+    );
+    if (!mounted) return;
+    try {
+      final fresh = await widget.repository.load(id);
+      if (!mounted) return;
+      setState(() => _embedded[id] = fresh);
+    } catch (_) {
+      // Le projet a été supprimé entre-temps : on garde l'ancienne version.
     }
   }
 
@@ -155,6 +263,7 @@ class _StudioScreenState extends State<StudioScreen>
   }
 
   Future<void> _editShape(VectorShape shape) async {
+    if (shape.isInstance) return; // une instance n'a pas de couches propres
     final project = _project;
     if (project == null) return;
     final edited = await Navigator.of(context).push<VectorShape>(
@@ -296,6 +405,7 @@ class _StudioScreenState extends State<StudioScreen>
         onToggleKeyframe: _toggleKeyframe,
         onKeyframeEasing: _setKeyframeEasing,
         onEditLayers: () => _editShape(shape),
+        onOpenSource: () => _openSourceProject(shape),
       ),
     );
     if (mounted) setState(() {});
@@ -490,7 +600,7 @@ class _StudioScreenState extends State<StudioScreen>
     );
 
     try {
-      final service = ExportService(project);
+      final service = ExportService(project, embeddedProjects: _embedded);
       final file = await service.exportVideo(
         format: format,
         onProgress: (value) => progress.value = value,
@@ -509,7 +619,10 @@ class _StudioScreenState extends State<StudioScreen>
     final controller = _controller;
     if (project == null || controller == null) return;
     try {
-      final file = await ExportService(project).exportFramePng(controller.timeMs);
+      final file = await ExportService(
+        project,
+        embeddedProjects: _embedded,
+      ).exportFramePng(controller.timeMs);
       await _share(file, 'image/png');
     } catch (error) {
       if (!mounted) return;
@@ -650,6 +763,7 @@ class _StudioScreenState extends State<StudioScreen>
                         timeMs: controller.timeMs,
                         selectedShapeId: _selectedId,
                         showFrame: true,
+                        embeddedProjects: _embedded,
                       ),
                       child: const SizedBox.expand(),
                     ),
@@ -828,11 +942,13 @@ class _StudioScreenState extends State<StudioScreen>
       onSelected: (value) {
         if (value == 'add') {
           _addShape();
+        } else if (value == 'insert_anim') {
+          _insertAnimation();
         } else if (value.startsWith('select:')) {
           setState(() => _selectedId = value.substring(7));
         } else if (value == 'edit') {
           final shape = _selected;
-          if (shape != null) _editShape(shape);
+          if (shape != null && !shape.isInstance) _editShape(shape);
         } else if (value == 'rename') {
           final shape = _selected;
           if (shape != null) _renameShape(shape);
@@ -849,6 +965,15 @@ class _StudioScreenState extends State<StudioScreen>
             contentPadding: EdgeInsets.zero,
             leading: Icon(Icons.add),
             title: Text('Ajouter une forme…'),
+          ),
+        ),
+        const PopupMenuItem<String>(
+          value: 'insert_anim',
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.movie_outlined),
+            title: Text('Insérer une animation…'),
           ),
         ),
         const PopupMenuDivider(),
@@ -881,7 +1006,7 @@ class _StudioScreenState extends State<StudioScreen>
         const PopupMenuDivider(),
         PopupMenuItem<String>(
           value: 'edit',
-          enabled: _selected != null,
+          enabled: _selected != null && !_selected!.isInstance,
           child: const Text('Modifier les couches…'),
         ),
         PopupMenuItem<String>(

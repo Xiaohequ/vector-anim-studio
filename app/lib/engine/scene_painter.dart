@@ -16,6 +16,7 @@ class ScenePainter extends CustomPainter {
     this.selectedLayerId,
     this.transparentBackground = false,
     this.showFrame = false,
+    this.embeddedProjects = const {},
   });
 
   final AnimationProject project;
@@ -29,6 +30,9 @@ class ScenePainter extends CustomPainter {
 
   /// Dessine la bordure du cadre projet (édition uniquement, jamais en export).
   final bool showFrame;
+
+  /// Projets imbriqués préchargés, indexés par id (rendu des instances).
+  final Map<String, AnimationProject> embeddedProjects;
 
   /// Facteur d'échelle permettant d'inscrire la scène dans [size].
   static double scaleFor(AnimationProject project, Size size) => math.min(
@@ -53,7 +57,7 @@ class ScenePainter extends CustomPainter {
 
     for (final shape in project.shapes) {
       if (!shape.isVisibleAt(timeMs)) continue;
-      _paintShape(canvas, shape);
+      _paintShape(canvas, shape, depth: 0);
     }
 
     canvas.restore();
@@ -110,7 +114,7 @@ class ScenePainter extends CustomPainter {
     }
   }
 
-  void _paintShape(Canvas canvas, VectorShape shape) {
+  void _paintShape(Canvas canvas, VectorShape shape, {required int depth}) {
     final x = shape.valueAt(AnimatableProperty.x, timeMs);
     final y = shape.valueAt(AnimatableProperty.y, timeMs);
     final rotation = shape.valueAt(AnimatableProperty.rotation, timeMs);
@@ -123,12 +127,60 @@ class ScenePainter extends CustomPainter {
     canvas.rotate(rotation);
     canvas.scale(scale <= 0 ? 0.0001 : scale);
 
-    for (final layer in shape.layers) {
-      if (!layer.visible) continue;
-      _paintLayer(canvas, layer, opacity, strokeFactor);
+    if (shape.isInstance) {
+      _paintInstance(canvas, shape, opacity, depth);
+    } else {
+      for (final layer in shape.layers) {
+        if (!layer.visible) continue;
+        _paintLayer(canvas, layer, opacity, strokeFactor);
+      }
     }
 
     canvas.restore();
+  }
+
+  /// Instance d'animation : rend le projet source (en boucle) dans la pose de
+  /// la forme, sans son fond (compositing sur la scène hôte). Un seul niveau
+  /// d'imbrication : les instances internes sont ignorées.
+  void _paintInstance(
+    Canvas canvas,
+    VectorShape shape,
+    double opacity,
+    int depth,
+  ) {
+    final sub = embeddedProjects[shape.embeddedProjectId];
+    final w = shape.embeddedWidth <= 0 ? 200.0 : shape.embeddedWidth;
+    final h = shape.embeddedHeight <= 0 ? 200.0 : shape.embeddedHeight;
+    if (sub == null) {
+      // Projet source introuvable : cadre translucide barré, la forme reste
+      // sélectionnable et éditable (position, fenêtre…).
+      final rect = Rect.fromCenter(center: Offset.zero, width: w, height: h);
+      canvas.drawRect(
+        rect,
+        Paint()..color = const Color(0x40C084FC),
+      );
+      final stroke = Paint()
+        ..color = const Color(0x99C084FC)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2;
+      canvas.drawRect(rect, stroke);
+      canvas.drawLine(rect.topLeft, rect.bottomRight, stroke);
+      canvas.drawLine(rect.topRight, rect.bottomLeft, stroke);
+      return;
+    }
+    if (depth >= 1) return;
+    final subTime = instanceTimeMs(timeMs, shape.startMs, sub.durationMs);
+    if (opacity < 1) {
+      canvas.saveLayer(
+        null,
+        Paint()..color = Colors.white.withValues(alpha: opacity),
+      );
+    }
+    for (final subShape in sub.shapes) {
+      if (!subShape.isVisibleAt(subTime)) continue;
+      _paintShape(canvas, subShape, depth: depth + 1);
+    }
+    if (opacity < 1) canvas.restore();
   }
 
   void _paintLayer(
@@ -324,6 +376,11 @@ class ScenePainter extends CustomPainter {
 
   /// Boîte englobante de la forme en coordonnées locales (avant transformation).
   static Rect? shapeBounds(VectorShape shape, int timeMs) {
+    if (shape.isInstance) {
+      final w = shape.embeddedWidth <= 0 ? 200.0 : shape.embeddedWidth;
+      final h = shape.embeddedHeight <= 0 ? 200.0 : shape.embeddedHeight;
+      return Rect.fromCenter(center: Offset.zero, width: w, height: h);
+    }
     Rect? bounds;
     for (final layer in shape.layers) {
       if (!layer.visible) continue;
@@ -359,6 +416,7 @@ Future<ui.Image> renderProjectToImage(
   double pixelRatio = 2,
   double? outputWidth,
   bool transparentBackground = false,
+  Map<String, AnimationProject> embeddedProjects = const {},
 }) async {
   final ratio = outputWidth == null ? pixelRatio : outputWidth / project.width;
   final width = math.max(2, (project.width * ratio).round());
@@ -377,6 +435,7 @@ Future<ui.Image> renderProjectToImage(
     project: project,
     timeMs: timeMs,
     transparentBackground: transparentBackground,
+    embeddedProjects: embeddedProjects,
   ).paint(canvas, Size(project.width, project.height));
   final picture = recorder.endRecording();
   return picture.toImage(width, height);
@@ -388,11 +447,13 @@ Future<Uint8List> renderFrameRgba(
   int timeMs, {
   required int width,
   required int height,
+  Map<String, AnimationProject> embeddedProjects = const {},
 }) async {
   final image = await renderProjectToImage(
     project,
     timeMs,
     outputWidth: width.toDouble(),
+    embeddedProjects: embeddedProjects,
   );
   final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
   image.dispose();

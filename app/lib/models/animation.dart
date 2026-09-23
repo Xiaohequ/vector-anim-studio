@@ -92,6 +92,16 @@ int keyframeSnapToleranceMs(int durationMs) => math.max(
           .round(),
     );
 
+/// Temps interne d'une instance d'animation (sémantique « boucle ») :
+/// l'animation source tourne à vitesse naturelle et recommence tant que la
+/// fenêtre d'affichage est ouverte. Avant le début de la fenêtre → 0.
+int instanceTimeMs(int timeMs, int startMs, int subDurationMs) {
+  if (subDurationMs <= 0) return 0;
+  final elapsed = timeMs - startMs;
+  if (elapsed <= 0) return 0;
+  return elapsed % subDurationMs;
+}
+
 /// Étiquette lisible d'une courbe d'interpolation (interface).
 String easingLabel(EasingKind easing) => switch (easing) {
       EasingKind.linear => 'Linéaire',
@@ -310,11 +320,24 @@ class VectorShape {
     this.startMs = 0,
     this.endMs = 4000,
     this.visible = true,
+    this.embeddedProjectId,
+    this.embeddedWidth = 0,
+    this.embeddedHeight = 0,
   })  : id = id ?? generateId('shape'),
         layers = layers ?? <ShapeLayer>[];
 
   final String id;
   String name;
+
+  /// Identifiant du projet imbriqué (instance d'animation) : la forme ne
+  /// porte aucune couche, elle rend le projet source dans sa pose.
+  String? embeddedProjectId;
+
+  /// Dimensions du projet source, capturées à l'insertion (sélection, bounds).
+  double embeddedWidth;
+  double embeddedHeight;
+
+  bool get isInstance => embeddedProjectId != null;
 
   /// Transformation de groupe (centre de la forme).
   double x;
@@ -491,6 +514,9 @@ class VectorShape {
       startMs: startMs,
       endMs: endMs,
       visible: visible,
+      embeddedProjectId: embeddedProjectId,
+      embeddedWidth: embeddedWidth,
+      embeddedHeight: embeddedHeight,
     );
     for (final key in keyframes) {
       clone.keyframes.add(key.copy());
@@ -510,6 +536,9 @@ class VectorShape {
         'startMs': startMs,
         'endMs': endMs,
         'visible': visible,
+        'embeddedProjectId': embeddedProjectId,
+        'embeddedWidth': embeddedWidth,
+        'embeddedHeight': embeddedHeight,
         'layers': layers.map((l) => l.toJson()).toList(),
         'keyframes': keyframes.map((k) => k.toJson()).toList(),
       };
@@ -527,6 +556,9 @@ class VectorShape {
       startMs: (json['startMs'] as num?)?.toInt() ?? 0,
       endMs: (json['endMs'] as num?)?.toInt() ?? 4000,
       visible: json['visible'] as bool? ?? true,
+      embeddedProjectId: json['embeddedProjectId'] as String?,
+      embeddedWidth: (json['embeddedWidth'] as num?)?.toDouble() ?? 0,
+      embeddedHeight: (json['embeddedHeight'] as num?)?.toDouble() ?? 0,
       layers: (json['layers'] as List<Object?>? ?? const [])
           .map((l) => ShapeLayer.fromJson((l as Map).cast<String, Object?>()))
           .toList(),

@@ -1,9 +1,10 @@
-# Vector Anim Studio 0.4.0
+# Vector Anim Studio 0.5.0
 
 Studio d'animation vectorielle complet pour Android : projets multiples, formes composées de couches, keyframes « pose », timeline à rectangles d'affichage, export MP4 et GIF.
 
 ## Nouveautés
 
+- **Instances d'animation** : le menu Formes propose « Insérer une animation… » pour imbriquer un autre projet. L'instance apparaît comme une barre **violette 🎬** sur la timeline ; ses propriétés (x, y, échelle, rotation, opacité, début, fin) s'éditent et s'animent (keyframes, auto-key, presets) comme une forme. La source tourne **en boucle** à vitesse naturelle sur la fenêtre d'affichage, et la lecture/lecture/export MP4-GIF-PNG suivent. Bouton « Source » dans la bottom sheet pour éditer le projet imbriqué (l'instance reflète les changements) ; projet source supprimé → cadre translucide barré, l'instance reste éditable. Un seul niveau d'imbrication.
 - **Dupliquer une couche** : bouton copier sur chaque couche de l'éditeur de forme — la copie est insérée juste après l'original, décalée de 16 px pour rester visible, sélectionnée et nommée « (copie) ». Couches et keyframes sont copiées en profondeur.
 - **6 nouvelles formes basiques** : Triangle, Étoile (5 branches), Hexagone, Croix, Cœur et Flèche — toutes paramétriques (suivent largeur/hauteur, remplissage ou contour) et rétrocompatibles avec les projets existants.
 - **Keyframes « pose »** : une keyframe porte désormais **toutes les propriétés** de la forme (position, rotation, échelle, opacité, épaisseur) au lieu d'une seule. L'interpolation entre deux keyframes s'applique à toutes les propriétés et est immédiatement visible dans l'aperçu.

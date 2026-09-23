@@ -41,7 +41,7 @@ class ProjectRepository {
   static const String fileName = 'vector_anim_studio.db';
 
   /// v2 : les keyframes sont des « poses » (toutes les propriétés à un temps).
-  static const int schemaVersion = 2;
+  static const int schemaVersion = 3;
 
   final DatabaseFactory _factory;
   final String? databasePath;
@@ -87,6 +87,9 @@ class ProjectRepository {
               start_ms INTEGER NOT NULL,
               end_ms INTEGER NOT NULL,
               visible INTEGER NOT NULL,
+              embedded_project_id TEXT,
+              embedded_width REAL NOT NULL DEFAULT 0,
+              embedded_height REAL NOT NULL DEFAULT 0,
               z INTEGER NOT NULL,
               FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
             )
@@ -133,8 +136,20 @@ class ProjectRepository {
         },
         onUpgrade: (db, oldVersion, newVersion) async {
           if (oldVersion < 2) await _migrateKeysToPoses(db);
+          if (oldVersion < 3) await _addEmbeddedColumns(db);
         },
       ),
+    );
+  }
+
+  /// Schéma v2 → v3 : instances d'animation (projets imbriqués).
+  Future<void> _addEmbeddedColumns(Database db) async {
+    await db.execute('ALTER TABLE shapes ADD COLUMN embedded_project_id TEXT');
+    await db.execute(
+      'ALTER TABLE shapes ADD COLUMN embedded_width REAL NOT NULL DEFAULT 0',
+    );
+    await db.execute(
+      'ALTER TABLE shapes ADD COLUMN embedded_height REAL NOT NULL DEFAULT 0',
     );
   }
 
@@ -356,6 +371,9 @@ class ProjectRepository {
         startMs: (shapeRow['start_ms'] as num).toInt(),
         endMs: (shapeRow['end_ms'] as num).toInt(),
         visible: (shapeRow['visible'] as num).toInt() == 1,
+        embeddedProjectId: shapeRow['embedded_project_id'] as String?,
+        embeddedWidth: (shapeRow['embedded_width'] as num?)?.toDouble() ?? 0,
+        embeddedHeight: (shapeRow['embedded_height'] as num?)?.toDouble() ?? 0,
       );
 
       final layerRows = await db.query(
@@ -475,6 +493,9 @@ class ProjectRepository {
           'start_ms': shape.startMs,
           'end_ms': shape.endMs,
           'visible': shape.visible ? 1 : 0,
+          'embedded_project_id': shape.embeddedProjectId,
+          'embedded_width': shape.embeddedWidth,
+          'embedded_height': shape.embeddedHeight,
           'z': i,
         });
         for (var j = 0; j < shape.layers.length; j++) {

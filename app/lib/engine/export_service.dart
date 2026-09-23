@@ -32,9 +32,12 @@ extension VideoFormatInfo on VideoFormat {
 
 /// Export d'un projet : vidéo MP4 (MediaCodec natif), GIF (pur Dart), PNG, JSON.
 class ExportService {
-  ExportService(this.project);
+  ExportService(this.project, {this.embeddedProjects = const {}});
 
   final AnimationProject project;
+
+  /// Projets imbriqués préchargés (rendu des instances dans les exports).
+  final Map<String, AnimationProject> embeddedProjects;
 
   static Future<Directory> outputDirectory() async {
     final documents = await getApplicationDocumentsDirectory();
@@ -115,6 +118,7 @@ class ExportService {
         timeMs,
         width: targetWidth,
         height: targetHeight,
+        embeddedProjects: embeddedProjects,
       );
       await FlutterQuickVideoEncoder.appendVideoFrame(frame);
       onProgress?.call((i + 1) / frames);
@@ -146,6 +150,7 @@ class ExportService {
         timeMs,
         width: targetWidth,
         height: targetHeight,
+        embeddedProjects: embeddedProjects,
       );
       final frame = img.Image.fromBytes(
         width: targetWidth,
@@ -167,7 +172,12 @@ class ExportService {
 
   /// Exporte la frame courante en PNG.
   Future<File> exportFramePng(int timeMs, {double pixelRatio = 2}) async {
-    final image = await renderProjectToImage(project, timeMs, pixelRatio: pixelRatio);
+    final image = await renderProjectToImage(
+      project,
+      timeMs,
+      pixelRatio: pixelRatio,
+      embeddedProjects: embeddedProjects,
+    );
     final data = await image.toByteData(format: ui.ImageByteFormat.png);
     image.dispose();
     final dir = await outputDirectory();

@@ -150,4 +150,24 @@ void main() {
     await repository.delete(project.id);
     expect(await repository.listSummaries(), hasLength(1));
   });
+
+  test('une instance d\'animation conserve sa référence imbriquée', () async {
+    final project = AnimationProject.blank(name: 'Hôte');
+    project.shapes.add(
+      VectorShape(
+        name: 'Instance',
+        embeddedProjectId: 'source-123',
+        embeddedWidth: 1080,
+        embeddedHeight: 1920,
+      ),
+    );
+    await repository.save(project);
+
+    final loaded = await repository.load(project.id);
+    final instance = loaded.shapes.single;
+    expect(instance.isInstance, isTrue);
+    expect(instance.embeddedProjectId, 'source-123');
+    expect(instance.embeddedWidth, 1080);
+    expect(instance.embeddedHeight, 1920);
+  });
 }

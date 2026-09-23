@@ -17,6 +17,7 @@ class ShapePropertiesSheet extends StatefulWidget {
     required this.onToggleKeyframe,
     required this.onKeyframeEasing,
     required this.onEditLayers,
+    this.onOpenSource,
   });
 
   final AnimationProject project;
@@ -29,6 +30,9 @@ class ShapePropertiesSheet extends StatefulWidget {
   final Future<void> Function() onToggleKeyframe;
   final Future<void> Function(EasingKind easing) onKeyframeEasing;
   final VoidCallback onEditLayers;
+
+  /// Ouvre le projet source (instances d'animation uniquement).
+  final VoidCallback? onOpenSource;
 
   @override
   State<ShapePropertiesSheet> createState() => _ShapePropertiesSheetState();
@@ -82,14 +86,24 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                         _refresh();
                       },
                     ),
-                    TextButton.icon(
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                        widget.onEditLayers();
-                      },
-                      icon: const Icon(Icons.edit, size: 16),
-                      label: const Text('Couches'),
-                    ),
+                    if (shape.isInstance)
+                      TextButton.icon(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          widget.onOpenSource?.call();
+                        },
+                        icon: const Icon(Icons.movie_outlined, size: 16),
+                        label: const Text('Source'),
+                      )
+                    else
+                      TextButton.icon(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          widget.onEditLayers();
+                        },
+                        icon: const Icon(Icons.edit, size: 16),
+                        label: const Text('Couches'),
+                      ),
                   ],
                 ),
                 Text(
@@ -101,7 +115,9 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                 ),
                 const SizedBox(height: 4),
                 for (final property in AnimatableProperty.values)
-                  _buildPropertyRow(shape, property, controller),
+                  if (property != AnimatableProperty.strokeWidth ||
+                      !shape.isInstance)
+                    _buildPropertyRow(shape, property, controller),
                 Row(
                   children: <Widget>[
                     const SizedBox(

@@ -168,7 +168,9 @@ class _ShapeBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final left = (shape.startMs / durationMs) * width;
     final barWidth = math.max(24.0, ((shape.endMs - shape.startMs) / durationMs) * width);
-    final color = Theme.of(context).colorScheme.primary;
+    final color = shape.isInstance
+        ? const Color(0xFFC084FC)
+        : Theme.of(context).colorScheme.primary;
     final keyTimes = <int>{
       for (final key in shape.keyframes)
         if (key.timeMs >= shape.startMs && key.timeMs <= shape.endMs) key.timeMs,
@@ -197,7 +199,7 @@ class _ShapeBar extends StatelessWidget {
               alignment: Alignment.centerLeft,
               padding: const EdgeInsets.symmetric(horizontal: 8),
               child: Text(
-                shape.name,
+                shape.isInstance ? '\u{1F3AC} ${shape.name}' : shape.name,
                 style: TextStyle(
                   fontSize: 11,
                   color: shape.visible ? Colors.white : Colors.white38,
