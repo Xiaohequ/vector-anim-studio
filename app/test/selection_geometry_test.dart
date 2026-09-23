@@ -51,11 +51,57 @@ void main() {
     });
   });
 
+  group('Poses', () {
+    test('shapePose lit les valeurs de base', () {
+      final pose = SelectionGeometry.shapePose(_shape(), 0);
+      expect(pose.origin, const Offset(180, 320));
+      expect(pose.rotation, 0);
+      expect(pose.scale, 1);
+    });
+
+    test('layerPose compose forme ∘ couche (identité)', () {
+      final layer = ShapeLayer(
+        name: 'L',
+        kind: ShapeKind.rect,
+        x: 10,
+        y: 20,
+        width: 110,
+        height: 50,
+      );
+      final pose = SelectionGeometry.layerPose(_shape(), layer, 0);
+      expect(pose.origin, const Offset(190, 340));
+      expect(pose.rotation, 0);
+      expect(pose.scale, 1);
+    });
+
+    test('layerPose : rotation et échelle de la forme se composent', () {
+      final shape = _shape(rotation: math.pi / 2, scale: 2);
+      final layer = ShapeLayer(
+        name: 'L',
+        kind: ShapeKind.rect,
+        x: 10,
+        y: 20,
+        width: 110,
+        height: 50,
+        rotation: 0.5,
+        scale: 1.5,
+      );
+      final pose = SelectionGeometry.layerPose(shape, layer, 0);
+      // R(90°) × (10, 20) = (-20, 10), fois l'échelle 2 → (-40, 20).
+      expect(pose.origin, const Offset(180 - 40, 320 + 20));
+      expect(pose.rotation, closeTo(math.pi / 2 + 0.5, 1e-9));
+      expect(pose.scale, 3);
+    });
+  });
+
   group('SelectionGeometry', () {
     test('coins sans rotation', () {
       final geo = SceneGeometry.fitFor(_project(), const Size(360, 640));
-      final corners = SelectionGeometry.cornersCanvas(
-          _bounds(), _shape(), 0, geo);
+      final corners = SelectionGeometry.corners(
+        _bounds(),
+        SelectionGeometry.shapePose(_shape(), 0),
+        geo,
+      );
       expect(corners[0], const Offset(180 - 61, 320 - 31)); // HG
       expect(corners[1], const Offset(180 + 61, 320 - 31)); // HD
       expect(corners[2], const Offset(180 + 61, 320 + 31)); // BD
@@ -64,8 +110,11 @@ void main() {
 
     test('coins pivotés de 90°', () {
       final geo = SceneGeometry.fitFor(_project(), const Size(360, 640));
-      final corners = SelectionGeometry.cornersCanvas(
-          _bounds(), _shape(rotation: math.pi / 2), 0, geo);
+      final corners = SelectionGeometry.corners(
+        _bounds(),
+        SelectionGeometry.shapePose(_shape(rotation: math.pi / 2), 0),
+        geo,
+      );
       // (-61,-31) tourné de 90° → (31,-61) ; (61,-31) → (31,61) ;
       // (61,31) → (-31,61).
       expect(corners[0], const Offset(180 + 31, 320 - 61));
@@ -75,23 +124,32 @@ void main() {
 
     test('poignée de rotation au-dessus du rectangle', () {
       final geo = SceneGeometry.fitFor(_project(), const Size(360, 640));
-      final handle = SelectionGeometry.rotationHandleCanvas(
-          _bounds(), _shape(), 0, geo);
+      final handle = SelectionGeometry.rotationHandle(
+        _bounds(),
+        SelectionGeometry.shapePose(_shape(), 0),
+        geo,
+      );
       expect(handle, const Offset(180, 320 - 31 - 30));
     });
 
     test('poignée de rotation suit la rotation de la forme', () {
       final geo = SceneGeometry.fitFor(_project(), const Size(360, 640));
-      final handle = SelectionGeometry.rotationHandleCanvas(
-          _bounds(), _shape(rotation: math.pi), 0, geo);
+      final handle = SelectionGeometry.rotationHandle(
+        _bounds(),
+        SelectionGeometry.shapePose(_shape(rotation: math.pi), 0),
+        geo,
+      );
       // Forme retournée : la poignée passe sous le rectangle.
       expect(handle.dy, greaterThan(320 + 31));
     });
 
     test('bouton propriétés au coin bas-gauche, en diagonale externe', () {
       final geo = SceneGeometry.fitFor(_project(), const Size(360, 640));
-      final button = SelectionGeometry.propertiesButtonCanvas(
-          _bounds(), _shape(), 0, geo);
+      final button = SelectionGeometry.propertiesButton(
+        _bounds(),
+        SelectionGeometry.shapePose(_shape(), 0),
+        geo,
+      );
       final bl = const Offset(180 - 61, 320 + 31);
       final outward = (bl - const Offset(180, 320));
       final expected = bl + (outward / outward.distance) * 26;
@@ -99,41 +157,61 @@ void main() {
       expect(button.dy, closeTo(expected.dy, 0.01));
     });
 
-    test('hitShape : centre touché, extérieur raté, marge écran constante', () {
+    test('hit : centre touché, extérieur raté, marge écran constante', () {
       final geo = SceneGeometry.fitFor(_project(), const Size(360, 640));
-      final shape = _shape();
+      final pose = SelectionGeometry.shapePose(_shape(), 0);
       expect(
-        SelectionGeometry.hitShape(_bounds(), shape, 0, geo,
-            const Offset(180, 320)),
+        SelectionGeometry.hit(_bounds(), pose, geo, const Offset(180, 320)),
         isTrue,
       );
       // 5 px écran à droite du bord (61) : dans la marge de 10 px.
       expect(
-        SelectionGeometry.hitShape(_bounds(), shape, 0, geo,
-            const Offset(180 + 66, 320)),
+        SelectionGeometry.hit(_bounds(), pose, geo, const Offset(180 + 66, 320)),
         isTrue,
       );
       // Loin : raté.
       expect(
-        SelectionGeometry.hitShape(_bounds(), shape, 0, geo,
-            const Offset(180 + 120, 320)),
+        SelectionGeometry.hit(_bounds(), pose, geo, const Offset(180 + 120, 320)),
         isFalse,
       );
     });
 
-    test('hitShape suit la rotation de la forme', () {
+    test('hit suit la rotation de l\'objet', () {
       final geo = SceneGeometry.fitFor(_project(), const Size(360, 640));
-      final shape = _shape(rotation: math.pi / 2);
+      final pose =
+          SelectionGeometry.shapePose(_shape(rotation: math.pi / 2), 0);
       // Le rect 220×62 devient vertical après rotation : point au-dessus → touché.
       expect(
-        SelectionGeometry.hitShape(_bounds(), shape, 0, geo,
-            const Offset(180, 320 - 50)),
+        SelectionGeometry.hit(_bounds(), pose, geo, const Offset(180, 320 - 50)),
         isTrue,
       );
       // Point à droite (horizontalement large) → raté maintenant.
       expect(
-        SelectionGeometry.hitShape(_bounds(), shape, 0, geo,
-            const Offset(180 + 50, 320)),
+        SelectionGeometry.hit(_bounds(), pose, geo, const Offset(180 + 50, 320)),
+        isFalse,
+      );
+    });
+
+    test('hit sur une couche via la pose composée', () {
+      final geo = SceneGeometry.fitFor(_project(), const Size(360, 640));
+      final shape = _shape();
+      final layer = ShapeLayer(
+        name: 'L',
+        kind: ShapeKind.rect,
+        x: 10,
+        y: 20,
+        width: 110,
+        height: 50,
+      );
+      final pose = SelectionGeometry.layerPose(shape, layer, 0);
+      expect(
+        SelectionGeometry.hit(
+            Rect.fromLTRB(-55, -55, 55, 55), pose, geo, const Offset(190, 340)),
+        isTrue,
+      );
+      expect(
+        SelectionGeometry.hit(
+            Rect.fromLTRB(-55, -55, 55, 55), pose, geo, const Offset(100, 250)),
         isFalse,
       );
     });

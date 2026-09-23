@@ -3,13 +3,21 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../engine/scene_painter.dart';
+import '../engine/selection_geometry.dart';
 import '../models/animation.dart';
+import 'layer_properties_sheet.dart';
 import 'palette.dart';
 
-/// Création / édition d'une forme : aperçu en haut, couches en bas.
+/// Geste en cours sur le preview de l'éditeur.
+enum _EditorGesture { none, move, scale, rotate }
+
+/// Création / édition d'une forme : aperçu manipulable en haut, couches en bas.
 ///
-/// Une forme est un groupe de couches (formes basiques). Chaque couche se
-/// règle indépendamment (position, taille, rotation, couleur, épaisseur).
+/// Une forme est un groupe de couches (formes basiques). La couche sélectionnée
+/// se manipule directement sur le preview : déplacement au doigt (x, y),
+/// pinch = échelle, poignée de rotation au-dessus du rectangle de sélection.
+/// Les réglages fins sont dans la bottom sheet ouverte par le bouton ⚙ ancré
+/// au coin bas-gauche de la sélection.
 class ShapeEditorScreen extends StatefulWidget {
   const ShapeEditorScreen({
     super.key,
@@ -30,6 +38,19 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
   late VectorShape _draft;
   late final TextEditingController _name;
   String? _selectedLayerId;
+
+  // Option : aimanter la rotation aux multiples de 90° (bouton du preview).
+  bool _snapRotation = false;
+
+  // Geste en cours (déplacement, pinch, rotation par poignée).
+  _EditorGesture _gesture = _EditorGesture.none;
+  int _activePointers = 0;
+  double _gestureBaseX = 0;
+  double _gestureBaseY = 0;
+  double _gestureBaseRotation = 0;
+  double _gestureBaseScale = 1;
+  double _gestureStartAngle = 0;
+  Offset _gestureStartPoint = Offset.zero;
 
   bool get _isNew => widget.shape == null;
 
@@ -164,7 +185,6 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 8),
           Expanded(
             child: LayerPanel(
               shape: _draft,
@@ -172,7 +192,6 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
               selectedLayer: layer,
               onSelect: (value) => setState(() => _selectedLayerId = value.id),
               onAdd: _addLayer,
-              onRemove: _removeLayer,
               onMove: _moveLayer,
               onChanged: () => setState(() {}),
             ),
@@ -181,6 +200,8 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
       ),
     );
   }
+
+  // ----------------------------------------------------------------- preview
 
   Widget _buildPreview() {
     return Container(
@@ -192,23 +213,225 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
         border: Border.all(color: const Color(0xFF232733)),
       ),
       clipBehavior: Clip.antiAlias,
-      child: InteractiveViewer(
-        maxScale: 5,
-        child: Center(
-          child: AspectRatio(
-            aspectRatio: widget.project.width / widget.project.height,
-            child: CustomPaint(
-              painter: ScenePainter(
-                project: _preview,
-                timeMs: _draft.startMs,
-                selectedShapeId: _isNew ? null : _draft.id,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final canvasSize = constraints.biggest;
+          final layer = _selectedLayer;
+          return Stack(
+            children: <Widget>[
+              Positioned.fill(
+                child: Listener(
+                  onPointerDown: (_) => _activePointers++,
+                  onPointerUp: (_) => _pointerUp(),
+                  onPointerCancel: (_) => _pointerUp(),
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onScaleStart: (details) =>
+                        _onGestureStart(details, canvasSize),
+                    onScaleUpdate: (details) =>
+                        _onGestureUpdate(details, canvasSize),
+                    onScaleEnd: (_) => _gesture = _EditorGesture.none,
+                    onTapUp: (details) => _onTapUp(details, canvasSize),
+                    child: CustomPaint(
+                      painter: ScenePainter(
+                        project: _preview,
+                        timeMs: _draft.startMs,
+                        selectedShapeId: _draft.id,
+                        selectedLayerId: _selectedLayerId,
+                        showFrame: true,
+                      ),
+                      child: const SizedBox.expand(),
+                    ),
+                  ),
+                ),
               ),
-              child: const SizedBox.expand(),
-            ),
-          ),
-        ),
+              Positioned(
+                right: 8,
+                top: 8,
+                child: IconButton(
+                  tooltip: 'Snap rotation 90°',
+                  isSelected: _snapRotation,
+                  onPressed: () =>
+                      setState(() => _snapRotation = !_snapRotation),
+                  icon: const Icon(Icons.rotate_90_degrees_ccw_outlined, size: 20),
+                  selectedIcon: const Icon(
+                    Icons.rotate_90_degrees_ccw,
+                    size: 20,
+                    color: Color(0xFF7DD3FC),
+                  ),
+                  style: IconButton.styleFrom(
+                    backgroundColor: const Color(0xCC151922),
+                    foregroundColor: Colors.white70,
+                  ),
+                ),
+              ),
+              if (layer != null && layer.visible)
+                _buildLayerButton(layer, canvasSize),
+            ],
+          );
+        },
       ),
     );
+  }
+
+  /// Bouton « réglages » ancré au coin bas-gauche du rectangle de la couche.
+  Widget _buildLayerButton(ShapeLayer layer, Size canvasSize) {
+    if (canvasSize.isEmpty) return const SizedBox.shrink();
+    final geo = SceneGeometry.fitFor(widget.project, canvasSize);
+    final center = SelectionGeometry.propertiesButton(
+      ScenePainter.layerBounds(layer),
+      SelectionGeometry.layerPose(_draft, layer, _draft.startMs),
+      geo,
+    );
+    const size = 34.0;
+    final left = (center.dx - size / 2)
+        .clamp(0.0, math.max(0.0, canvasSize.width - size))
+        .toDouble();
+    final top = (center.dy - size / 2)
+        .clamp(0.0, math.max(0.0, canvasSize.height - size))
+        .toDouble();
+    return Positioned(
+      left: left,
+      top: top,
+      width: size,
+      height: size,
+      child: IconButton(
+        tooltip: 'Réglages de la couche',
+        padding: EdgeInsets.zero,
+        iconSize: 18,
+        style: IconButton.styleFrom(
+          backgroundColor: const Color(0xCC151922),
+          foregroundColor: const Color(0xFF7DD3FC),
+        ),
+        icon: const Icon(Icons.tune),
+        onPressed: () => _showLayerSheet(layer),
+      ),
+    );
+  }
+
+  void _showLayerSheet(ShapeLayer layer) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      backgroundColor: const Color(0xFF151922),
+      builder: (_) => LayerPropertiesSheet(
+        layer: layer,
+        canDelete: _draft.layers.length > 1,
+        onChanged: () => setState(() {}),
+        onDelete: () => _removeLayer(layer),
+      ),
+    );
+  }
+
+  // ----------------------------------------------------------------- gestes
+
+  void _pointerUp() => _activePointers = math.max(0, _activePointers - 1);
+
+  void _onGestureStart(ScaleStartDetails details, Size canvasSize) {
+    _gestureStartPoint = details.localFocalPoint;
+    final layer = _selectedLayer;
+    if (layer == null || !layer.visible) {
+      _gesture = _EditorGesture.none;
+      return;
+    }
+    final geo = SceneGeometry.fitFor(widget.project, canvasSize);
+    final pose = SelectionGeometry.layerPose(_draft, layer, _draft.startMs);
+    final bounds = ScenePainter.layerBounds(layer);
+    if (_activePointers >= 2) {
+      // Pinch : échelle de la couche sélectionnée.
+      _gesture = _EditorGesture.scale;
+    } else if (SelectionGeometry.hitRotationHandle(
+      details.localFocalPoint,
+      SelectionGeometry.rotationHandle(bounds, pose, geo),
+    )) {
+      // Poignée de rotation.
+      _gesture = _EditorGesture.rotate;
+      final center = SelectionGeometry.center(pose, geo);
+      _gestureStartAngle = math.atan2(
+        details.localFocalPoint.dy - center.dy,
+        details.localFocalPoint.dx - center.dx,
+      );
+    } else if (SelectionGeometry.hit(
+      bounds,
+      pose,
+      geo,
+      details.localFocalPoint,
+    )) {
+      // Corps de la couche : déplacement.
+      _gesture = _EditorGesture.move;
+    } else {
+      _gesture = _EditorGesture.none;
+    }
+    _gestureBaseX = layer.x;
+    _gestureBaseY = layer.y;
+    _gestureBaseRotation = layer.rotation;
+    _gestureBaseScale = layer.scale;
+  }
+
+  void _onGestureUpdate(ScaleUpdateDetails details, Size canvasSize) {
+    final layer = _selectedLayer;
+    if (layer == null || _gesture == _EditorGesture.none) return;
+    switch (_gesture) {
+      case _EditorGesture.move:
+        final geo = SceneGeometry.fitFor(widget.project, canvasSize);
+        final sceneDelta = geo.canvasToScene(details.localFocalPoint) -
+            geo.canvasToScene(_gestureStartPoint);
+        // La couche vit dans le repère de la forme : le delta de scène est
+        // repassé en local (rotation et échelle de la forme inversées).
+        final shapePose = SelectionGeometry.shapePose(_draft, _draft.startMs);
+        final cosR = math.cos(-shapePose.rotation);
+        final sinR = math.sin(-shapePose.rotation);
+        final safeScale = math.max(0.0001, shapePose.scale.abs());
+        final local = Offset(
+          (sceneDelta.dx * cosR - sceneDelta.dy * sinR) / safeScale,
+          (sceneDelta.dx * sinR + sceneDelta.dy * cosR) / safeScale,
+        );
+        setState(() {
+          layer.x = _gestureBaseX + local.dx;
+          layer.y = _gestureBaseY + local.dy;
+        });
+      case _EditorGesture.scale:
+        final next = (_gestureBaseScale * details.scale).clamp(0.05, 4.0);
+        setState(() => layer.scale = next.toDouble());
+      case _EditorGesture.rotate:
+        final geo = SceneGeometry.fitFor(widget.project, canvasSize);
+        final pose = SelectionGeometry.layerPose(_draft, layer, _draft.startMs);
+        final center = SelectionGeometry.center(pose, geo);
+        final angle = math.atan2(
+          details.localFocalPoint.dy - center.dy,
+          details.localFocalPoint.dx - center.dx,
+        );
+        var next = _gestureBaseRotation + (angle - _gestureStartAngle);
+        if (_snapRotation) {
+          const step = math.pi / 2;
+          const tolerance = 3 * math.pi / 180;
+          final snapped = (next / step).roundToDouble() * step;
+          if ((next - snapped).abs() <= tolerance) next = snapped;
+        }
+        setState(() => layer.rotation = next);
+      case _EditorGesture.none:
+        break;
+    }
+  }
+
+  /// Tap sur une couche : la sélectionne (du premier plan vers l'arrière-plan).
+  /// Tap dans le vide : la sélection actuelle est conservée.
+  void _onTapUp(TapUpDetails details, Size canvasSize) {
+    final geo = SceneGeometry.fitFor(widget.project, canvasSize);
+    for (final layer in _draft.layers.reversed) {
+      if (!layer.visible) continue;
+      if (SelectionGeometry.hit(
+        ScenePainter.layerBounds(layer),
+        SelectionGeometry.layerPose(_draft, layer, _draft.startMs),
+        geo,
+        details.localPosition,
+      )) {
+        setState(() => _selectedLayerId = layer.id);
+        return;
+      }
+    }
   }
 }
 
@@ -219,7 +442,9 @@ class TimelineViewMinSpan {
   static const int ms = 100;
 }
 
-/// Liste des couches + réglages de la couche sélectionnée.
+/// Liste des couches + fenêtre d'affichage de la forme. Les réglages fins de
+/// la couche sélectionnée sont dans la bottom sheet (`LayerPropertiesSheet`),
+/// ouverte depuis le bouton ⚙ du preview.
 class LayerPanel extends StatelessWidget {
   const LayerPanel({
     super.key,
@@ -228,7 +453,6 @@ class LayerPanel extends StatelessWidget {
     required this.selectedLayer,
     required this.onSelect,
     required this.onAdd,
-    required this.onRemove,
     required this.onMove,
     required this.onChanged,
   });
@@ -238,7 +462,6 @@ class LayerPanel extends StatelessWidget {
   final ShapeLayer? selectedLayer;
   final ValueChanged<ShapeLayer> onSelect;
   final ValueChanged<ShapeKind> onAdd;
-  final ValueChanged<ShapeLayer> onRemove;
   final void Function(int index, int delta) onMove;
   final VoidCallback onChanged;
 
@@ -278,37 +501,6 @@ class LayerPanel extends StatelessWidget {
           ],
         ),
         if (layer != null) ...<Widget>[
-          const Divider(height: 28),
-          Row(
-            children: <Widget>[
-              Expanded(
-                child: Text(
-                  'Réglages · ${layer.name}',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-              IconButton(
-                tooltip: 'Supprimer la couche',
-                onPressed: () => onRemove(layer),
-                icon: const Icon(Icons.delete_outline),
-              ),
-            ],
-          ),
-          _ColorRow(layer: layer, onChanged: onChanged),
-          Row(
-            children: <Widget>[
-              const Text('Remplissage', style: TextStyle(fontSize: 12)),
-              Switch(
-                value: layer.filled,
-                onChanged: (value) {
-                  layer.filled = value;
-                  onChanged();
-                },
-              ),
-            ],
-          ),
-          for (final property in _layerProperties(shape))
-            _LayerSlider(layer: layer, property: property, onChanged: onChanged),
           const Divider(height: 28),
           const Text(
             'Fenêtre d’affichage (timeline)',
@@ -389,121 +581,6 @@ class LayerPanel extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-
-  List<LayerProperty> _layerProperties(VectorShape shape) => const <LayerProperty>[
-        LayerProperty.x,
-        LayerProperty.y,
-        LayerProperty.width,
-        LayerProperty.height,
-        LayerProperty.rotation,
-        LayerProperty.scale,
-        LayerProperty.opacity,
-        LayerProperty.strokeWidth,
-      ];
-}
-
-class _ColorRow extends StatelessWidget {
-  const _ColorRow({required this.layer, required this.onChanged});
-
-  final ShapeLayer layer;
-  final VoidCallback onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: <Widget>[
-        const Text('Couleur', style: TextStyle(fontSize: 12)),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: <Widget>[
-              for (final color in kColorPalette)
-                GestureDetector(
-                  onTap: () {
-                    layer.colorValue = color;
-                    onChanged();
-                  },
-                  child: Container(
-                    width: 22,
-                    height: 22,
-                    decoration: BoxDecoration(
-                      color: Color(color),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: layer.colorValue == color
-                            ? Colors.white
-                            : Colors.white24,
-                        width: 2,
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _LayerSlider extends StatelessWidget {
-  const _LayerSlider({
-    required this.layer,
-    required this.property,
-    required this.onChanged,
-  });
-
-  final ShapeLayer layer;
-  final LayerProperty property;
-  final VoidCallback onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final (min, max, step) = switch (property) {
-      LayerProperty.x => (-240.0, 240.0, 1.0),
-      LayerProperty.y => (-320.0, 320.0, 1.0),
-      LayerProperty.width => (2.0, 400.0, 1.0),
-      LayerProperty.height => (0.0, 400.0, 1.0),
-      LayerProperty.rotation => (-3.15, 3.15, 0.01),
-      LayerProperty.scale => (0.05, 4.0, 0.01),
-      LayerProperty.opacity => (0.0, 1.0, 0.01),
-      LayerProperty.strokeWidth => (0.0, 40.0, 0.5),
-    };
-    final value = layer.baseOf(property).clamp(min, max);
-    return Row(
-      children: <Widget>[
-        SizedBox(
-          width: 92,
-          child: Text(
-            layerPropertyLabel(property),
-            style: const TextStyle(fontSize: 12),
-          ),
-        ),
-        Expanded(
-          child: Slider(
-            min: min,
-            max: max,
-            divisions: math.max(1, ((max - min) / step).round()),
-            value: value,
-            onChanged: (next) {
-              layer.setBase(property, next);
-              onChanged();
-            },
-          ),
-        ),
-        SizedBox(
-          width: 46,
-          child: Text(
-            value.toStringAsFixed(step < 1 ? 2 : 0),
-            style: const TextStyle(fontSize: 11),
-            textAlign: TextAlign.right,
-          ),
-        ),
-      ],
     );
   }
 }

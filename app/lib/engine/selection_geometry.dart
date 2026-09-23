@@ -3,6 +3,21 @@ import 'dart:ui' show Offset, Rect, Size;
 
 import '../models/animation.dart';
 
+/// Pose d'un objet en coordonnées scène : origine (centre de rotation et
+/// d'échelle), rotation (radians), échelle. Sert autant pour une forme que
+/// pour une couche (via composition, cf. `layerPose`).
+class Pose2D {
+  const Pose2D({
+    required this.origin,
+    required this.rotation,
+    required this.scale,
+  });
+
+  final Offset origin;
+  final double rotation;
+  final double scale;
+}
+
 /// Mapping entre les coordonnées scène (repère du projet, ex. 360×640) et les
 /// coordonnées canvas (repère du widget, pixels logiques). La scène est
 /// inscrite dans le canvas avec un facteur unique et centrée — le même calcul
@@ -44,13 +59,11 @@ class SceneGeometry {
 }
 
 /// Géométrie de la sélection en coordonnées canvas (écran) : rectangle pivoté,
-/// poignée de rotation, bouton propriétés et zones de toucher.
+/// poignée de rotation, bouton propriétés et zones de toucher — à partir d'une
+/// [Pose2D] et du rect local de l'objet.
 ///
-/// Toutes les méthodes prennent le rect local de la forme (avant
-/// transformation, cf. `ScenePainter.shapeBounds`) et la pose effective à
-/// l'instant courant. Les distances (poignées, marges de toucher) sont
-/// exprimées en pixels écran pour rester constantes quelles que soient les
-/// échelles de la forme.
+/// Les distances (poignées, marges de toucher) sont exprimées en pixels écran
+/// pour rester constantes quelles que soient les échelles de l'objet.
 class SelectionGeometry {
   SelectionGeometry._();
 
@@ -66,15 +79,14 @@ class SelectionGeometry {
   /// Tolérance de toucher (px écran) autour de la poignée.
   static const double touchSlop = 26;
 
-  /// Marge de toucher (px écran) autour du corps de la forme.
+  /// Marge de toucher (px écran) autour du corps de l'objet.
   static const double shapeTouchMargin = 10;
 
-  /// Pose effective (position, rotation, échelle) de la forme à l'instant donné.
-  static ({Offset position, double rotation, double scale}) pose(
-    VectorShape shape,
-    int timeMs,
-  ) => (
-        position: Offset(
+  // ------------------------------------------------------------- poses
+
+  /// Pose d'une forme à l'instant donné (valeurs interpolées).
+  static Pose2D shapePose(VectorShape shape, int timeMs) => Pose2D(
+        origin: Offset(
           shape.valueAt(AnimatableProperty.x, timeMs),
           shape.valueAt(AnimatableProperty.y, timeMs),
         ),
@@ -82,88 +94,87 @@ class SelectionGeometry {
         scale: shape.valueAt(AnimatableProperty.scale, timeMs),
       );
 
-  /// Projette un point du repère local de la forme vers le canvas.
-  static Offset localToCanvas(
-    Offset local,
+  /// Pose d'une couche : composition de la transforme de la forme ∘ couche.
+  /// L'origine de la couche (son centre, positionné par layer.x/y dans le
+  /// repère de la forme) est transformée par la pose de la forme ; rotations
+  /// s'additionnent, échelles se multiplient.
+  static Pose2D layerPose(
     VectorShape shape,
+    ShapeLayer layer,
     int timeMs,
-    SceneGeometry geo,
   ) {
-    final p = pose(shape, timeMs);
-    final s = math.max(0.0001, p.scale.abs());
+    final sp = shapePose(shape, timeMs);
+    final cosR = math.cos(sp.rotation);
+    final sinR = math.sin(sp.rotation);
+    final lx = layer.x * sp.scale;
+    final ly = layer.y * sp.scale;
+    return Pose2D(
+      origin: Offset(
+        sp.origin.dx + lx * cosR - ly * sinR,
+        sp.origin.dy + lx * sinR + ly * cosR,
+      ),
+      rotation: sp.rotation + layer.rotation,
+      scale: sp.scale * layer.scale,
+    );
+  }
+
+  // ---------------------------------------------------------- géométrie
+
+  /// Projette un point du repère local de l'objet vers le canvas.
+  static Offset localToCanvas(Offset local, Pose2D pose, SceneGeometry geo) {
+    final s = math.max(0.0001, pose.scale.abs());
     final sx = local.dx * s;
     final sy = local.dy * s;
-    final cosR = math.cos(p.rotation);
-    final sinR = math.sin(p.rotation);
+    final cosR = math.cos(pose.rotation);
+    final sinR = math.sin(pose.rotation);
     return geo.sceneToCanvas(Offset(
-      p.position.dx + sx * cosR - sy * sinR,
-      p.position.dy + sx * sinR + sy * cosR,
+      pose.origin.dx + sx * cosR - sy * sinR,
+      pose.origin.dy + sx * sinR + sy * cosR,
     ));
   }
 
   /// Les 4 coins du rectangle de sélection, en canvas (HG, HD, BD, BG).
-  static List<Offset> cornersCanvas(
-    Rect localBounds,
-    VectorShape shape,
-    int timeMs,
-    SceneGeometry geo,
-  ) => <Offset>[
-        localToCanvas(localBounds.topLeft, shape, timeMs, geo),
-        localToCanvas(localBounds.topRight, shape, timeMs, geo),
-        localToCanvas(localBounds.bottomRight, shape, timeMs, geo),
-        localToCanvas(localBounds.bottomLeft, shape, timeMs, geo),
+  static List<Offset> corners(Rect localBounds, Pose2D pose, SceneGeometry geo) =>
+      <Offset>[
+        localToCanvas(localBounds.topLeft, pose, geo),
+        localToCanvas(localBounds.topRight, pose, geo),
+        localToCanvas(localBounds.bottomRight, pose, geo),
+        localToCanvas(localBounds.bottomLeft, pose, geo),
       ];
 
-  /// Centre de la forme (son origine x, y) en canvas.
-  static Offset centerCanvas(
-    VectorShape shape,
-    int timeMs,
-    SceneGeometry geo,
-  ) => geo.sceneToCanvas(Offset(
-        shape.valueAt(AnimatableProperty.x, timeMs),
-        shape.valueAt(AnimatableProperty.y, timeMs),
-      ));
+  /// Centre de l'objet (son origine) en canvas.
+  static Offset center(Pose2D pose, SceneGeometry geo) =>
+      geo.sceneToCanvas(pose.origin);
 
   /// Milieu du haut du rectangle de sélection, en canvas.
-  static Offset topCenterCanvas(
-    Rect localBounds,
-    VectorShape shape,
-    int timeMs,
-    SceneGeometry geo,
-  ) => localToCanvas(
-        Offset(localBounds.center.dx, localBounds.top),
-        shape,
-        timeMs,
-        geo,
-      );
+  static Offset topCenter(Rect localBounds, Pose2D pose, SceneGeometry geo) =>
+      localToCanvas(Offset(localBounds.center.dx, localBounds.top), pose, geo);
 
   /// Position du centre de la poignée de rotation, en canvas : à
   /// [handleDistance] au-dessus du haut du rectangle, le long de son axe.
-  static Offset rotationHandleCanvas(
+  static Offset rotationHandle(
     Rect localBounds,
-    VectorShape shape,
-    int timeMs,
+    Pose2D pose,
     SceneGeometry geo,
   ) {
-    final topCenter = topCenterCanvas(localBounds, shape, timeMs, geo);
-    final center = centerCanvas(shape, timeMs, geo);
-    final up = topCenter - center;
+    final top = topCenter(localBounds, pose, geo);
+    final c = center(pose, geo);
+    final up = top - c;
     final len = up.distance;
-    if (len < 0.0001) return topCenter - const Offset(0, handleDistance);
-    return topCenter + (up / len) * handleDistance;
+    if (len < 0.0001) return top - const Offset(0, handleDistance);
+    return top + (up / len) * handleDistance;
   }
 
   /// Position du centre du bouton propriétés : coin bas-gauche du rectangle
   /// décalé en diagonale externe, en canvas.
-  static Offset propertiesButtonCanvas(
+  static Offset propertiesButton(
     Rect localBounds,
-    VectorShape shape,
-    int timeMs,
+    Pose2D pose,
     SceneGeometry geo,
   ) {
-    final bottomLeft = cornersCanvas(localBounds, shape, timeMs, geo)[3];
-    final center = centerCanvas(shape, timeMs, geo);
-    final outward = bottomLeft - center;
+    final bottomLeft = corners(localBounds, pose, geo)[3];
+    final c = center(pose, geo);
+    final outward = bottomLeft - c;
     final len = outward.distance;
     final step = len < 0.0001
         ? const Offset(-buttonOffset, buttonOffset)
@@ -171,26 +182,26 @@ class SelectionGeometry {
     return bottomLeft + step;
   }
 
+  // ---------------------------------------------------------- hit tests
+
   /// Le point canvas touche-t-il la poignée de rotation ?
   static bool hitRotationHandle(Offset point, Offset handleCenter) =>
       (point - handleCenter).distance <= touchSlop;
 
-  /// Le point canvas touche-t-il la forme ? Rect local pivoté/zoomé avec une
+  /// Le point canvas touche-t-il l'objet ? Rect local pivoté/zoomé avec une
   /// marge de toucher constante en pixels écran.
-  static bool hitShape(
+  static bool hit(
     Rect localBounds,
-    VectorShape shape,
-    int timeMs,
+    Pose2D pose,
     SceneGeometry geo,
     Offset canvasPoint,
   ) {
-    final p = pose(shape, timeMs);
-    final s = math.max(0.0001, p.scale.abs());
+    final s = math.max(0.0001, pose.scale.abs());
     final scene = geo.canvasToScene(canvasPoint);
-    final relX = scene.dx - p.position.dx;
-    final relY = scene.dy - p.position.dy;
-    final cosR = math.cos(-p.rotation);
-    final sinR = math.sin(-p.rotation);
+    final relX = scene.dx - pose.origin.dx;
+    final relY = scene.dy - pose.origin.dy;
+    final cosR = math.cos(-pose.rotation);
+    final sinR = math.sin(-pose.rotation);
     final local = Offset(
       (relX * cosR - relY * sinR) / s,
       (relX * sinR + relY * cosR) / s,

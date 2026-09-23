@@ -339,30 +339,24 @@ class _StudioScreenState extends State<StudioScreen>
       return;
     }
     final geo = SceneGeometry.fitFor(project, canvasSize);
+    final pose = SelectionGeometry.shapePose(shape, controller.timeMs);
     if (_activePointers >= 2) {
       // Pinch : échelle de la forme sélectionnée.
       _gesture = _CanvasGesture.scale;
     } else if (SelectionGeometry.hitRotationHandle(
       details.localFocalPoint,
-      SelectionGeometry.rotationHandleCanvas(
-        bounds,
-        shape,
-        controller.timeMs,
-        geo,
-      ),
+      SelectionGeometry.rotationHandle(bounds, pose, geo),
     )) {
       // Poignée de rotation.
       _gesture = _CanvasGesture.rotate;
-      final center =
-          SelectionGeometry.centerCanvas(shape, controller.timeMs, geo);
+      final center = SelectionGeometry.center(pose, geo);
       _gestureStartAngle = math.atan2(
         details.localFocalPoint.dy - center.dy,
         details.localFocalPoint.dx - center.dx,
       );
-    } else if (SelectionGeometry.hitShape(
+    } else if (SelectionGeometry.hit(
       bounds,
-      shape,
-      controller.timeMs,
+      pose,
       geo,
       details.localFocalPoint,
     )) {
@@ -402,8 +396,8 @@ class _StudioScreenState extends State<StudioScreen>
             shape, controller, AnimatableProperty.scale, next.toDouble());
       case _CanvasGesture.rotate:
         final geo = SceneGeometry.fitFor(project, canvasSize);
-        final center =
-            SelectionGeometry.centerCanvas(shape, controller.timeMs, geo);
+        final pose = SelectionGeometry.shapePose(shape, controller.timeMs);
+        final center = SelectionGeometry.center(pose, geo);
         final angle = math.atan2(
           details.localFocalPoint.dy - center.dy,
           details.localFocalPoint.dx - center.dx,
@@ -442,10 +436,9 @@ class _StudioScreenState extends State<StudioScreen>
       if (!shape.isVisibleAt(controller.timeMs)) continue;
       final bounds = ScenePainter.shapeBounds(shape, controller.timeMs);
       if (bounds == null) continue;
-      if (SelectionGeometry.hitShape(
+      if (SelectionGeometry.hit(
         bounds,
-        shape,
-        controller.timeMs,
+        SelectionGeometry.shapePose(shape, controller.timeMs),
         geo,
         details.localPosition,
       )) {
@@ -591,21 +584,30 @@ class _StudioScreenState extends State<StudioScreen>
         appBar: AppBar(
           title: Text(project.name, maxLines: 1, overflow: TextOverflow.ellipsis),
           actions: <Widget>[
-            _shapesMenu(project),
-            _animationsMenu(),
-            _layersMenu(project),
             _exportMenu(),
           ],
         ),
         body: AnimatedBuilder(
           animation: controller,
           builder: (context, _) {
-            return Column(
-              children: <Widget>[
-                Expanded(child: _buildCanvas(project, controller)),
-                _buildTimeline(project, controller),
-                _buildPlaybar(project, controller),
-              ],
+            return LayoutBuilder(
+              builder: (context, constraints) {
+                // Le preview prend ~40 % de la hauteur : le reste va à la
+                // barre de lecture, à la timeline et à la barre d'outils.
+                final previewHeight =
+                    (constraints.maxHeight * 0.40).clamp(200.0, 380.0);
+                return Column(
+                  children: <Widget>[
+                    SizedBox(
+                      height: previewHeight,
+                      child: _buildCanvas(project, controller),
+                    ),
+                    _buildPlaybar(controller),
+                    Expanded(child: _buildTimeline(project, controller)),
+                    _buildToolbar(project),
+                  ],
+                );
+              },
             );
           },
         ),
@@ -675,10 +677,9 @@ class _StudioScreenState extends State<StudioScreen>
       return const SizedBox.shrink();
     }
     final geo = SceneGeometry.fitFor(project, canvasSize);
-    final center = SelectionGeometry.propertiesButtonCanvas(
+    final center = SelectionGeometry.propertiesButton(
       bounds,
-      shape,
-      controller.timeMs,
+      SelectionGeometry.shapePose(shape, controller.timeMs),
       geo,
     );
     const size = 38.0;
@@ -708,8 +709,7 @@ class _StudioScreenState extends State<StudioScreen>
 
   Widget _buildTimeline(AnimationProject project, TimelineController controller) {
     return Container(
-      height: 110,
-      margin: const EdgeInsets.symmetric(horizontal: 12),
+      margin: const EdgeInsets.fromLTRB(12, 4, 12, 0),
       padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
       decoration: BoxDecoration(
         color: const Color(0xFF151922),
@@ -752,12 +752,17 @@ class _StudioScreenState extends State<StudioScreen>
     );
   }
 
-  Widget _buildPlaybar(AnimationProject project, TimelineController controller) {
+  Widget _buildPlaybar(TimelineController controller) {
+    final shape = _selected;
+    final keyframe = shape == null ? null : controller.nearestKeyframe(shape);
+    final hasKeyframes = shape?.hasKeyframes ?? false;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
+      padding: const EdgeInsets.fromLTRB(12, 2, 12, 2),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: <Widget>[
           IconButton(
+            tooltip: 'Retour au début',
             onPressed: controller.rewind,
             icon: const Icon(Icons.skip_previous),
           ),
@@ -769,6 +774,17 @@ class _StudioScreenState extends State<StudioScreen>
             icon: Icon(controller.playing ? Icons.pause : Icons.play_arrow),
           ),
           IconButton(
+            tooltip: keyframe == null
+                ? 'Ajouter une keyframe au curseur'
+                : 'Retirer la keyframe au curseur',
+            onPressed: _toggleKeyframe,
+            icon: Icon(
+              keyframe == null ? Icons.diamond_outlined : Icons.diamond,
+              color: hasKeyframes ? const Color(0xFFF2C94C) : null,
+            ),
+          ),
+          IconButton(
+            tooltip: 'Boucle',
             onPressed: () => controller.setLoop(!controller.loop),
             icon: Icon(controller.loop ? Icons.repeat_on : Icons.repeat),
           ),
@@ -779,8 +795,25 @@ class _StudioScreenState extends State<StudioScreen>
             icon: const Icon(Icons.rotate_90_degrees_ccw_outlined),
             selectedIcon: const Icon(Icons.rotate_90_degrees_ccw),
           ),
+        ],
+      ),
+    );
+  }
+
+  /// Barre d'outils en bas : menus Formes, Animations, Calques.
+  Widget _buildToolbar(AnimationProject project) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      child: Row(
+        children: <Widget>[
+          _shapesMenu(project),
+          _animationsMenu(),
+          _layersMenu(project),
           const Spacer(),
-          Text('${project.shapes.length} forme(s)', style: const TextStyle(fontSize: 12)),
+          Text(
+            '${project.shapes.length} forme(s)',
+            style: const TextStyle(fontSize: 12),
+          ),
         ],
       ),
     );

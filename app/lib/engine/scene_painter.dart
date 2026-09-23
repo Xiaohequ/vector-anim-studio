@@ -13,6 +13,7 @@ class ScenePainter extends CustomPainter {
     required this.project,
     required this.timeMs,
     this.selectedShapeId,
+    this.selectedLayerId,
     this.transparentBackground = false,
     this.showFrame = false,
   });
@@ -20,6 +21,10 @@ class ScenePainter extends CustomPainter {
   final AnimationProject project;
   final int timeMs;
   final String? selectedShapeId;
+
+  /// Couche sélectionnée à l'intérieur de la forme sélectionnée (éditeur de
+  /// forme) : prioritaire sur la sélection de forme pour l'overlay.
+  final String? selectedLayerId;
   final bool transparentBackground;
 
   /// Dessine la bordure du cadre projet (édition uniquement, jamais en export).
@@ -69,7 +74,8 @@ class ScenePainter extends CustomPainter {
     }
 
     // Sélection + poignées en espace écran : épaisseur constante quelle que
-    // soit l'échelle de la forme.
+    // soit l'échelle de l'objet. La sélection de couche (éditeur) prime sur
+    // celle de la forme.
     VectorShape? selected;
     if (selectedShapeId != null) {
       for (final shape in project.shapes) {
@@ -79,7 +85,29 @@ class ScenePainter extends CustomPainter {
         }
       }
     }
-    if (selected != null) _paintSelectionOverlay(canvas, selected, geo);
+    if (selected == null) return;
+    if (selectedLayerId != null) {
+      for (final layer in selected.layers) {
+        if (layer.id == selectedLayerId && layer.visible) {
+          _paintPoseOverlay(
+            canvas,
+            layerBounds(layer),
+            SelectionGeometry.layerPose(selected, layer, timeMs),
+            geo,
+          );
+          return;
+        }
+      }
+    }
+    final bounds = shapeBounds(selected, timeMs);
+    if (bounds != null) {
+      _paintPoseOverlay(
+        canvas,
+        bounds,
+        SelectionGeometry.shapePose(selected, timeMs),
+        geo,
+      );
+    }
   }
 
   void _paintShape(Canvas canvas, VectorShape shape) {
@@ -179,15 +207,13 @@ class ScenePainter extends CustomPainter {
 
   /// Rectangle de sélection + poignée de rotation, dessinés en espace écran
   /// (le trait garde 2 px quelles que soient les échelles forme/vue).
-  void _paintSelectionOverlay(
+  void _paintPoseOverlay(
     Canvas canvas,
-    VectorShape shape,
+    Rect bounds,
+    Pose2D pose,
     SceneGeometry geo,
   ) {
-    final bounds = shapeBounds(shape, timeMs);
-    if (bounds == null) return;
-
-    final corners = SelectionGeometry.cornersCanvas(bounds, shape, timeMs, geo);
+    final corners = SelectionGeometry.corners(bounds, pose, geo);
     final border = Paint()
       ..color = const Color(0xFF7DD3FC)
       ..style = PaintingStyle.stroke
@@ -195,10 +221,8 @@ class ScenePainter extends CustomPainter {
       ..isAntiAlias = true;
     canvas.drawPath(Path()..addPolygon(corners, true), border);
 
-    final topCenter =
-        SelectionGeometry.topCenterCanvas(bounds, shape, timeMs, geo);
-    final handle =
-        SelectionGeometry.rotationHandleCanvas(bounds, shape, timeMs, geo);
+    final topCenter = SelectionGeometry.topCenter(bounds, pose, geo);
+    final handle = SelectionGeometry.rotationHandle(bounds, pose, geo);
     canvas.drawLine(topCenter, handle, border..strokeWidth = 1.5);
     canvas.drawCircle(
       handle,
@@ -220,6 +244,15 @@ class ScenePainter extends CustomPainter {
     }
     return bounds;
   }
+
+  /// Rect local d'une couche (son repère : centre à l'origine), gonflé de 6
+  /// comme la sélection de forme. Les points d'un chemin ne sont pas pris en
+  /// compte : largeur/hauteur déclarées seulement.
+  static Rect layerBounds(ShapeLayer layer) => Rect.fromCenter(
+        center: Offset.zero,
+        width: math.max(1.0, layer.width.abs()),
+        height: math.max(0.0, layer.height.abs()),
+      ).inflate(6);
 
   /// Le projet est un objet **mutable** partagé : comparer `oldDelegate.project`
   /// ne détecte rien lorsqu'une valeur change au repos (le canvas ne serait pas
