@@ -84,6 +84,10 @@ class _StudioScreenState extends State<StudioScreen>
   /// Parent de l'os en attente (os sélectionné au moment du premier tap).
   String? _pendingParentId;
 
+  /// Pièce touchée au premier tap du mode rig : le nouvel os naîtra lié à
+  /// cette pièce (ancrage automatique).
+  String? _pendingShapeId;
+
   /// Os en cours de rotation (glisser de son extrémité).
   String? _dragBoneId;
 
@@ -223,7 +227,8 @@ class _StudioScreenState extends State<StudioScreen>
     if (id == null) return;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => StudioScreen(projectId: id, repository: widget.repository),
+        builder: (_) =>
+            StudioScreen(projectId: id, repository: widget.repository),
       ),
     );
     if (!mounted) return;
@@ -288,8 +293,9 @@ class _StudioScreenState extends State<StudioScreen>
     if (project != null) await widget.repository.save(project);
   }
 
-  void _snack(String message) =>
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  void _snack(String message) => ScaffoldMessenger.of(
+    context,
+  ).showSnackBar(SnackBar(content: Text(message)));
 
   // ------------------------------------------------------------------ undo
 
@@ -300,7 +306,8 @@ class _StudioScreenState extends State<StudioScreen>
     final project = _project;
     if (project == null) return;
     final now = DateTime.now();
-    if (tag != null && _undoTag == tag &&
+    if (tag != null &&
+        _undoTag == tag &&
         now.difference(_lastUndoAt).inMilliseconds < 900) {
       _lastUndoAt = now;
       return;
@@ -329,17 +336,16 @@ class _StudioScreenState extends State<StudioScreen>
       _selectedId = previous.shapeById(selectedId) != null
           ? selectedId
           : (previous.shapes.isEmpty ? null : previous.shapes.last.id);
-      _selectedBoneId =
-          previous.skeleton?.boneById(_selectedBoneId) != null
-              ? _selectedBoneId
-              : null;
+      _selectedBoneId = previous.skeleton?.boneById(_selectedBoneId) != null
+          ? _selectedBoneId
+          : null;
       _addBoneMode = false;
       _pendingJoint = null;
+      _pendingShapeId = null;
       _zoom = TimelineZoomState(durationOf: () => _project!.durationMs);
     });
     // L'ancien controller est désabonné par le rebuild : on le dispose après.
-    SchedulerBinding.instance
-        .addPostFrameCallback((_) => old?.dispose());
+    SchedulerBinding.instance.addPostFrameCallback((_) => old?.dispose());
     _syncTicker();
     widget.repository.save(previous);
   }
@@ -567,6 +573,7 @@ class _StudioScreenState extends State<StudioScreen>
       _addBoneMode = !_addBoneMode;
       _pendingJoint = null;
       _pendingParentId = null;
+      _pendingShapeId = null;
     });
     if (_addBoneMode) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -586,20 +593,20 @@ class _StudioScreenState extends State<StudioScreen>
     _pushUndo(); // couvre aussi la création du rig au premier os
     _createRigIfNeeded();
     final rig = project.skeleton!;
+    String? boundName;
     final parent = rig.boneById(_pendingParentId);
-    final parentFrame =
-        SkeletonPose.evaluate(rig, _controller?.timeMs ?? 0)
-            .frameOf(parent?.id);
+    final parentFrame = SkeletonPose.evaluate(
+      rig,
+      _controller?.timeMs ?? 0,
+    ).frameOf(parent?.id);
     final length = math.max(4.0, (scenePoint - joint).distance);
     final bone = RigBone(
       name: 'Os ${rig.bones.length + 1}',
       parentId: parent?.id,
       length: length,
     );
-    bone.restAngle = math.atan2(
-          scenePoint.dy - joint.dy,
-          scenePoint.dx - joint.dx,
-        ) -
+    bone.restAngle =
+        math.atan2(scenePoint.dy - joint.dy, scenePoint.dx - joint.dx) -
         (parentFrame?.worldAngleRest ?? 0);
     if (parentFrame == null) {
       // Racine : articulation en coordonnées projet, angle monde.
@@ -609,7 +616,8 @@ class _StudioScreenState extends State<StudioScreen>
       // Enfant : offset dans le repère de repos du parent. Le point touché
       // est exprimé au temps courant : on le ramène dans le repos du parent
       // (identité quand le parent est au repos, le cas nominal du rigging).
-      final restPoint = parentFrame.jointRest +
+      final restPoint =
+          parentFrame.jointRest +
           rotateVector(scenePoint - parentFrame.joint, -parentFrame.worldDelta);
       final local = rotateVector(
         restPoint - parentFrame.jointRest,
@@ -620,12 +628,29 @@ class _StudioScreenState extends State<StudioScreen>
     }
     setState(() {
       rig.addBone(bone);
+      // Ancrage : si le premier tap du mode rig tombait sur une pièce, le
+      // nouvel os naît lié à cette pièce (elle suit l'os, et au repos l'os
+      // la suit quand on la déplace).
+      final target = _pendingShapeId;
+      if (target != null) {
+        final piece = project.shapeById(target);
+        if (piece != null) {
+          rig.bindShape(piece.id, bone.id);
+          boundName = piece.name;
+        }
+      }
       _selectedBoneId = bone.id;
       _addBoneMode = false;
       _pendingJoint = null;
       _pendingParentId = null;
+      _pendingShapeId = null;
     });
     _scheduleSave();
+    _snack(
+      boundName == null
+          ? 'Os « ${bone.name} » créé'
+          : 'Os « ${bone.name} » créé et lié à « $boundName »',
+    );
   }
 
   /// Lie la pièce sélectionnée à un os (rig maître : ses sliders deviennent
@@ -647,9 +672,7 @@ class _StudioScreenState extends State<StudioScreen>
           for (final bone in rig.bones)
             SimpleDialogOption(
               onPressed: () => Navigator.of(context).pop(bone.id),
-              child: Text(
-                '${'—' * rig.depthOf(bone.id)} ${bone.name}',
-              ),
+              child: Text('${'—' * rig.depthOf(bone.id)} ${bone.name}'),
             ),
         ],
       ),
@@ -789,6 +812,7 @@ class _StudioScreenState extends State<StudioScreen>
       _selectedBoneId = null;
       _addBoneMode = false;
       _pendingJoint = null;
+      _pendingShapeId = null;
     });
     await _flushSave();
     _snack('Squelette supprimé');
@@ -834,13 +858,15 @@ class _StudioScreenState extends State<StudioScreen>
     AnimatableProperty property,
     double value,
   ) {
-    setState(() => shape.applyValue(
-          property,
-          value,
-          controller.timeMs,
-          autoKey: true,
-          toleranceMs: controller.snapToleranceMs,
-        ));
+    setState(
+      () => shape.applyValue(
+        property,
+        value,
+        controller.timeMs,
+        autoKey: true,
+        toleranceMs: controller.snapToleranceMs,
+      ),
+    );
     _gestureMutated = true;
   }
 
@@ -855,8 +881,41 @@ class _StudioScreenState extends State<StudioScreen>
     int timeMs,
   ) {
     if (!project.isSkeleton || project.skeleton == null) return null;
-    return SkeletonPose.evaluate(project.skeleton!, timeMs)
-        .frameOf(project.skeleton!.boneIdForShape(shape.id));
+    return SkeletonPose.evaluate(
+      project.skeleton!,
+      timeMs,
+    ).frameOf(project.skeleton!.boneIdForShape(shape.id));
+  }
+
+  /// Pièce touchée par un point canvas (du premier plan vers l'arrière-plan),
+  /// visible selon le mode du projet — ou null.
+  VectorShape? _hitShapeAt(
+    AnimationProject project,
+    TimelineController controller,
+    SceneGeometry geo,
+    Offset canvasPoint,
+  ) {
+    for (final shape in project.shapes.reversed) {
+      final show = project.isSkeleton
+          ? shape.visible
+          : shape.isVisibleAt(controller.timeMs);
+      if (!show) continue;
+      final bounds = ScenePainter.shapeBounds(shape, controller.timeMs);
+      if (bounds == null) continue;
+      if (SelectionGeometry.hit(
+        bounds,
+        SelectionGeometry.shapePoseWithRig(
+          shape,
+          controller.timeMs,
+          _frameForShape(project, shape, controller.timeMs),
+        ),
+        geo,
+        canvasPoint,
+      )) {
+        return shape;
+      }
+    }
+    return null;
   }
 
   void _onCanvasGestureStart(
@@ -934,10 +993,14 @@ class _StudioScreenState extends State<StudioScreen>
     }
     _gestureBaseX = shape.valueAt(AnimatableProperty.x, controller.timeMs);
     _gestureBaseY = shape.valueAt(AnimatableProperty.y, controller.timeMs);
-    _gestureBaseRotation =
-        shape.valueAt(AnimatableProperty.rotation, controller.timeMs);
-    _gestureBaseScale =
-        shape.valueAt(AnimatableProperty.scale, controller.timeMs);
+    _gestureBaseRotation = shape.valueAt(
+      AnimatableProperty.rotation,
+      controller.timeMs,
+    );
+    _gestureBaseScale = shape.valueAt(
+      AnimatableProperty.scale,
+      controller.timeMs,
+    );
     // Snapshot en attente : poussé dans la pile seulement si le geste
     // modifie réellement la scène (voir _onCanvasGestureEnd).
     _gestureUndo = AnimationProject.fromJson(project.toJson());
@@ -969,36 +1032,73 @@ class _StudioScreenState extends State<StudioScreen>
         );
         if (_snapRotation) desired = _snapAngle(desired);
         final parentFrame = pose.frameOf(bone.parentId);
-        if (rig.hasKeyframes(bone.id)) {
-          // Auto-key : pose d'angle au curseur (snap sur une keyframe proche).
-          final target = rig
-                  .keyframeNear(
-                    bone.id,
-                    controller.timeMs,
-                    controller.snapToleranceMs,
-                  )
-                  ?.timeMs ??
-              controller.timeMs;
-          rig.upsertKeyframe(
-            bone.id,
-            target,
-            desired - frame.worldAngleRest - (parentFrame?.worldDelta ?? 0),
-          );
-        } else {
-          // Rig non animé : glisser = poser le rig (angle de repos relatif
-          // au parent, évalué au temps courant pour suivre le doigt).
-          bone.restAngle = desired - (parentFrame?.worldAngle ?? 0);
-        }
+        // setState à chaque update : sans lui, ni le canvas ni la timeline
+        // ne se repeignent pendant le glisser (saccades de v0.9.0).
+        setState(() {
+          if (rig.hasKeyframes(bone.id)) {
+            // Auto-key : pose d'angle au curseur (snap sur une keyframe
+            // proche). Les pièces suivent par la transformée os(t).
+            final target =
+                rig
+                    .keyframeNear(
+                      bone.id,
+                      controller.timeMs,
+                      controller.snapToleranceMs,
+                    )
+                    ?.timeMs ??
+                controller.timeMs;
+            rig.upsertKeyframe(
+              bone.id,
+              target,
+              desired - frame.worldAngleRest - (parentFrame?.worldDelta ?? 0),
+            );
+          } else {
+            // Rig non animé : glisser = poser le rig (angle de repos relatif
+            // au parent, évalué au temps courant pour suivre le doigt). La
+            // pose de repos change : les pièces liées à l'os et à ses
+            // descendants sont emportées par la nouvelle pose.
+            bone.restAngle = desired - (parentFrame?.worldAngle ?? 0);
+            carryBoundPieces(
+              project,
+              rig,
+              pose,
+              SkeletonPose.evaluate(rig, controller.timeMs),
+              controller.timeMs,
+              toleranceMs: controller.snapToleranceMs,
+            );
+          }
+        });
         _gestureMutated = true;
       case _CanvasGesture.move:
         final geo = SceneGeometry.fitFor(project, canvasSize);
-        final sceneDelta = geo.canvasToScene(details.localFocalPoint) -
+        final frame = _gestureBoneFrame;
+        final rig = project.skeleton;
+        // Pièce liée à un os au repos (pièce non animée) : le glisser
+        // déplace l'ANCRAGE de l'os (offset de repos) — l'os suit la pièce,
+        // qui reste collée à l'os ; la chaîne descendante suit (offsets
+        // relatifs). Delta par pas : l'offset est muté à chaque update.
+        if (frame != null &&
+            frame.worldDelta == 0 &&
+            rig != null &&
+            shape!.keyframes.isEmpty) {
+          final bone = rig.boneById(rig.boneIdForShape(shape.id));
+          if (bone != null) {
+            rig.translateBoneRest(
+              bone,
+              SkeletonPose.evaluate(rig, controller.timeMs),
+              details.focalPointDelta / geo.scale,
+            );
+            _gestureMutated = true;
+          }
+          break;
+        }
+        final sceneDelta =
+            geo.canvasToScene(details.localFocalPoint) -
             geo.canvasToScene(_gestureStartPoint);
         var dx = _gestureBaseX + sceneDelta.dx;
         var dy = _gestureBaseY + sceneDelta.dy;
-        // Pièce liée à un os : écrire le décalage dans le repère de repos
-        // pour que la pièce suive exactement le doigt dans le monde.
-        final frame = _gestureBoneFrame;
+        // Pièce liée à un os animé : écrire le décalage dans le repère de
+        // repos pour que la pièce suive exactement le doigt dans le monde.
         if (frame != null && frame.worldDelta != 0) {
           final corrected = rotateVector(sceneDelta, -frame.worldDelta);
           dx = _gestureBaseX + corrected.dx;
@@ -1009,7 +1109,11 @@ class _StudioScreenState extends State<StudioScreen>
       case _CanvasGesture.scale:
         final next = (_gestureBaseScale * details.scale).clamp(0.05, 4.0);
         _applyGestureValue(
-            shape!, controller, AnimatableProperty.scale, next.toDouble());
+          shape!,
+          controller,
+          AnimatableProperty.scale,
+          next.toDouble(),
+        );
       case _CanvasGesture.rotate:
         final geo = SceneGeometry.fitFor(project, canvasSize);
         final pose = SelectionGeometry.shapePoseWithRig(
@@ -1025,7 +1129,11 @@ class _StudioScreenState extends State<StudioScreen>
         var next = _gestureBaseRotation + (angle - _gestureStartAngle);
         if (_snapRotation) next = _snapAngle(next);
         _applyGestureValue(
-            shape, controller, AnimatableProperty.rotation, next);
+          shape,
+          controller,
+          AnimatableProperty.rotation,
+          next,
+        );
       case _CanvasGesture.none:
         break;
     }
@@ -1086,9 +1194,18 @@ class _StudioScreenState extends State<StudioScreen>
             }
           }
         }
+        // Ancrage : une pièce sous le premier tap → le nouvel os naîtra
+        // lié à cette pièce (elle suit l'os, et au repos l'os la suit).
+        final anchor = _hitShapeAt(
+          project,
+          controller,
+          geo,
+          details.localPosition,
+        );
         setState(() {
           _pendingJoint = joint;
           _pendingParentId = parent;
+          _pendingShapeId = anchor?.id;
         });
         return;
       }
@@ -1110,25 +1227,9 @@ class _StudioScreenState extends State<StudioScreen>
         return;
       }
     }
-    for (final shape in project.shapes.reversed) {
-      final show =
-          project.isSkeleton ? shape.visible : shape.isVisibleAt(controller.timeMs);
-      if (!show) continue;
-      final bounds = ScenePainter.shapeBounds(shape, controller.timeMs);
-      if (bounds == null) continue;
-      if (SelectionGeometry.hit(
-        bounds,
-        SelectionGeometry.shapePoseWithRig(
-          shape,
-          controller.timeMs,
-          _frameForShape(project, shape, controller.timeMs),
-        ),
-        geo,
-        details.localPosition,
-      )) {
-        setState(() => _selectedId = shape.id);
-        return;
-      }
+    final hit = _hitShapeAt(project, controller, geo, details.localPosition);
+    if (hit != null) {
+      setState(() => _selectedId = hit.id);
     }
   }
 
@@ -1310,15 +1411,16 @@ class _StudioScreenState extends State<StudioScreen>
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
-            child: Text('Projet illisible :\n$_error', textAlign: TextAlign.center),
+            child: Text(
+              'Projet illisible :\n$_error',
+              textAlign: TextAlign.center,
+            ),
           ),
         ),
       );
     }
     if (project == null || controller == null) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     return PopScope(
@@ -1327,10 +1429,12 @@ class _StudioScreenState extends State<StudioScreen>
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text(project.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-          actions: <Widget>[
-            _exportMenu(),
-          ],
+          title: Text(
+            project.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          actions: <Widget>[_exportMenu()],
         ),
         body: AnimatedBuilder(
           animation: controller,
@@ -1339,8 +1443,10 @@ class _StudioScreenState extends State<StudioScreen>
               builder: (context, constraints) {
                 // Le preview prend ~40 % de la hauteur : le reste va à la
                 // barre de lecture, à la timeline et à la barre d'outils.
-                final previewHeight =
-                    (constraints.maxHeight * 0.40).clamp(200.0, 380.0);
+                final previewHeight = (constraints.maxHeight * 0.40).clamp(
+                  200.0,
+                  380.0,
+                );
                 return Column(
                   children: <Widget>[
                     SizedBox(
@@ -1383,18 +1489,29 @@ class _StudioScreenState extends State<StudioScreen>
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onScaleStart: (details) => _onCanvasGestureStart(
-                        details, project, controller, canvasSize),
+                      details,
+                      project,
+                      controller,
+                      canvasSize,
+                    ),
                     onScaleUpdate: (details) => _onCanvasGestureUpdate(
-                        details, project, controller, canvasSize),
+                      details,
+                      project,
+                      controller,
+                      canvasSize,
+                    ),
                     onScaleEnd: _onCanvasGestureEnd,
-                    onTapUp: (details) =>
-                        _onCanvasTapUp(details, project, controller, canvasSize),
+                    onTapUp: (details) => _onCanvasTapUp(
+                      details,
+                      project,
+                      controller,
+                      canvasSize,
+                    ),
                     child: CustomPaint(
                       painter: ScenePainter(
                         project: project,
                         timeMs: controller.timeMs,
-                        selectedShapeId:
-                            _addBoneMode ? null : _selectedId,
+                        selectedShapeId: _addBoneMode ? null : _selectedId,
                         showFrame: true,
                         embeddedProjects: _embedded,
                       ),
@@ -1474,7 +1591,10 @@ class _StudioScreenState extends State<StudioScreen>
     );
   }
 
-  Widget _buildTimeline(AnimationProject project, TimelineController controller) {
+  Widget _buildTimeline(
+    AnimationProject project,
+    TimelineController controller,
+  ) {
     final zoom = _zoom;
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 4, 12, 0),
@@ -1500,7 +1620,10 @@ class _StudioScreenState extends State<StudioScreen>
                   tooltip: 'Zoom avant',
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+                  constraints: const BoxConstraints(
+                    minWidth: 34,
+                    minHeight: 34,
+                  ),
                   icon: const Icon(Icons.zoom_in, size: 18),
                   onPressed: () => setState(zoom.zoomIn),
                 ),
@@ -1508,7 +1631,10 @@ class _StudioScreenState extends State<StudioScreen>
                   tooltip: 'Zoom arrière',
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+                  constraints: const BoxConstraints(
+                    minWidth: 34,
+                    minHeight: 34,
+                  ),
                   icon: const Icon(Icons.zoom_out, size: 18),
                   onPressed: () => setState(zoom.zoomOut),
                 ),
@@ -1516,7 +1642,10 @@ class _StudioScreenState extends State<StudioScreen>
                   tooltip: 'Ajuster au projet',
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+                  constraints: const BoxConstraints(
+                    minWidth: 34,
+                    minHeight: 34,
+                  ),
                   icon: const Icon(Icons.fit_screen_outlined, size: 18),
                   onPressed: () => setState(zoom.fit),
                 ),
@@ -1554,20 +1683,24 @@ class _StudioScreenState extends State<StudioScreen>
                         setState(() => shape.removeKeyframeAt(timeMs));
                         _scheduleSave();
                       },
-                      skeletonRig:
-                          project.isSkeleton ? project.skeleton : null,
+                      skeletonRig: project.isSkeleton ? project.skeleton : null,
                       selectedBoneId: _selectedBoneId,
                       onSelectBone: (bone) =>
                           setState(() => _selectedBoneId = bone.id),
                       onBoneMoveChanged: (bone, target) {
-                        setState(() =>
-                            project.skeleton!.shiftTrackTo(bone.id, target));
+                        setState(
+                          () => project.skeleton!.shiftTrackTo(bone.id, target),
+                        );
                       },
                       onBoneMoveEnd: (_) => _scheduleSave(),
                       onBoneGestureStart: (_) => _pushUndo(),
                       onDeleteBoneKeyframe: (bone, timeMs) {
-                        setState(() =>
-                            project.skeleton!.removeKeyframeAt(bone.id, timeMs));
+                        setState(
+                          () => project.skeleton!.removeKeyframeAt(
+                            bone.id,
+                            timeMs,
+                          ),
+                        );
                         _scheduleSave();
                       },
                       onZoomChanged: () => setState(() {}),
@@ -1607,10 +1740,7 @@ class _StudioScreenState extends State<StudioScreen>
             IconButton(
               tooltip: 'Terminer le mode rig',
               onPressed: _startAddBone,
-              icon: const Icon(
-                Icons.check_circle,
-                color: Color(0xFF3ECF8E),
-              ),
+              icon: const Icon(Icons.check_circle, color: Color(0xFF3ECF8E)),
             )
           else ...<Widget>[
             IconButton(
@@ -1628,8 +1758,8 @@ class _StudioScreenState extends State<StudioScreen>
             IconButton(
               tooltip: diamondKeyframe == null
                   ? (skeleton
-                      ? 'Ajouter une keyframe d’angle à l’os au curseur'
-                      : 'Ajouter une keyframe au curseur')
+                        ? 'Ajouter une keyframe d’angle à l’os au curseur'
+                        : 'Ajouter une keyframe au curseur')
                   : 'Retirer la keyframe au curseur',
               onPressed: skeleton ? _toggleBoneKeyframe : _toggleKeyframe,
               icon: Icon(
@@ -1905,7 +2035,7 @@ class _StudioScreenState extends State<StudioScreen>
               subtitle: Text(
                 rig.hasKeyframes(candidate.id)
                     ? '${rig.trackOf(candidate.id)!.length} keyframe(s) · '
-                        '${candidate.length.round()} px'
+                          '${candidate.length.round()} px'
                     : 'repos · ${candidate.length.round()} px',
                 style: const TextStyle(fontSize: 11),
               ),
@@ -2004,7 +2134,10 @@ class _StudioScreenState extends State<StudioScreen>
         PopupMenuItem<String>(value: 'png', child: Text('Image PNG (frame)')),
         PopupMenuDivider(),
         PopupMenuItem<String>(value: 'json', child: Text('Projet JSON')),
-        PopupMenuItem<String>(value: 'clipboard', child: Text('Copier le JSON')),
+        PopupMenuItem<String>(
+          value: 'clipboard',
+          child: Text('Copier le JSON'),
+        ),
       ],
     );
   }

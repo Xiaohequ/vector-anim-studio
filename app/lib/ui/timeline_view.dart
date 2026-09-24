@@ -64,8 +64,9 @@ class TimelineView extends StatefulWidget {
   /// y prend le snapshot d'annulation AVANT modification.
   final void Function(VectorShape shape) onGestureStart;
 
-  /// Mode squelette : rig du projet — une barre par os animé remplace les
-  /// barres de formes. Null → comportement vectoriel historique.
+  /// Mode squelette : rig du projet — les barres des os animés s'ajoutent
+  /// sous les barres de pièces (qui restent affichées). Null → comportement
+  /// vectoriel historique.
   final SkeletonRig? skeletonRig;
   final String? selectedBoneId;
   final ValueChanged<RigBone>? onSelectBone;
@@ -252,12 +253,14 @@ class _TimelineViewState extends State<TimelineView> {
   Widget build(BuildContext context) {
     final zoom = widget.zoom;
     final rig = widget.skeletonRig;
-    final boneMode = rig != null;
-    final lanes = boneMode
-        ? const <List<VectorShape>>[]
-        : TimelineLayout.packLanes(widget.project.shapes);
-    final boneLanes = boneMode ? TimelineLayout.packBoneLanes(rig) : const <List<RigBone>>[];
-    final laneCount = math.max(1, math.max(lanes.length, boneLanes.length));
+    // Barres de pièces toujours affichées, barres d'os (si rig) posées en
+    // dessous : v0.9.0 masquait les pièces dès qu'un os existait.
+    final lanes = TimelineLayout.packLanes(widget.project.shapes);
+    final boneLanes = rig == null
+        ? const <List<RigBone>>[]
+        : TimelineLayout.packBoneLanes(rig);
+    final laneCount = math.max(1, lanes.length + boneLanes.length);
+    final boneLaneOffset = lanes.length;
     final laneArea = laneCount * TimelineView.laneHeight;
 
     return LayoutBuilder(
@@ -278,8 +281,9 @@ class _TimelineViewState extends State<TimelineView> {
                 Positioned.fill(
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onTapDown: (details) =>
-                        widget.onSeek(zoom.timeFor(details.localPosition.dx, width)),
+                    onTapDown: (details) => widget.onSeek(
+                      zoom.timeFor(details.localPosition.dx, width),
+                    ),
                     onHorizontalDragUpdate: (details) {
                       if (_pinching) return;
                       widget.onSeek(
@@ -301,7 +305,9 @@ class _TimelineViewState extends State<TimelineView> {
                   Positioned(
                     left: 0,
                     right: 0,
-                    top: TimelineView.rulerHeight + lane * TimelineView.laneHeight,
+                    top:
+                        TimelineView.rulerHeight +
+                        lane * TimelineView.laneHeight,
                     height: TimelineView.laneHeight,
                     child: IgnorePointer(
                       // Décoratif : ne doit pas bloquer le seek sur le fond.
@@ -316,17 +322,18 @@ class _TimelineViewState extends State<TimelineView> {
                       ),
                     ),
                   ),
-                if (!boneMode)
-                  for (var lane = 0; lane < lanes.length; lane++)
-                    for (final shape in lanes[lane])
-                      _ShapeBar(
+                for (var lane = 0; lane < lanes.length; lane++)
+                  for (final shape in lanes[lane])
+                    _ShapeBar(
                       shape: shape,
                       zoom: zoom,
                       timeMs: widget.timeMs,
-                      toleranceMs:
-                          keyframeSnapToleranceMs(widget.project.durationMs),
+                      toleranceMs: keyframeSnapToleranceMs(
+                        widget.project.durationMs,
+                      ),
                       laneTop:
-                          TimelineView.rulerHeight + lane * TimelineView.laneHeight,
+                          TimelineView.rulerHeight +
+                          lane * TimelineView.laneHeight,
                       width: width,
                       pinching: _pinching,
                       moving: _movingShape?.id == shape.id,
@@ -345,33 +352,34 @@ class _TimelineViewState extends State<TimelineView> {
                       onGestureStart: () => widget.onGestureStart(shape),
                       onFollowEdge: _followEdge,
                     ),
-                if (boneMode)
-                  for (var lane = 0; lane < boneLanes.length; lane++)
-                    for (final bone in boneLanes[lane])
-                      _BoneBar(
-                        bone: bone,
-                        rig: rig,
-                        zoom: zoom,
-                        timeMs: widget.timeMs,
-                        toleranceMs:
-                            keyframeSnapToleranceMs(widget.project.durationMs),
-                        laneTop: TimelineView.rulerHeight +
-                            lane * TimelineView.laneHeight,
-                        width: width,
-                        pinching: _pinching,
-                        moving: _movingBone?.id == bone.id,
-                        movingOriginMs: _movingBoneOriginMs,
-                        selected: bone.id == widget.selectedBoneId,
-                        onSelect: () => widget.onSelectBone?.call(bone),
-                        onSeek: (t) => widget.onSeek(t),
-                        onMoveStart: () => _handleBoneMoveStart(bone),
-                        onMoveChanged: (target) =>
-                            _handleBoneMoveUpdate(bone, target),
-                        onMoveEnd: () => _handleBoneMoveEnd(bone),
-                        onDeleteKeyframe: (time) =>
-                            widget.onDeleteBoneKeyframe?.call(bone, time),
-                        onFollowEdge: _followEdge,
+                for (var lane = 0; lane < boneLanes.length; lane++)
+                  for (final bone in boneLanes[lane])
+                    _BoneBar(
+                      bone: bone,
+                      rig: rig!,
+                      zoom: zoom,
+                      timeMs: widget.timeMs,
+                      toleranceMs: keyframeSnapToleranceMs(
+                        widget.project.durationMs,
                       ),
+                      laneTop:
+                          TimelineView.rulerHeight +
+                          (boneLaneOffset + lane) * TimelineView.laneHeight,
+                      width: width,
+                      pinching: _pinching,
+                      moving: _movingBone?.id == bone.id,
+                      movingOriginMs: _movingBoneOriginMs,
+                      selected: bone.id == widget.selectedBoneId,
+                      onSelect: () => widget.onSelectBone?.call(bone),
+                      onSeek: (t) => widget.onSeek(t),
+                      onMoveStart: () => _handleBoneMoveStart(bone),
+                      onMoveChanged: (target) =>
+                          _handleBoneMoveUpdate(bone, target),
+                      onMoveEnd: () => _handleBoneMoveEnd(bone),
+                      onDeleteKeyframe: (time) =>
+                          widget.onDeleteBoneKeyframe?.call(bone, time),
+                      onFollowEdge: _followEdge,
+                    ),
                 Positioned(
                   left: zoom.xFor(widget.timeMs, width) - 1,
                   top: 0,
@@ -553,9 +561,9 @@ class _ShapeBar extends StatelessWidget {
         : Theme.of(context).colorScheme.primary;
     final keyTimes = <int>{
       for (final key in shape.keyframes)
-        if (key.timeMs >= shape.startMs && key.timeMs <= shape.endMs) key.timeMs,
-    }.toList()
-      ..sort();
+        if (key.timeMs >= shape.startMs && key.timeMs <= shape.endMs)
+          key.timeMs,
+    }.toList()..sort();
 
     return Positioned(
       left: pinnedLeft,
@@ -595,8 +603,8 @@ class _ShapeBar extends StatelessWidget {
                   color: moving
                       ? Colors.white
                       : selected
-                          ? color
-                          : color.withValues(alpha: 0.5),
+                      ? color
+                      : color.withValues(alpha: 0.5),
                   width: moving || selected ? 2 : 1,
                 ),
                 boxShadow: moving
@@ -625,9 +633,9 @@ class _ShapeBar extends StatelessWidget {
               Align(
                 alignment: Alignment(
                   ((keyTime - shape.startMs) /
-                              math.max(1, shape.endMs - shape.startMs))
-                          .clamp(0.0, 1.0) *
-                      2 -
+                                  math.max(1, shape.endMs - shape.startMs))
+                              .clamp(0.0, 1.0) *
+                          2 -
                       1,
                   0.75,
                 ),
@@ -668,8 +676,10 @@ class _ShapeBar extends StatelessWidget {
               onDragStart: () => onGestureStart(),
               onDragEnd: () {},
               onDrag: (deltaMs) {
-                final next = (shape.startMs + deltaMs)
-                    .clamp(0, shape.endMs - TimelineView.minSpanMs);
+                final next = (shape.startMs + deltaMs).clamp(
+                  0,
+                  shape.endMs - TimelineView.minSpanMs,
+                );
                 onRangeChanged(next, shape.endMs);
               },
             ),
@@ -739,19 +749,19 @@ class _Handle extends StatelessWidget {
                 color: Colors.white.withValues(alpha: 0.22),
                 borderRadius: BorderRadius.circular(4),
               ),
-               child: const Center(
-                 child: SizedBox(
-                   width: 2,
-                   height: 12,
-                   child: ColoredBox(color: Colors.white70),
-                 ),
-               ),
-             ),
-           ),
-         ),
-       ),
-     );
-   }
+              child: const Center(
+                child: SizedBox(
+                  width: 2,
+                  height: 12,
+                  child: ColoredBox(color: Colors.white70),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// Barre d'une piste d'os (mode squelette) : plage première → dernière
@@ -849,8 +859,8 @@ class _BoneBar extends StatelessWidget {
                   color: moving
                       ? Colors.white
                       : selected
-                          ? _color
-                          : _color.withValues(alpha: 0.5),
+                      ? _color
+                      : _color.withValues(alpha: 0.5),
                   width: moving || selected ? 2 : 1,
                 ),
                 boxShadow: moving
@@ -875,9 +885,11 @@ class _BoneBar extends StatelessWidget {
             for (final key in track)
               Align(
                 alignment: Alignment(
-                  ((key.timeMs - first) / math.max(1, last - first))
-                          .clamp(0.0, 1.0) *
-                      2 -
+                  ((key.timeMs - first) / math.max(1, last - first)).clamp(
+                            0.0,
+                            1.0,
+                          ) *
+                          2 -
                       1,
                   0.75,
                 ),

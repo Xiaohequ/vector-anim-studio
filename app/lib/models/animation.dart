@@ -4,20 +4,31 @@ import 'dart:ui' show Offset;
 import 'skeleton.dart';
 
 /// Type de forme basique dessinable dans une couche.
-enum ShapeKind { rect, circle, line, path, triangle, star, hexagon, cross, heart, arrow }
+enum ShapeKind {
+  rect,
+  circle,
+  line,
+  path,
+  triangle,
+  star,
+  hexagon,
+  cross,
+  heart,
+  arrow,
+}
 
 String shapeKindLabel(ShapeKind kind) => switch (kind) {
-      ShapeKind.rect => 'Rectangle',
-      ShapeKind.circle => 'Cercle',
-      ShapeKind.line => 'Ligne',
-      ShapeKind.path => 'Chemin',
-      ShapeKind.triangle => 'Triangle',
-      ShapeKind.star => 'Étoile',
-      ShapeKind.hexagon => 'Hexagone',
-      ShapeKind.cross => 'Croix',
-      ShapeKind.heart => 'Cœur',
-      ShapeKind.arrow => 'Flèche',
-    };
+  ShapeKind.rect => 'Rectangle',
+  ShapeKind.circle => 'Cercle',
+  ShapeKind.line => 'Ligne',
+  ShapeKind.path => 'Chemin',
+  ShapeKind.triangle => 'Triangle',
+  ShapeKind.star => 'Étoile',
+  ShapeKind.hexagon => 'Hexagone',
+  ShapeKind.cross => 'Croix',
+  ShapeKind.heart => 'Cœur',
+  ShapeKind.arrow => 'Flèche',
+};
 
 /// Propriétés animables d'une forme complète (transformation de groupe).
 enum AnimatableProperty { x, y, rotation, scale, opacity, strokeWidth }
@@ -34,29 +45,29 @@ enum ProjectType { vector, skeleton }
 
 extension ProjectTypeInfo on ProjectType {
   String get label => switch (this) {
-        ProjectType.vector => 'Animation vectorielle',
-        ProjectType.skeleton => 'Animation squelette',
-      };
+    ProjectType.vector => 'Animation vectorielle',
+    ProjectType.skeleton => 'Animation squelette',
+  };
 }
 
 extension ProjectFormatInfo on ProjectFormat {
   String get label => switch (this) {
-        ProjectFormat.portrait => 'Portrait 360 × 640',
-        ProjectFormat.landscape => 'Paysage 640 × 360',
-        ProjectFormat.square => 'Carré 480 × 480',
-      };
+    ProjectFormat.portrait => 'Portrait 360 × 640',
+    ProjectFormat.landscape => 'Paysage 640 × 360',
+    ProjectFormat.square => 'Carré 480 × 480',
+  };
 
   double get width => switch (this) {
-        ProjectFormat.portrait => 360,
-        ProjectFormat.landscape => 640,
-        ProjectFormat.square => 480,
-      };
+    ProjectFormat.portrait => 360,
+    ProjectFormat.landscape => 640,
+    ProjectFormat.square => 480,
+  };
 
   double get height => switch (this) {
-        ProjectFormat.portrait => 640,
-        ProjectFormat.landscape => 360,
-        ProjectFormat.square => 480,
-      };
+    ProjectFormat.portrait => 640,
+    ProjectFormat.landscape => 360,
+    ProjectFormat.square => 480,
+  };
 }
 
 /// Applique une courbe d'accélération sur une progression normalisée [0,1].
@@ -79,13 +90,13 @@ double applyEasing(EasingKind easing, double t) {
 
 /// Étiquette lisible d'une propriété (interface).
 String propertyLabel(AnimatableProperty property) => switch (property) {
-      AnimatableProperty.x => 'Position X',
-      AnimatableProperty.y => 'Position Y',
-      AnimatableProperty.rotation => 'Rotation',
-      AnimatableProperty.scale => 'Échelle',
-      AnimatableProperty.opacity => 'Opacité',
-      AnimatableProperty.strokeWidth => 'Épaisseur',
-    };
+  AnimatableProperty.x => 'Position X',
+  AnimatableProperty.y => 'Position Y',
+  AnimatableProperty.rotation => 'Rotation',
+  AnimatableProperty.scale => 'Échelle',
+  AnimatableProperty.opacity => 'Opacité',
+  AnimatableProperty.strokeWidth => 'Épaisseur',
+};
 
 int _idSeed = 0;
 
@@ -100,10 +111,9 @@ const double keyframeSnapTolerancePx = 8;
 const double keyframeNominalTimelineWidth = 400;
 
 int keyframeSnapToleranceMs(int durationMs) => math.max(
-      1,
-      (durationMs * keyframeSnapTolerancePx / keyframeNominalTimelineWidth)
-          .round(),
-    );
+  1,
+  (durationMs * keyframeSnapTolerancePx / keyframeNominalTimelineWidth).round(),
+);
 
 /// Temps interne d'une instance d'animation (sémantique « boucle ») :
 /// l'animation source tourne à vitesse naturelle et recommence tant que la
@@ -117,12 +127,12 @@ int instanceTimeMs(int timeMs, int startMs, int subDurationMs) {
 
 /// Étiquette lisible d'une courbe d'interpolation (interface).
 String easingLabel(EasingKind easing) => switch (easing) {
-      EasingKind.linear => 'Linéaire',
-      EasingKind.easeIn => 'Entrée',
-      EasingKind.easeOut => 'Sortie',
-      EasingKind.easeInOut => 'Entrée/sortie',
-      EasingKind.step => 'Palier',
-    };
+  EasingKind.linear => 'Linéaire',
+  EasingKind.easeIn => 'Entrée',
+  EasingKind.easeOut => 'Sortie',
+  EasingKind.easeInOut => 'Entrée/sortie',
+  EasingKind.step => 'Palier',
+};
 
 /// Une keyframe « pose » : toutes les propriétés de la forme à `timeMs`.
 class ShapeKeyframe {
@@ -142,21 +152,22 @@ class ShapeKeyframe {
   double? valueOf(AnimatableProperty property) => values[property];
 
   ShapeKeyframe copy() => ShapeKeyframe(
-        timeMs: timeMs,
-        values: Map<AnimatableProperty, double>.from(values),
-        easing: easing,
-      );
+    timeMs: timeMs,
+    values: Map<AnimatableProperty, double>.from(values),
+    easing: easing,
+  );
 
   Map<String, Object?> toJson() => <String, Object?>{
-        'timeMs': timeMs,
-        'easing': easing.name,
-        'values': <String, double>{
-          for (final entry in values.entries) entry.key.name: entry.value,
-        },
-      };
+    'timeMs': timeMs,
+    'easing': easing.name,
+    'values': <String, double>{
+      for (final entry in values.entries) entry.key.name: entry.value,
+    },
+  };
 
   static ShapeKeyframe fromJson(Map<String, Object?> json) {
-    final raw = (json['values'] as Map?)?.cast<String, Object?>() ??
+    final raw =
+        (json['values'] as Map?)?.cast<String, Object?>() ??
         const <String, Object?>{};
     return ShapeKeyframe(
       timeMs: (json['timeMs'] as num).toInt(),
@@ -191,8 +202,8 @@ class ShapeLayer {
     this.filled = true,
     List<Offset>? points,
     this.visible = true,
-  })  : id = id ?? generateId('layer'),
-        points = points ?? <Offset>[];
+  }) : id = id ?? generateId('layer'),
+       points = points ?? <Offset>[];
 
   final String id;
   String name;
@@ -212,15 +223,15 @@ class ShapeLayer {
   bool visible;
 
   double baseOf(LayerProperty property) => switch (property) {
-        LayerProperty.x => x,
-        LayerProperty.y => y,
-        LayerProperty.width => width,
-        LayerProperty.height => height,
-        LayerProperty.rotation => rotation,
-        LayerProperty.scale => scale,
-        LayerProperty.opacity => opacity,
-        LayerProperty.strokeWidth => strokeWidth,
-      };
+    LayerProperty.x => x,
+    LayerProperty.y => y,
+    LayerProperty.width => width,
+    LayerProperty.height => height,
+    LayerProperty.rotation => rotation,
+    LayerProperty.scale => scale,
+    LayerProperty.opacity => opacity,
+    LayerProperty.strokeWidth => strokeWidth,
+  };
 
   void setBase(LayerProperty property, double value) {
     switch (property) {
@@ -244,79 +255,88 @@ class ShapeLayer {
   }
 
   ShapeLayer copy({String? id, String? name}) => ShapeLayer(
-        id: id ?? this.id,
-        name: name ?? this.name,
-        kind: kind,
-        x: x,
-        y: y,
-        width: width,
-        height: height,
-        rotation: rotation,
-        scale: scale,
-        opacity: opacity,
-        strokeWidth: strokeWidth,
-        colorValue: colorValue,
-        filled: filled,
-        points: List<Offset>.from(points),
-        visible: visible,
-      );
+    id: id ?? this.id,
+    name: name ?? this.name,
+    kind: kind,
+    x: x,
+    y: y,
+    width: width,
+    height: height,
+    rotation: rotation,
+    scale: scale,
+    opacity: opacity,
+    strokeWidth: strokeWidth,
+    colorValue: colorValue,
+    filled: filled,
+    points: List<Offset>.from(points),
+    visible: visible,
+  );
 
   Map<String, Object?> toJson() => {
-        'id': id,
-        'name': name,
-        'kind': kind.name,
-        'x': x,
-        'y': y,
-        'width': width,
-        'height': height,
-        'rotation': rotation,
-        'scale': scale,
-        'opacity': opacity,
-        'strokeWidth': strokeWidth,
-        'colorValue': colorValue,
-        'filled': filled,
-        'points': points.map((p) => [p.dx, p.dy]).toList(),
-        'visible': visible,
-      };
+    'id': id,
+    'name': name,
+    'kind': kind.name,
+    'x': x,
+    'y': y,
+    'width': width,
+    'height': height,
+    'rotation': rotation,
+    'scale': scale,
+    'opacity': opacity,
+    'strokeWidth': strokeWidth,
+    'colorValue': colorValue,
+    'filled': filled,
+    'points': points.map((p) => [p.dx, p.dy]).toList(),
+    'visible': visible,
+  };
 
   factory ShapeLayer.fromJson(Map<String, Object?> json) => ShapeLayer(
-        id: json['id'] as String?,
-        name: json['name'] as String? ?? 'Couche',
-        kind: ShapeKind.values.firstWhere(
-          (k) => k.name == json['kind'],
-          orElse: () => ShapeKind.rect,
-        ),
-        x: (json['x'] as num?)?.toDouble() ?? 0,
-        y: (json['y'] as num?)?.toDouble() ?? 0,
-        width: (json['width'] as num?)?.toDouble() ?? 110,
-        height: (json['height'] as num?)?.toDouble() ?? 110,
-        rotation: (json['rotation'] as num?)?.toDouble() ?? 0,
-        scale: (json['scale'] as num?)?.toDouble() ?? 1,
-        opacity: (json['opacity'] as num?)?.toDouble() ?? 1,
-        strokeWidth: (json['strokeWidth'] as num?)?.toDouble() ?? 4,
-        colorValue: (json['colorValue'] as num?)?.toInt() ?? 0xFF5B8DEF,
-        filled: json['filled'] as bool? ?? true,
-        points: (json['points'] as List<Object?>? ?? const [])
-            .map((p) => (p as List<Object?>))
-            .map((p) => Offset((p[0] as num).toDouble(), (p[1] as num).toDouble()))
-            .toList(),
-        visible: json['visible'] as bool? ?? true,
-      );
+    id: json['id'] as String?,
+    name: json['name'] as String? ?? 'Couche',
+    kind: ShapeKind.values.firstWhere(
+      (k) => k.name == json['kind'],
+      orElse: () => ShapeKind.rect,
+    ),
+    x: (json['x'] as num?)?.toDouble() ?? 0,
+    y: (json['y'] as num?)?.toDouble() ?? 0,
+    width: (json['width'] as num?)?.toDouble() ?? 110,
+    height: (json['height'] as num?)?.toDouble() ?? 110,
+    rotation: (json['rotation'] as num?)?.toDouble() ?? 0,
+    scale: (json['scale'] as num?)?.toDouble() ?? 1,
+    opacity: (json['opacity'] as num?)?.toDouble() ?? 1,
+    strokeWidth: (json['strokeWidth'] as num?)?.toDouble() ?? 4,
+    colorValue: (json['colorValue'] as num?)?.toInt() ?? 0xFF5B8DEF,
+    filled: json['filled'] as bool? ?? true,
+    points: (json['points'] as List<Object?>? ?? const [])
+        .map((p) => (p as List<Object?>))
+        .map((p) => Offset((p[0] as num).toDouble(), (p[1] as num).toDouble()))
+        .toList(),
+    visible: json['visible'] as bool? ?? true,
+  );
 }
 
 /// Propriétés éditables d'une couche (non animées).
-enum LayerProperty { x, y, width, height, rotation, scale, opacity, strokeWidth }
+enum LayerProperty {
+  x,
+  y,
+  width,
+  height,
+  rotation,
+  scale,
+  opacity,
+  strokeWidth,
+}
 
 String layerPropertyLabel(LayerProperty property) => switch (property) {
-      LayerProperty.x => 'Position X',
-      LayerProperty.y => 'Position Y',
-      LayerProperty.width => 'Largeur',
-      LayerProperty.height => 'Hauteur',
-      LayerProperty.rotation => 'Rotation',
-      LayerProperty.scale => 'Échelle',
-      LayerProperty.opacity => 'Opacité',
-      LayerProperty.strokeWidth => 'Épaisseur',
-    };
+  LayerProperty.x => 'Position X',
+  LayerProperty.y => 'Position Y',
+  LayerProperty.width => 'Largeur',
+  LayerProperty.height => 'Hauteur',
+  LayerProperty.rotation => 'Rotation',
+  LayerProperty.scale => 'Échelle',
+  LayerProperty.opacity => 'Opacité',
+  LayerProperty.strokeWidth => 'Épaisseur',
+};
 
 /// Une forme du projet : un groupe de couches, animable et affiché sur [startMs, endMs].
 class VectorShape {
@@ -336,8 +356,8 @@ class VectorShape {
     this.embeddedProjectId,
     this.embeddedWidth = 0,
     this.embeddedHeight = 0,
-  })  : id = id ?? generateId('shape'),
-        layers = layers ?? <ShapeLayer>[];
+  }) : id = id ?? generateId('shape'),
+       layers = layers ?? <ShapeLayer>[];
 
   final String id;
   String name;
@@ -380,13 +400,13 @@ class VectorShape {
       visible && timeMs >= startMs && timeMs <= endMs;
 
   double baseOf(AnimatableProperty property) => switch (property) {
-        AnimatableProperty.x => x,
-        AnimatableProperty.y => y,
-        AnimatableProperty.rotation => rotation,
-        AnimatableProperty.scale => scale,
-        AnimatableProperty.opacity => opacity,
-        AnimatableProperty.strokeWidth => strokeWidth,
-      };
+    AnimatableProperty.x => x,
+    AnimatableProperty.y => y,
+    AnimatableProperty.rotation => rotation,
+    AnimatableProperty.scale => scale,
+    AnimatableProperty.opacity => opacity,
+    AnimatableProperty.strokeWidth => strokeWidth,
+  };
 
   void setBase(AnimatableProperty property, double value) {
     switch (property) {
@@ -440,7 +460,9 @@ class VectorShape {
   bool isAnimated(AnimatableProperty property) {
     if (keyframes.length < 2) return false;
     final reference = valueAt(property, keyframes.first.timeMs);
-    return keyframes.any((k) => (k.valueOf(property) ?? reference) != reference);
+    return keyframes.any(
+      (k) => (k.valueOf(property) ?? reference) != reference,
+    );
   }
 
   /// Keyframe la plus proche de `timeMs` dans la tolérance, ou `null`.
@@ -567,23 +589,23 @@ class VectorShape {
   }
 
   Map<String, Object?> toJson() => {
-        'id': id,
-        'name': name,
-        'x': x,
-        'y': y,
-        'rotation': rotation,
-        'scale': scale,
-        'opacity': opacity,
-        'strokeWidth': strokeWidth,
-        'startMs': startMs,
-        'endMs': endMs,
-        'visible': visible,
-        'embeddedProjectId': embeddedProjectId,
-        'embeddedWidth': embeddedWidth,
-        'embeddedHeight': embeddedHeight,
-        'layers': layers.map((l) => l.toJson()).toList(),
-        'keyframes': keyframes.map((k) => k.toJson()).toList(),
-      };
+    'id': id,
+    'name': name,
+    'x': x,
+    'y': y,
+    'rotation': rotation,
+    'scale': scale,
+    'opacity': opacity,
+    'strokeWidth': strokeWidth,
+    'startMs': startMs,
+    'endMs': endMs,
+    'visible': visible,
+    'embeddedProjectId': embeddedProjectId,
+    'embeddedWidth': embeddedWidth,
+    'embeddedHeight': embeddedHeight,
+    'layers': layers.map((l) => l.toJson()).toList(),
+    'keyframes': keyframes.map((k) => k.toJson()).toList(),
+  };
 
   factory VectorShape.fromJson(Map<String, Object?> json) {
     final shape = VectorShape(
@@ -606,8 +628,9 @@ class VectorShape {
           .toList(),
     );
     for (final entry in (json['keyframes'] as List<Object?>? ?? const [])) {
-      shape.keyframes
-          .add(ShapeKeyframe.fromJson((entry as Map).cast<String, Object?>()));
+      shape.keyframes.add(
+        ShapeKeyframe.fromJson((entry as Map).cast<String, Object?>()),
+      );
     }
     shape.keyframes.sort((a, b) => a.timeMs.compareTo(b.timeMs));
     return shape;
@@ -629,8 +652,8 @@ class AnimationProject {
     this.createdAt,
     this.updatedAt,
     List<VectorShape>? shapes,
-  })  : id = id ?? generateId('project'),
-        shapes = shapes ?? <VectorShape>[];
+  }) : id = id ?? generateId('project'),
+       shapes = shapes ?? <VectorShape>[];
 
   final String id;
   String name;
@@ -657,20 +680,20 @@ class AnimationProject {
   DateTime? updatedAt;
   final List<VectorShape> shapes;
 
-  /// Durée du projet : pour un projet vectoriel, le maximum des fins de
-  /// segments des formes ; pour un projet squelette, le maximum des temps de
-  /// keyframes d'os (les pièces sont visibles en permanence) — avec un
-  /// plancher de 4 s tant qu'un rig existe, pour que le curseur reste
-  /// déplaçable avant la première keyframe. Projet vide → 0.
+  /// Durée du projet : le maximum des fins de segments des formes ; pour un
+  /// projet squelette, on y ajoute les keyframes d'os, avec un plancher de
+  /// 4 s tant qu'un rig existe ou qu'une pièce est posée — pour que le
+  /// curseur reste déplaçable avant la première keyframe. Projet vide → 0.
   int get durationMs {
-    if (isSkeleton) {
-      final rig = skeleton;
-      if (rig == null || rig.bones.isEmpty) return 0;
-      return math.max(rig.maxKeyframeTimeMs, 4000);
-    }
     var max = 0;
     for (final shape in shapes) {
       if (shape.endMs > max) max = shape.endMs;
+    }
+    if (isSkeleton) {
+      final rig = skeleton;
+      if (rig != null && (rig.bones.isNotEmpty || shapes.isNotEmpty)) {
+        max = math.max(math.max(max, rig.maxKeyframeTimeMs), 4000);
+      }
     }
     return max;
   }
@@ -695,50 +718,54 @@ class AnimationProject {
   }
 
   Map<String, Object?> toJson() => {
-        'id': id,
-        'name': name,
-        'type': type.name,
-        'skeleton': skeleton?.toJson(),
-        'width': width,
-        'height': height,
-        'durationMs': durationMs,
-        'fps': fps,
-        'backgroundValue': backgroundValue,
-        'coverPath': coverPath,
-        'createdAt': createdAt?.millisecondsSinceEpoch,
-        'updatedAt': updatedAt?.millisecondsSinceEpoch,
-        'shapes': shapes.map((s) => s.toJson()).toList(),
-      };
+    'id': id,
+    'name': name,
+    'type': type.name,
+    'skeleton': skeleton?.toJson(),
+    'width': width,
+    'height': height,
+    'durationMs': durationMs,
+    'fps': fps,
+    'backgroundValue': backgroundValue,
+    'coverPath': coverPath,
+    'createdAt': createdAt?.millisecondsSinceEpoch,
+    'updatedAt': updatedAt?.millisecondsSinceEpoch,
+    'shapes': shapes.map((s) => s.toJson()).toList(),
+  };
 
-  factory AnimationProject.fromJson(Map<String, Object?> json) =>
-      AnimationProject(
-        id: json['id'] as String?,
-        name: json['name'] as String? ?? 'Projet',
-        type: ProjectType.values.firstWhere(
-          (t) => t.name == json['type'],
-          orElse: () => ProjectType.vector,
-        ),
-        skeleton: json['skeleton'] == null
-            ? null
-            : SkeletonRig.fromJson(
-                (json['skeleton'] as Map).cast<String, Object?>(),
-              ),
-        width: (json['width'] as num?)?.toDouble() ?? 360,
-        height: (json['height'] as num?)?.toDouble() ?? 640,
-        fps: (json['fps'] as num?)?.toInt() ?? 30,
-        backgroundValue:
-            (json['backgroundValue'] as num?)?.toInt() ?? 0xFF14161C,
-        coverPath: json['coverPath'] as String?,
-        createdAt: json['createdAt'] == null
-            ? null
-            : DateTime.fromMillisecondsSinceEpoch((json['createdAt'] as num).toInt()),
-        updatedAt: json['updatedAt'] == null
-            ? null
-            : DateTime.fromMillisecondsSinceEpoch((json['updatedAt'] as num).toInt()),
-        shapes: (json['shapes'] as List<Object?>? ?? const [])
-            .map((s) => VectorShape.fromJson((s as Map).cast<String, Object?>()))
-            .toList(),
-      );
+  factory AnimationProject.fromJson(
+    Map<String, Object?> json,
+  ) => AnimationProject(
+    id: json['id'] as String?,
+    name: json['name'] as String? ?? 'Projet',
+    type: ProjectType.values.firstWhere(
+      (t) => t.name == json['type'],
+      orElse: () => ProjectType.vector,
+    ),
+    skeleton: json['skeleton'] == null
+        ? null
+        : SkeletonRig.fromJson(
+            (json['skeleton'] as Map).cast<String, Object?>(),
+          ),
+    width: (json['width'] as num?)?.toDouble() ?? 360,
+    height: (json['height'] as num?)?.toDouble() ?? 640,
+    fps: (json['fps'] as num?)?.toInt() ?? 30,
+    backgroundValue: (json['backgroundValue'] as num?)?.toInt() ?? 0xFF14161C,
+    coverPath: json['coverPath'] as String?,
+    createdAt: json['createdAt'] == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(
+            (json['createdAt'] as num).toInt(),
+          ),
+    updatedAt: json['updatedAt'] == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(
+            (json['updatedAt'] as num).toInt(),
+          ),
+    shapes: (json['shapes'] as List<Object?>? ?? const [])
+        .map((s) => VectorShape.fromJson((s as Map).cast<String, Object?>()))
+        .toList(),
+  );
 
   /// Projet vierge prêt à être édité : pas de durée ni de fps fixés — la
   /// durée sera celle du contenu posé sur la timeline.
@@ -746,15 +773,14 @@ class AnimationProject {
     String name = 'Nouvelle animation',
     ProjectFormat format = ProjectFormat.portrait,
     ProjectType type = ProjectType.vector,
-  }) =>
-      AnimationProject(
-        name: name,
-        type: type,
-        width: format.width,
-        height: format.height,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
+  }) => AnimationProject(
+    name: name,
+    type: type,
+    width: format.width,
+    height: format.height,
+    createdAt: DateTime.now(),
+    updatedAt: DateTime.now(),
+  );
 
   /// Scène de démonstration : un carré qui tourne + un cercle qui pulse.
   static AnimationProject demo() {

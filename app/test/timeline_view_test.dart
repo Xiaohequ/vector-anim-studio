@@ -56,9 +56,9 @@ Widget _host(AnimationProject project, TimelineZoomState zoom, _Rec rec) {
 /// (les barres y sont posées avec une width explicite).
 List<double> _barWidths(WidgetTester tester) {
   final widths = <double>[];
-  tester
-      .renderObject<RenderStack>(find.byType(Stack).first)
-      .visitChildren((child) {
+  tester.renderObject<RenderStack>(find.byType(Stack).first).visitChildren((
+    child,
+  ) {
     final width = (child.parentData as StackParentData?)?.width;
     if (width != null) widths.add(width);
   });
@@ -66,11 +66,14 @@ List<double> _barWidths(WidgetTester tester) {
 }
 
 void main() {
-  testWidgets('la largeur des barres = durée × pixels/ms (pas le contraire)',
-      (tester) async {
+  testWidgets('la largeur des barres = durée × pixels/ms (pas le contraire)', (
+    tester,
+  ) async {
     final project = _project();
     final rec = _Rec();
-    await tester.pumpWidget(_host(project, TimelineZoomState(durationOf: () => 4000), rec));
+    await tester.pumpWidget(
+      _host(project, TimelineZoomState(durationOf: () => 4000), rec),
+    );
 
     // Vue 4000 ms sur 800 px : segment 0–1000 ms → 200 px (le bug v0.6.0
     // donnait durée × ms/px = 5000 px, une barre qui couvre tout l'écran).
@@ -86,19 +89,24 @@ void main() {
   testWidgets('un tap sur le fond déplace la tête de lecture', (tester) async {
     final project = _project();
     final rec = _Rec();
-    await tester.pumpWidget(_host(project, TimelineZoomState(durationOf: () => 4000), rec));
+    await tester.pumpWidget(
+      _host(project, TimelineZoomState(durationOf: () => 4000), rec),
+    );
 
     // Hors de la barre (x > 200) : le tap tombe sur le fond → scrub.
     await tester.tapAt(const Offset(400, 30));
     expect(rec.seeked, 2000);
   });
 
-  testWidgets('appui long + glisser déplace le segment, keyframes suivent',
-      (tester) async {
+  testWidgets('appui long + glisser déplace le segment, keyframes suivent', (
+    tester,
+  ) async {
     final project = _project();
     final shape = project.shapes.first;
     final rec = _Rec();
-    await tester.pumpWidget(_host(project, TimelineZoomState(durationOf: () => 4000), rec));
+    await tester.pumpWidget(
+      _host(project, TimelineZoomState(durationOf: () => 4000), rec),
+    );
 
     // Appui long sur la barre (x < 200) puis glisser de 200 px :
     // ms/px = 4000/800 = 5 → décalage de 1000 ms.
@@ -140,12 +148,15 @@ void main() {
     await tester.pump();
   });
 
-  testWidgets('le glisser sur une barre scrub aussi la tête de lecture',
-      (tester) async {
+  testWidgets('le glisser sur une barre scrub aussi la tête de lecture', (
+    tester,
+  ) async {
     final project = _project();
     final shape = project.shapes.first;
     final rec = _Rec();
-    await tester.pumpWidget(_host(project, TimelineZoomState(durationOf: () => 4000), rec));
+    await tester.pumpWidget(
+      _host(project, TimelineZoomState(durationOf: () => 4000), rec),
+    );
 
     // Glisser au milieu de la barre (x = 100) : scrub, pas de déplacement.
     await tester.dragFrom(const Offset(100, 27), const Offset(120, 0));

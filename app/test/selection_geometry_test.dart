@@ -8,20 +8,16 @@ import 'package:vector_anim_studio/models/animation.dart';
 AnimationProject _project() => AnimationProject(width: 360, height: 640);
 
 /// Forme simple : une couche rectangulaire 110×50 centrée sur l'origine.
-VectorShape _shape({
-  double rotation = 0,
-  double scale = 1,
-}) =>
-    VectorShape(
-      name: 'Test',
-      x: 180,
-      y: 320,
-      rotation: rotation,
-      scale: scale,
-      layers: <ShapeLayer>[
-        ShapeLayer(name: 'L', kind: ShapeKind.rect, width: 110, height: 50),
-      ],
-    );
+VectorShape _shape({double rotation = 0, double scale = 1}) => VectorShape(
+  name: 'Test',
+  x: 180,
+  y: 320,
+  rotation: rotation,
+  scale: scale,
+  layers: <ShapeLayer>[
+    ShapeLayer(name: 'L', kind: ShapeKind.rect, width: 110, height: 50),
+  ],
+);
 
 /// Rect local de la forme de test, gonflé de 6 comme la sélection.
 Rect _bounds() => Rect.fromLTRB(-61, -31, 61, 31);
@@ -166,28 +162,50 @@ void main() {
       );
       // 5 px écran à droite du bord (61) : dans la marge de 10 px.
       expect(
-        SelectionGeometry.hit(_bounds(), pose, geo, const Offset(180 + 66, 320)),
+        SelectionGeometry.hit(
+          _bounds(),
+          pose,
+          geo,
+          const Offset(180 + 66, 320),
+        ),
         isTrue,
       );
       // Loin : raté.
       expect(
-        SelectionGeometry.hit(_bounds(), pose, geo, const Offset(180 + 120, 320)),
+        SelectionGeometry.hit(
+          _bounds(),
+          pose,
+          geo,
+          const Offset(180 + 120, 320),
+        ),
         isFalse,
       );
     });
 
     test('hit suit la rotation de l\'objet', () {
       final geo = SceneGeometry.fitFor(_project(), const Size(360, 640));
-      final pose =
-          SelectionGeometry.shapePose(_shape(rotation: math.pi / 2), 0);
+      final pose = SelectionGeometry.shapePose(
+        _shape(rotation: math.pi / 2),
+        0,
+      );
       // Le rect 220×62 devient vertical après rotation : point au-dessus → touché.
       expect(
-        SelectionGeometry.hit(_bounds(), pose, geo, const Offset(180, 320 - 50)),
+        SelectionGeometry.hit(
+          _bounds(),
+          pose,
+          geo,
+          const Offset(180, 320 - 50),
+        ),
         isTrue,
       );
       // Point à droite (horizontalement large) → raté maintenant.
       expect(
-        SelectionGeometry.hit(_bounds(), pose, geo, const Offset(180 + 50, 320)),
+        SelectionGeometry.hit(
+          _bounds(),
+          pose,
+          geo,
+          const Offset(180 + 50, 320),
+        ),
         isFalse,
       );
     });
@@ -206,12 +224,20 @@ void main() {
       final pose = SelectionGeometry.layerPose(shape, layer, 0);
       expect(
         SelectionGeometry.hit(
-            Rect.fromLTRB(-55, -55, 55, 55), pose, geo, const Offset(190, 340)),
+          Rect.fromLTRB(-55, -55, 55, 55),
+          pose,
+          geo,
+          const Offset(190, 340),
+        ),
         isTrue,
       );
       expect(
         SelectionGeometry.hit(
-            Rect.fromLTRB(-55, -55, 55, 55), pose, geo, const Offset(100, 250)),
+          Rect.fromLTRB(-55, -55, 55, 55),
+          pose,
+          geo,
+          const Offset(100, 250),
+        ),
         isFalse,
       );
     });
@@ -220,12 +246,16 @@ void main() {
       final handle = const Offset(100, 100);
       expect(
         SelectionGeometry.hitRotationHandle(
-            const Offset(100 + 25, 100), handle),
+          const Offset(100 + 25, 100),
+          handle,
+        ),
         isTrue,
       );
       expect(
         SelectionGeometry.hitRotationHandle(
-            const Offset(100 + 40, 100), handle),
+          const Offset(100 + 40, 100),
+          handle,
+        ),
         isFalse,
       );
     });

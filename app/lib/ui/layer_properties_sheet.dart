@@ -78,7 +78,11 @@ class _LayerPropertiesSheetState extends State<LayerPropertiesSheet> {
               ],
             ),
             for (final property in LayerProperty.values)
-              _LayerSlider(layer: layer, property: property, onChanged: _onChanged),
+              _LayerSlider(
+                layer: layer,
+                property: property,
+                onChanged: _onChanged,
+              ),
           ],
         ),
       ),

@@ -37,34 +37,34 @@ class RigBone {
   double length;
 
   RigBone copy({String? id, String? parentId}) => RigBone(
-        id: id ?? this.id,
-        name: name,
-        parentId: parentId ?? this.parentId,
-        offsetX: offsetX,
-        offsetY: offsetY,
-        restAngle: restAngle,
-        length: length,
-      );
+    id: id ?? this.id,
+    name: name,
+    parentId: parentId ?? this.parentId,
+    offsetX: offsetX,
+    offsetY: offsetY,
+    restAngle: restAngle,
+    length: length,
+  );
 
   Map<String, Object?> toJson() => <String, Object?>{
-        'id': id,
-        'name': name,
-        'parentId': parentId,
-        'offsetX': offsetX,
-        'offsetY': offsetY,
-        'restAngle': restAngle,
-        'length': length,
-      };
+    'id': id,
+    'name': name,
+    'parentId': parentId,
+    'offsetX': offsetX,
+    'offsetY': offsetY,
+    'restAngle': restAngle,
+    'length': length,
+  };
 
   factory RigBone.fromJson(Map<String, Object?> json) => RigBone(
-        id: json['id'] as String?,
-        name: json['name'] as String? ?? 'Os',
-        parentId: json['parentId'] as String?,
-        offsetX: (json['offsetX'] as num?)?.toDouble() ?? 0,
-        offsetY: (json['offsetY'] as num?)?.toDouble() ?? 0,
-        restAngle: (json['restAngle'] as num?)?.toDouble() ?? 0,
-        length: (json['length'] as num?)?.toDouble() ?? 80,
-      );
+    id: json['id'] as String?,
+    name: json['name'] as String? ?? 'Os',
+    parentId: json['parentId'] as String?,
+    offsetX: (json['offsetX'] as num?)?.toDouble() ?? 0,
+    offsetY: (json['offsetY'] as num?)?.toDouble() ?? 0,
+    restAngle: (json['restAngle'] as num?)?.toDouble() ?? 0,
+    length: (json['length'] as num?)?.toDouble() ?? 80,
+  );
 }
 
 /// Keyframe d'un os : le delta d'angle (radians) ajouté à l'angle de repos
@@ -82,26 +82,23 @@ class BoneKeyframe {
   EasingKind easing;
   double angleDelta;
 
-  BoneKeyframe copy() => BoneKeyframe(
-        timeMs: timeMs,
-        easing: easing,
-        angleDelta: angleDelta,
-      );
+  BoneKeyframe copy() =>
+      BoneKeyframe(timeMs: timeMs, easing: easing, angleDelta: angleDelta);
 
   Map<String, Object?> toJson() => <String, Object?>{
-        'timeMs': timeMs,
-        'easing': easing.name,
-        'angleDelta': angleDelta,
-      };
+    'timeMs': timeMs,
+    'easing': easing.name,
+    'angleDelta': angleDelta,
+  };
 
   factory BoneKeyframe.fromJson(Map<String, Object?> json) => BoneKeyframe(
-        timeMs: (json['timeMs'] as num).toInt(),
-        easing: EasingKind.values.firstWhere(
-          (e) => e.name == json['easing'],
-          orElse: () => EasingKind.easeInOut,
-        ),
-        angleDelta: (json['angleDelta'] as num?)?.toDouble() ?? 0,
-      );
+    timeMs: (json['timeMs'] as num).toInt(),
+    easing: EasingKind.values.firstWhere(
+      (e) => e.name == json['easing'],
+      orElse: () => EasingKind.easeInOut,
+    ),
+    angleDelta: (json['angleDelta'] as num?)?.toDouble() ?? 0,
+  );
 }
 
 /// Liaison rig maître : une pièce (forme entière) suit un os.
@@ -116,14 +113,14 @@ class BoneBinding {
   final String boneId;
 
   Map<String, Object?> toJson() => <String, Object?>{
-        'shapeId': shapeId,
-        'boneId': boneId,
-      };
+    'shapeId': shapeId,
+    'boneId': boneId,
+  };
 
   factory BoneBinding.fromJson(Map<String, Object?> json) => BoneBinding(
-        shapeId: json['shapeId'] as String,
-        boneId: json['boneId'] as String,
-      );
+    shapeId: json['shapeId'] as String,
+    boneId: json['boneId'] as String,
+  );
 }
 
 /// Le rig complet d'un projet squelette : arbre d'os, liaisons pièces → os
@@ -134,10 +131,10 @@ class SkeletonRig {
     List<RigBone>? bones,
     List<BoneBinding>? bindings,
     Map<String, List<BoneKeyframe>>? tracks,
-  })  : name = name ?? 'Squelette',
-        bones = bones ?? <RigBone>[],
-        bindings = bindings ?? <BoneBinding>[],
-        tracks = tracks ?? <String, List<BoneKeyframe>>{};
+  }) : name = name ?? 'Squelette',
+       bones = bones ?? <RigBone>[],
+       bindings = bindings ?? <BoneBinding>[],
+       tracks = tracks ?? <String, List<BoneKeyframe>>{};
 
   String name;
   final List<RigBone> bones;
@@ -188,7 +185,8 @@ class SkeletonRig {
       for (final bone in bones) {
         if (resolved.contains(bone.id)) continue;
         final parent = bone.parentId;
-        final ready = parent == null ||
+        final ready =
+            parent == null ||
             !byId.containsKey(parent) || // parent absent : traité en racine
             resolved.contains(parent);
         if (!ready) continue;
@@ -243,15 +241,21 @@ class SkeletonRig {
   }
 
   /// Ajoute ou remplace la keyframe d'angle à [timeMs], triées à chaque fois.
-  void upsertKeyframe(String boneId, int timeMs, double angleDelta,
-      {EasingKind? easing}) {
+  void upsertKeyframe(
+    String boneId,
+    int timeMs,
+    double angleDelta, {
+    EasingKind? easing,
+  }) {
     final track = tracks.putIfAbsent(boneId, () => <BoneKeyframe>[]);
     track.removeWhere((k) => k.timeMs == timeMs);
-    track.add(BoneKeyframe(
-      timeMs: timeMs,
-      easing: easing ?? EasingKind.easeInOut,
-      angleDelta: angleDelta,
-    ));
+    track.add(
+      BoneKeyframe(
+        timeMs: timeMs,
+        easing: easing ?? EasingKind.easeInOut,
+        angleDelta: angleDelta,
+      ),
+    );
     track.sort((a, b) => a.timeMs.compareTo(b.timeMs));
   }
 
@@ -306,6 +310,20 @@ class SkeletonRig {
   void unbindShape(String shapeId) =>
       bindings.removeWhere((b) => b.shapeId == shapeId);
 
+  /// Déplace l'articulation de repos d'un os de [worldDelta] (coordonnées
+  /// monde/projet). Racine : le delta s'applique tel quel à l'offset. Enfant :
+  /// le delta est ramené dans le repère de repos du parent (angle monde
+  /// courant). Les os enfants (offsets relatifs) suivent automatiquement.
+  void translateBoneRest(RigBone bone, SkeletonPose pose, Offset worldDelta) {
+    final parent = boneById(bone.parentId);
+    final parentFrame = parent == null ? null : pose.frameOf(parent.id);
+    final local = parentFrame == null
+        ? worldDelta
+        : rotateVector(worldDelta, -parentFrame.worldAngle);
+    bone.offsetX += local.dx;
+    bone.offsetY += local.dy;
+  }
+
   /// Supprime un os : les enfants sont re-parentés à son parent (le rig reste
   /// connexe), ses liaisons et sa piste d'animation sont retirées.
   void removeBone(String boneId) {
@@ -320,47 +338,47 @@ class SkeletonRig {
   }
 
   SkeletonRig copy() => SkeletonRig(
-        name: name,
-        bones: [for (final bone in bones) bone.copy()],
-        bindings: [
-          for (final binding in bindings)
-            BoneBinding(shapeId: binding.shapeId, boneId: binding.boneId),
-        ],
-        tracks: <String, List<BoneKeyframe>>{
-          for (final entry in tracks.entries)
-            entry.key: [for (final key in entry.value) key.copy()],
-        },
-      );
+    name: name,
+    bones: [for (final bone in bones) bone.copy()],
+    bindings: [
+      for (final binding in bindings)
+        BoneBinding(shapeId: binding.shapeId, boneId: binding.boneId),
+    ],
+    tracks: <String, List<BoneKeyframe>>{
+      for (final entry in tracks.entries)
+        entry.key: [for (final key in entry.value) key.copy()],
+    },
+  );
 
   Map<String, Object?> toJson() => <String, Object?>{
-        'name': name,
-        'bones': [for (final bone in bones) bone.toJson()],
-        'bindings': [for (final binding in bindings) binding.toJson()],
-        'tracks': <String, Object?>{
-          for (final entry in tracks.entries)
-            entry.key: [for (final key in entry.value) key.toJson()],
-        },
-      };
+    'name': name,
+    'bones': [for (final bone in bones) bone.toJson()],
+    'bindings': [for (final binding in bindings) binding.toJson()],
+    'tracks': <String, Object?>{
+      for (final entry in tracks.entries)
+        entry.key: [for (final key in entry.value) key.toJson()],
+    },
+  };
 
   factory SkeletonRig.fromJson(Map<String, Object?> json) => SkeletonRig(
-        name: json['name'] as String? ?? 'Squelette',
-        bones: (json['bones'] as List<Object?>? ?? const [])
-            .map((b) => RigBone.fromJson((b as Map).cast<String, Object?>()))
-            .toList(),
-        bindings: (json['bindings'] as List<Object?>? ?? const [])
-            .map((b) => BoneBinding.fromJson((b as Map).cast<String, Object?>()))
-            .toList(),
-        tracks: <String, List<BoneKeyframe>>{
-          for (final entry in
-              ((json['tracks'] as Map?)?.cast<String, Object?>() ??
-                      const <String, Object?>{})
-                  .entries)
-            entry.key: [
-              for (final key in (entry.value as List<Object?>? ?? const []))
-                BoneKeyframe.fromJson((key as Map).cast<String, Object?>()),
-            ]..sort((a, b) => a.timeMs.compareTo(b.timeMs)),
-        },
-      );
+    name: json['name'] as String? ?? 'Squelette',
+    bones: (json['bones'] as List<Object?>? ?? const [])
+        .map((b) => RigBone.fromJson((b as Map).cast<String, Object?>()))
+        .toList(),
+    bindings: (json['bindings'] as List<Object?>? ?? const [])
+        .map((b) => BoneBinding.fromJson((b as Map).cast<String, Object?>()))
+        .toList(),
+    tracks: <String, List<BoneKeyframe>>{
+      for (final entry
+          in ((json['tracks'] as Map?)?.cast<String, Object?>() ??
+                  const <String, Object?>{})
+              .entries)
+        entry.key: [
+          for (final key in (entry.value as List<Object?>? ?? const []))
+            BoneKeyframe.fromJson((key as Map).cast<String, Object?>()),
+        ]..sort((a, b) => a.timeMs.compareTo(b.timeMs)),
+    },
+  );
 }
 
 /// État d'un os à un instant donné : frame de repos (monde) et frame animée.
@@ -396,8 +414,7 @@ class BoneFrame {
   /// repère projet de repos : `joint + R(worldDelta)·(p − jointRest)`.
   /// Identité au repos — c'est exactement la transformée que le painter
   /// applique au canvas avant la pose de la pièce.
-  Offset mapPoint(Offset p) =>
-      joint + rotateVector(p - jointRest, worldDelta);
+  Offset mapPoint(Offset p) => joint + rotateVector(p - jointRest, worldDelta);
 }
 
 /// Évaluation FK du rig à un instant donné : transformée monde de chaque os.
@@ -406,8 +423,7 @@ class SkeletonPose {
 
   final Map<String, BoneFrame> frames;
 
-  BoneFrame? frameOf(String? boneId) =>
-      boneId == null ? null : frames[boneId];
+  BoneFrame? frameOf(String? boneId) => boneId == null ? null : frames[boneId];
 
   /// Les parents sont résolus avant les enfants (voir `orderedParentsFirst`).
   /// Un parent absent de l'arbre est traité comme une racine (robustesse
@@ -426,7 +442,8 @@ class SkeletonPose {
         jointRest = Offset(bone.offsetX, bone.offsetY);
         angleRest = bone.restAngle;
       } else {
-        jointRest = parentFrame.jointRest +
+        jointRest =
+            parentFrame.jointRest +
             rotateVector(
               Offset(bone.offsetX, bone.offsetY),
               parentFrame.worldAngleRest,
@@ -447,15 +464,13 @@ class SkeletonPose {
       final joint = parentFrame == null
           ? Offset(bone.offsetX, bone.offsetY)
           : parentFrame.jointRest +
-              parentDeltaPos +
-              rotateVector(
-                Offset(bone.offsetX, bone.offsetY),
-                parentFrame.worldAngleRest + parentDelta,
-              );
-      final worldAngle = angleRest + parentDelta + rig.angleDeltaAt(
-            bone.id,
-            timeMs,
-          );
+                parentDeltaPos +
+                rotateVector(
+                  Offset(bone.offsetX, bone.offsetY),
+                  parentFrame.worldAngleRest + parentDelta,
+                );
+      final worldAngle =
+          angleRest + parentDelta + rig.angleDeltaAt(bone.id, timeMs);
 
       frames[bone.id] = BoneFrame(
         jointRest: jointRest,
@@ -477,4 +492,59 @@ Offset rotateVector(Offset vector, double angle) {
     vector.dx * cos - vector.dy * sin,
     vector.dx * sin + vector.dy * cos,
   );
+}
+
+/// Emporte les pièces liées lors d'une modification de la pose de repos du
+/// rig (entre [before] et [after], deux évaluations du MÊME rig autour de la
+/// mutation). La transformée rigide repos→repos de l'os porteur — pivot à
+/// son articulation, rotation deltaAngle — s'applique au centre et à la
+/// rotation de chaque pièce dont la frame de repos a changé (l'os porteur
+/// comme les os descendants). Écriture auto-key : pose au curseur si la
+/// pièce est animée, valeur de base sinon.
+void carryBoundPieces(
+  AnimationProject project,
+  SkeletonRig rig,
+  SkeletonPose before,
+  SkeletonPose after,
+  int timeMs, {
+  int toleranceMs = 0,
+}) {
+  for (final binding in rig.bindings) {
+    final shape = project.shapeById(binding.shapeId);
+    final oldFrame = before.frameOf(binding.boneId);
+    final newFrame = after.frameOf(binding.boneId);
+    if (shape == null || oldFrame == null || newFrame == null) continue;
+    final deltaAngle = newFrame.worldAngleRest - oldFrame.worldAngleRest;
+    final moved =
+        (newFrame.jointRest - oldFrame.jointRest).distance > 1e-9 ||
+        deltaAngle.abs() > 1e-9;
+    if (!moved) continue;
+    final x = shape.valueAt(AnimatableProperty.x, timeMs);
+    final y = shape.valueAt(AnimatableProperty.y, timeMs);
+    final rotation = shape.valueAt(AnimatableProperty.rotation, timeMs);
+    final mapped =
+        newFrame.jointRest +
+        rotateVector(Offset(x, y) - oldFrame.jointRest, deltaAngle);
+    shape.applyValue(
+      AnimatableProperty.x,
+      mapped.dx,
+      timeMs,
+      autoKey: true,
+      toleranceMs: toleranceMs,
+    );
+    shape.applyValue(
+      AnimatableProperty.y,
+      mapped.dy,
+      timeMs,
+      autoKey: true,
+      toleranceMs: toleranceMs,
+    );
+    shape.applyValue(
+      AnimatableProperty.rotation,
+      rotation + deltaAngle,
+      timeMs,
+      autoKey: true,
+      toleranceMs: toleranceMs,
+    );
+  }
 }

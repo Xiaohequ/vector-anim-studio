@@ -39,7 +39,7 @@ class ProjectSummary {
 /// pistes d'animation (keyframes).
 class ProjectRepository {
   ProjectRepository({DatabaseFactory? factory, this.databasePath})
-      : _factory = factory ?? databaseFactory;
+    : _factory = factory ?? databaseFactory;
 
   static const String fileName = 'vector_anim_studio.db';
 
@@ -56,8 +56,8 @@ class ProjectRepository {
   Future<Database> get database async => _db ??= await _open();
 
   Future<Database> _open() async {
-    final path = databasePath ??
-        p.join(await _factory.getDatabasesPath(), fileName);
+    final path =
+        databasePath ?? p.join(await _factory.getDatabasesPath(), fileName);
     return _factory.openDatabase(
       path,
       options: OpenDatabaseOptions(
@@ -136,7 +136,9 @@ class ProjectRepository {
           await db.execute(
             'CREATE INDEX idx_shapes_project ON shapes (project_id)',
           );
-          await db.execute('CREATE INDEX idx_layers_shape ON layers (shape_id)');
+          await db.execute(
+            'CREATE INDEX idx_layers_shape ON layers (shape_id)',
+          );
           await db.execute(
             'CREATE INDEX idx_shape_keyframes_shape ON shape_keyframes (shape_id)',
           );
@@ -206,10 +208,7 @@ class ProjectRepository {
     for (final row in keyRows) {
       final info = trackInfo[row['track_id'] as String];
       if (info == null) continue;
-      legacy
-          .putIfAbsent(info.$1, () => {})
-          .putIfAbsent(info.$2, () => [])
-          .add((
+      legacy.putIfAbsent(info.$1, () => {}).putIfAbsent(info.$2, () => []).add((
         (row['time_ms'] as num).toInt(),
         (row['value'] as num).toDouble(),
         EasingKind.values.firstWhere(
@@ -227,16 +226,16 @@ class ProjectRepository {
         AnimatableProperty.rotation: (shapeRow['rotation'] as num).toDouble(),
         AnimatableProperty.scale: (shapeRow['scale'] as num).toDouble(),
         AnimatableProperty.opacity: (shapeRow['opacity'] as num).toDouble(),
-        AnimatableProperty.strokeWidth:
-            (shapeRow['stroke_width'] as num).toDouble(),
+        AnimatableProperty.strokeWidth: (shapeRow['stroke_width'] as num)
+            .toDouble(),
       };
       final perShape =
-          legacy[shapeId] ?? <AnimatableProperty, List<(int, double, EasingKind)>>{};
+          legacy[shapeId] ??
+          <AnimatableProperty, List<(int, double, EasingKind)>>{};
       final times = <int>{
         for (final list in perShape.values)
           for (final entry in list) entry.$1,
-      }.toList()
-        ..sort();
+      }.toList()..sort();
 
       for (final time in times) {
         var easing = EasingKind.easeInOut;
@@ -288,8 +287,8 @@ class ProjectRepository {
   }
 
   static ShapeKeyframe _decodeKeyframe(Map<String, Object?> row) {
-    final raw =
-        (jsonDecode(row['values_json'] as String) as Map).cast<String, Object?>();
+    final raw = (jsonDecode(row['values_json'] as String) as Map)
+        .cast<String, Object?>();
     return ShapeKeyframe(
       timeMs: (row['time_ms'] as num).toInt(),
       easing: EasingKind.values.firstWhere(
@@ -468,16 +467,17 @@ class ProjectRepository {
         'id': project.id,
         'name': project.name,
         'type': project.type.name,
-        'skeleton':
-            project.skeleton == null ? null : jsonEncode(project.skeleton!.toJson()),
+        'skeleton': project.skeleton == null
+            ? null
+            : jsonEncode(project.skeleton!.toJson()),
         'width': project.width,
         'height': project.height,
         'duration_ms': project.durationMs,
         'fps': project.fps,
         'background_value': project.backgroundValue,
         'cover_path': project.coverPath,
-        'created_at': (project.createdAt ?? DateTime.now())
-            .millisecondsSinceEpoch,
+        'created_at':
+            (project.createdAt ?? DateTime.now()).millisecondsSinceEpoch,
         'updated_at': touch
             ? DateTime.now().millisecondsSinceEpoch
             : project.updatedAt?.millisecondsSinceEpoch,
@@ -629,10 +629,9 @@ class ProjectRepository {
       ? null
       : DateTime.fromMillisecondsSinceEpoch((value as num).toInt());
 
-  static String _encodePoints(List<Offset> points) =>
-      jsonEncode(<List<double>>[
-        for (final point in points) <double>[point.dx, point.dy],
-      ]);
+  static String _encodePoints(List<Offset> points) => jsonEncode(<List<double>>[
+    for (final point in points) <double>[point.dx, point.dy],
+  ]);
 
   static List<Offset> _decodePoints(String raw) {
     if (raw.trim().isEmpty) return <Offset>[];

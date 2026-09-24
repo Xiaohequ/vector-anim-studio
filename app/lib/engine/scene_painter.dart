@@ -36,10 +36,8 @@ class ScenePainter extends CustomPainter {
   final Map<String, AnimationProject> embeddedProjects;
 
   /// Facteur d'échelle permettant d'inscrire la scène dans [size].
-  static double scaleFor(AnimationProject project, Size size) => math.min(
-        size.width / project.width,
-        size.height / project.height,
-      );
+  static double scaleFor(AnimationProject project, Size size) =>
+      math.min(size.width / project.width, size.height / project.height);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -63,8 +61,9 @@ class ScenePainter extends CustomPainter {
     // Bordure du cadre projet (édition uniquement : jamais en export).
     if (showFrame) {
       final topLeft = geo.sceneToCanvas(Offset.zero);
-      final bottomRight =
-          geo.sceneToCanvas(Offset(project.width, project.height));
+      final bottomRight = geo.sceneToCanvas(
+        Offset(project.width, project.height),
+      );
       canvas.drawRect(
         Rect.fromPoints(topLeft, bottomRight),
         Paint()
@@ -117,10 +116,7 @@ class ScenePainter extends CustomPainter {
   }
 
   /// Os portant une forme (rig maître), pour la composition de rendu.
-  BoneFrame? _rigFrameFor(
-    AnimationProject project,
-    VectorShape shape,
-  ) {
+  BoneFrame? _rigFrameFor(AnimationProject project, VectorShape shape) {
     if (!project.isSkeleton || project.skeleton == null) return null;
     final pose = SkeletonPose.evaluate(project.skeleton!, timeMs);
     return pose.frameOf(project.skeleton!.boneIdForShape(shape.id));
@@ -138,19 +134,26 @@ class ScenePainter extends CustomPainter {
     final rig = project.skeleton;
     final SkeletonPose? rigPose =
         project.isSkeleton && rig != null && rig.bones.isNotEmpty
-            ? SkeletonPose.evaluate(rig, timeMs)
-            : null;
+        ? SkeletonPose.evaluate(rig, timeMs)
+        : null;
     for (final shape in project.shapes) {
       // Projet squelette : les pièces sont visibles en permanence (le rig
       // porte toute l'animation) — pas de fenêtre d'affichage.
-      final show =
-          project.isSkeleton ? shape.visible : shape.isVisibleAt(timeMs);
+      final show = project.isSkeleton
+          ? shape.visible
+          : shape.isVisibleAt(timeMs);
       if (!show) continue;
       BoneFrame? frame;
       if (rigPose != null) {
         frame = rigPose.frameOf(rig!.boneIdForShape(shape.id));
       }
-      _paintShape(canvas, shape, depth: depth, boneFrame: frame);
+      _paintShape(
+        canvas,
+        shape,
+        depth: depth,
+        boneFrame: frame,
+        sampleMs: timeMs,
+      );
     }
   }
 
@@ -159,13 +162,17 @@ class ScenePainter extends CustomPainter {
     VectorShape shape, {
     required int depth,
     BoneFrame? boneFrame,
+    required int sampleMs,
   }) {
-    final x = shape.valueAt(AnimatableProperty.x, timeMs);
-    final y = shape.valueAt(AnimatableProperty.y, timeMs);
-    final rotation = shape.valueAt(AnimatableProperty.rotation, timeMs);
-    final scale = shape.valueAt(AnimatableProperty.scale, timeMs);
-    final opacity = shape.valueAt(AnimatableProperty.opacity, timeMs);
-    final strokeFactor = shape.valueAt(AnimatableProperty.strokeWidth, timeMs);
+    final x = shape.valueAt(AnimatableProperty.x, sampleMs);
+    final y = shape.valueAt(AnimatableProperty.y, sampleMs);
+    final rotation = shape.valueAt(AnimatableProperty.rotation, sampleMs);
+    final scale = shape.valueAt(AnimatableProperty.scale, sampleMs);
+    final opacity = shape.valueAt(AnimatableProperty.opacity, sampleMs);
+    final strokeFactor = shape.valueAt(
+      AnimatableProperty.strokeWidth,
+      sampleMs,
+    );
 
     canvas.save();
     // Rig maître : l'os emporte la pièce (transformée os(t) ∘ os(repos)⁻¹),
@@ -176,7 +183,7 @@ class ScenePainter extends CustomPainter {
     canvas.scale(scale <= 0 ? 0.0001 : scale);
 
     if (shape.isInstance) {
-      _paintInstance(canvas, shape, opacity, depth);
+      _paintInstance(canvas, shape, opacity, depth, sampleMs);
     } else {
       for (final layer in shape.layers) {
         if (!layer.visible) continue;
@@ -205,6 +212,7 @@ class ScenePainter extends CustomPainter {
     VectorShape shape,
     double opacity,
     int depth,
+    int sampleMs,
   ) {
     final sub = embeddedProjects[shape.embeddedProjectId];
     final w = shape.embeddedWidth <= 0 ? 200.0 : shape.embeddedWidth;
@@ -213,10 +221,7 @@ class ScenePainter extends CustomPainter {
       // Projet source introuvable : cadre translucide barré, la forme reste
       // sélectionnable et éditable (position, fenêtre…).
       final rect = Rect.fromCenter(center: Offset.zero, width: w, height: h);
-      canvas.drawRect(
-        rect,
-        Paint()..color = const Color(0x40C084FC),
-      );
+      canvas.drawRect(rect, Paint()..color = const Color(0x40C084FC));
       final stroke = Paint()
         ..color = const Color(0x99C084FC)
         ..style = PaintingStyle.stroke
@@ -227,7 +232,7 @@ class ScenePainter extends CustomPainter {
       return;
     }
     if (depth >= 1) return;
-    final subTime = instanceTimeMs(timeMs, shape.startMs, sub.durationMs);
+    final subTime = instanceTimeMs(sampleMs, shape.startMs, sub.durationMs);
     if (opacity < 1) {
       canvas.saveLayer(
         null,
@@ -271,7 +276,9 @@ class ScenePainter extends CustomPainter {
               width: layer.width,
               height: layer.height,
             ),
-            Radius.circular(math.min(24, math.min(layer.width, layer.height) * 0.15)),
+            Radius.circular(
+              math.min(24, math.min(layer.width, layer.height) * 0.15),
+            ),
           ),
           paint,
         );
@@ -302,9 +309,15 @@ class ScenePainter extends CustomPainter {
             ),
           );
         } else {
-          path.moveTo(pts.first.dx - layer.width / 2, pts.first.dy - layer.height / 2);
+          path.moveTo(
+            pts.first.dx - layer.width / 2,
+            pts.first.dy - layer.height / 2,
+          );
           for (final point in pts.skip(1)) {
-            path.lineTo(point.dx - layer.width / 2, point.dy - layer.height / 2);
+            path.lineTo(
+              point.dx - layer.width / 2,
+              point.dy - layer.height / 2,
+            );
           }
           path.close();
         }
@@ -453,10 +466,10 @@ class ScenePainter extends CustomPainter {
   /// comme la sélection de forme. Les points d'un chemin ne sont pas pris en
   /// compte : largeur/hauteur déclarées seulement.
   static Rect layerBounds(ShapeLayer layer) => Rect.fromCenter(
-        center: Offset.zero,
-        width: math.max(1.0, layer.width.abs()),
-        height: math.max(0.0, layer.height.abs()),
-      ).inflate(6);
+    center: Offset.zero,
+    width: math.max(1.0, layer.width.abs()),
+    height: math.max(0.0, layer.height.abs()),
+  ).inflate(6);
 
   /// Le projet est un objet **mutable** partagé : comparer `oldDelegate.project`
   /// ne détecte rien lorsqu'une valeur change au repos (le canvas ne serait pas

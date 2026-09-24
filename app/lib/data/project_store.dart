@@ -13,7 +13,8 @@ class ProjectStore extends ChangeNotifier {
   bool _loading = true;
   String? _error;
 
-  List<ProjectSummary> get projects => List<ProjectSummary>.unmodifiable(_projects);
+  List<ProjectSummary> get projects =>
+      List<ProjectSummary>.unmodifiable(_projects);
   bool get loading => _loading;
   String? get error => _error;
   bool get isEmpty => !_loading && _projects.isEmpty;

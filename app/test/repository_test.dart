@@ -109,22 +109,25 @@ void main() {
     );
   });
 
-  test('une seconde sauvegarde remplace les formes sans les dupliquer', () async {
-    final project = AnimationProject.blank(name: 'Remplacement');
-    project.shapes.add(
-      VectorShape(
-        name: 'Forme',
-        layers: <ShapeLayer>[ShapeLayer(name: 'Rect', kind: ShapeKind.rect)],
-      ),
-    );
-    await repository.save(project);
-    project.shapes.first.name = 'Forme renommée';
-    await repository.save(project);
+  test(
+    'une seconde sauvegarde remplace les formes sans les dupliquer',
+    () async {
+      final project = AnimationProject.blank(name: 'Remplacement');
+      project.shapes.add(
+        VectorShape(
+          name: 'Forme',
+          layers: <ShapeLayer>[ShapeLayer(name: 'Rect', kind: ShapeKind.rect)],
+        ),
+      );
+      await repository.save(project);
+      project.shapes.first.name = 'Forme renommée';
+      await repository.save(project);
 
-    final loaded = await repository.load(project.id);
-    expect(loaded.shapes.length, 1);
-    expect(loaded.shapes.first.name, 'Forme renommée');
-  });
+      final loaded = await repository.load(project.id);
+      expect(loaded.shapes.length, 1);
+      expect(loaded.shapes.first.name, 'Forme renommée');
+    },
+  );
 
   test('suppression et duplication', () async {
     final project = AnimationProject.blank(name: 'Source');
@@ -139,7 +142,10 @@ void main() {
     final copy = await repository.duplicate(project.id);
     expect(copy.name, 'Source (copie)');
     expect(copy.shapes.first.id, isNot(project.shapes.first.id));
-    expect(copy.shapes.first.layers.first.id, isNot(project.shapes.first.layers.first.id));
+    expect(
+      copy.shapes.first.layers.first.id,
+      isNot(project.shapes.first.layers.first.id),
+    );
     expect((await repository.listSummaries()).length, 2);
 
     await repository.rename(project.id, 'Renommé');

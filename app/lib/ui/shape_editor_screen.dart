@@ -19,11 +19,7 @@ enum _EditorGesture { none, move, scale, rotate }
 /// Les réglages fins sont dans la bottom sheet ouverte par le bouton ⚙ ancré
 /// au coin bas-gauche de la sélection.
 class ShapeEditorScreen extends StatefulWidget {
-  const ShapeEditorScreen({
-    super.key,
-    required this.project,
-    this.shape,
-  });
+  const ShapeEditorScreen({super.key, required this.project, this.shape});
 
   final AnimationProject project;
 
@@ -58,7 +54,8 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
   void initState() {
     super.initState();
     final project = widget.project;
-    _draft = widget.shape?.copy() ??
+    _draft =
+        widget.shape?.copy() ??
         VectorShape(
           name: 'Forme ${project.shapes.length + 1}',
           x: project.width / 2,
@@ -149,8 +146,9 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
     });
   }
 
-  void _snack(String message) =>
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  void _snack(String message) => ScaffoldMessenger.of(
+    context,
+  ).showSnackBar(SnackBar(content: Text(message)));
 
   /// Bornée de la fenêtre d'affichage éditable : la fin du dernier AUTRE
   /// segment +10 s (le projet s'étend tout seul) — jamais sous la fin du
@@ -171,8 +169,7 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
       fps: widget.project.fps,
       backgroundValue: widget.project.backgroundValue,
       shapes: <VectorShape>[
-        if (!_isNew)
-          ...widget.project.shapes.where((s) => s.id != _draft.id),
+        if (!_isNew) ...widget.project.shapes.where((s) => s.id != _draft.id),
         _draft,
       ],
     );
@@ -279,7 +276,10 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
                   isSelected: _snapRotation,
                   onPressed: () =>
                       setState(() => _snapRotation = !_snapRotation),
-                  icon: const Icon(Icons.rotate_90_degrees_ccw_outlined, size: 20),
+                  icon: const Icon(
+                    Icons.rotate_90_degrees_ccw_outlined,
+                    size: 20,
+                  ),
                   selectedIcon: const Icon(
                     Icons.rotate_90_degrees_ccw,
                     size: 20,
@@ -402,7 +402,8 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
     switch (_gesture) {
       case _EditorGesture.move:
         final geo = SceneGeometry.fitFor(widget.project, canvasSize);
-        final sceneDelta = geo.canvasToScene(details.localFocalPoint) -
+        final sceneDelta =
+            geo.canvasToScene(details.localFocalPoint) -
             geo.canvasToScene(_gestureStartPoint);
         // La couche vit dans le repère de la forme : le delta de scène est
         // repassé en local (rotation et échelle de la forme inversées).
@@ -507,7 +508,10 @@ class LayerPanel extends StatelessWidget {
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
-            Text('${shape.layers.length}', style: const TextStyle(fontSize: 12)),
+            Text(
+              '${shape.layers.length}',
+              style: const TextStyle(fontSize: 12),
+            ),
           ],
         ),
         const SizedBox(height: 6),
@@ -549,10 +553,10 @@ class LayerPanel extends StatelessWidget {
               shape.endMs.toDouble().clamp(0, durationMs.toDouble()),
             ),
             onChanged: (values) {
-              final start = values.start.round().clamp(
-                    0,
-                    math.max(0, durationMs - TimelineViewMinSpan.ms),
-                  ).toInt();
+              final start = values.start
+                  .round()
+                  .clamp(0, math.max(0, durationMs - TimelineViewMinSpan.ms))
+                  .toInt();
               final end = values.end
                   .round()
                   .clamp(start + TimelineViewMinSpan.ms, durationMs)
@@ -598,7 +602,9 @@ class LayerPanel extends StatelessWidget {
                 layer.visible = !layer.visible;
                 onChanged();
               },
-              icon: Icon(layer.visible ? Icons.visibility : Icons.visibility_off),
+              icon: Icon(
+                layer.visible ? Icons.visibility : Icons.visibility_off,
+              ),
             ),
             IconButton(
               tooltip: 'Monter',

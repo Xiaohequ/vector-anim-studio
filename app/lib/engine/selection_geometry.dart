@@ -87,13 +87,13 @@ class SelectionGeometry {
 
   /// Pose d'une forme à l'instant donné (valeurs interpolées).
   static Pose2D shapePose(VectorShape shape, int timeMs) => Pose2D(
-        origin: Offset(
-          shape.valueAt(AnimatableProperty.x, timeMs),
-          shape.valueAt(AnimatableProperty.y, timeMs),
-        ),
-        rotation: shape.valueAt(AnimatableProperty.rotation, timeMs),
-        scale: shape.valueAt(AnimatableProperty.scale, timeMs),
-      );
+    origin: Offset(
+      shape.valueAt(AnimatableProperty.x, timeMs),
+      shape.valueAt(AnimatableProperty.y, timeMs),
+    ),
+    rotation: shape.valueAt(AnimatableProperty.rotation, timeMs),
+    scale: shape.valueAt(AnimatableProperty.scale, timeMs),
+  );
 
   /// Pose d'une forme liée à un os : composition `os(t) ∘ os(repos)⁻¹ ∘ pose`.
   /// Le mouvement de l'os (rigide) emporte l'origine de la forme (elle orbite
@@ -111,8 +111,8 @@ class SelectionGeometry {
     );
     return Pose2D(
       origin: frame.mapPoint(origin),
-      rotation: shape.valueAt(AnimatableProperty.rotation, timeMs) +
-          frame.worldDelta,
+      rotation:
+          shape.valueAt(AnimatableProperty.rotation, timeMs) + frame.worldDelta,
       scale: shape.valueAt(AnimatableProperty.scale, timeMs),
     );
   }
@@ -121,11 +121,7 @@ class SelectionGeometry {
   /// L'origine de la couche (son centre, positionné par layer.x/y dans le
   /// repère de la forme) est transformée par la pose de la forme ; rotations
   /// s'additionnent, échelles se multiplient.
-  static Pose2D layerPose(
-    VectorShape shape,
-    ShapeLayer layer,
-    int timeMs,
-  ) {
+  static Pose2D layerPose(VectorShape shape, ShapeLayer layer, int timeMs) {
     final sp = shapePose(shape, timeMs);
     final cosR = math.cos(sp.rotation);
     final sinR = math.sin(sp.rotation);
@@ -150,20 +146,25 @@ class SelectionGeometry {
     final sy = local.dy * s;
     final cosR = math.cos(pose.rotation);
     final sinR = math.sin(pose.rotation);
-    return geo.sceneToCanvas(Offset(
-      pose.origin.dx + sx * cosR - sy * sinR,
-      pose.origin.dy + sx * sinR + sy * cosR,
-    ));
+    return geo.sceneToCanvas(
+      Offset(
+        pose.origin.dx + sx * cosR - sy * sinR,
+        pose.origin.dy + sx * sinR + sy * cosR,
+      ),
+    );
   }
 
   /// Les 4 coins du rectangle de sélection, en canvas (HG, HD, BD, BG).
-  static List<Offset> corners(Rect localBounds, Pose2D pose, SceneGeometry geo) =>
-      <Offset>[
-        localToCanvas(localBounds.topLeft, pose, geo),
-        localToCanvas(localBounds.topRight, pose, geo),
-        localToCanvas(localBounds.bottomRight, pose, geo),
-        localToCanvas(localBounds.bottomLeft, pose, geo),
-      ];
+  static List<Offset> corners(
+    Rect localBounds,
+    Pose2D pose,
+    SceneGeometry geo,
+  ) => <Offset>[
+    localToCanvas(localBounds.topLeft, pose, geo),
+    localToCanvas(localBounds.topRight, pose, geo),
+    localToCanvas(localBounds.bottomRight, pose, geo),
+    localToCanvas(localBounds.bottomLeft, pose, geo),
+  ];
 
   /// Centre de l'objet (son origine) en canvas.
   static Offset center(Pose2D pose, SceneGeometry geo) =>

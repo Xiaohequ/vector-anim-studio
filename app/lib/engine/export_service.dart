@@ -15,19 +15,19 @@ enum VideoFormat { mp4, gif }
 
 extension VideoFormatInfo on VideoFormat {
   String get label => switch (this) {
-        VideoFormat.mp4 => 'Vidéo MP4 (H.264)',
-        VideoFormat.gif => 'GIF animé',
-      };
+    VideoFormat.mp4 => 'Vidéo MP4 (H.264)',
+    VideoFormat.gif => 'GIF animé',
+  };
 
   String get extension => switch (this) {
-        VideoFormat.mp4 => 'mp4',
-        VideoFormat.gif => 'gif',
-      };
+    VideoFormat.mp4 => 'mp4',
+    VideoFormat.gif => 'gif',
+  };
 
   String get mimeType => switch (this) {
-        VideoFormat.mp4 => 'video/mp4',
-        VideoFormat.gif => 'image/gif',
-      };
+    VideoFormat.mp4 => 'video/mp4',
+    VideoFormat.gif => 'image/gif',
+  };
 }
 
 /// Export d'un projet : vidéo MP4 (MediaCodec natif), GIF (pur Dart), PNG, JSON.
@@ -74,9 +74,19 @@ class ExportService {
     final file = File(p.join(dir.path, name));
     switch (format) {
       case VideoFormat.mp4:
-        return _exportMp4(file, fps: fps ?? project.fps, width: width, onProgress: onProgress);
+        return _exportMp4(
+          file,
+          fps: fps ?? project.fps,
+          width: width,
+          onProgress: onProgress,
+        );
       case VideoFormat.gif:
-        return _exportGif(file, fps: fps ?? 12, width: width ?? 320, onProgress: onProgress);
+        return _exportGif(
+          file,
+          fps: fps ?? 12,
+          width: width ?? 320,
+          onProgress: onProgress,
+        );
     }
   }
 
@@ -88,15 +98,16 @@ class ExportService {
   }) async {
     final targetWidth = _even((width ?? project.width).round().clamp(16, 1920));
     final targetHeight = _even(
-      ((width ?? project.width) * project.height / project.width)
-          .round()
-          .clamp(16, 1920),
+      ((width ?? project.width) * project.height / project.width).round().clamp(
+        16,
+        1920,
+      ),
     );
     final frames = frameCount(fps: fps);
     final bitrate = (targetWidth * targetHeight * fps * 0.11).round().clamp(
-          500000,
-          20000000,
-        );
+      500000,
+      20000000,
+    );
 
     await FlutterQuickVideoEncoder.setLogLevel(LogLevel.none);
     await FlutterQuickVideoEncoder.setup(
@@ -134,8 +145,10 @@ class ExportService {
     void Function(double)? onProgress,
   }) async {
     final targetWidth = width.round().clamp(64, 720);
-    final targetHeight =
-        (width * project.height / project.width).round().clamp(64, 720);
+    final targetHeight = (width * project.height / project.width).round().clamp(
+      64,
+      720,
+    );
     final frames = frameCount(fps: fps);
     final encoder = img.GifEncoder(
       delay: (100 / fps).round().clamp(2, 200),
@@ -181,7 +194,9 @@ class ExportService {
     final data = await image.toByteData(format: ui.ImageByteFormat.png);
     image.dispose();
     final dir = await outputDirectory();
-    final file = File(p.join(dir.path, '${_slug(project.name)}-frame-$timeMs.png'));
+    final file = File(
+      p.join(dir.path, '${_slug(project.name)}-frame-$timeMs.png'),
+    );
     await file.writeAsBytes(data!.buffer.asUint8List());
     return file;
   }
@@ -189,7 +204,9 @@ class ExportService {
   /// Exporte le projet complet au format JSON (lisible par l'application).
   Future<File> exportJson() async {
     final dir = await outputDirectory();
-    final file = File(p.join(dir.path, '${_slug(project.name)}-${_stamp()}.json'));
+    final file = File(
+      p.join(dir.path, '${_slug(project.name)}-${_stamp()}.json'),
+    );
     await file.writeAsString(_prettyJson(project.toJson()));
     return file;
   }

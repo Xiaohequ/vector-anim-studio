@@ -28,7 +28,7 @@ class ShapePropertiesSheet extends StatefulWidget {
 
   /// Écrit une propriété via l'auto-key (pose au curseur).
   final void Function(AnimatableProperty property, double value)
-      onPropertyChanged;
+  onPropertyChanged;
   final Future<void> Function() onToggleKeyframe;
   final Future<void> Function(EasingKind easing) onKeyframeEasing;
   final VoidCallback onEditLayers;
@@ -122,9 +122,9 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                   widget.skeletonPiece
                       ? widget.skeletonNote ?? 'Pièce du rig'
                       : 'Affichée de ${(shape.startMs / 1000).toStringAsFixed(2)} s à '
-                          '${(shape.endMs / 1000).toStringAsFixed(2)} s'
-                          '${shape.visible ? '' : ' · masquée'}'
-                          '${hasKeyframes ? '' : ' · aucune keyframe'}',
+                            '${(shape.endMs / 1000).toStringAsFixed(2)} s'
+                            '${shape.visible ? '' : ' · masquée'}'
+                            '${hasKeyframes ? '' : ' · aucune keyframe'}',
                   style: const TextStyle(fontSize: 11, color: Colors.white70),
                 ),
                 const SizedBox(height: 4),
@@ -137,8 +137,10 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                     children: <Widget>[
                       const SizedBox(
                         width: 92,
-                        child:
-                            Text('Interpolation', style: TextStyle(fontSize: 12)),
+                        child: Text(
+                          'Interpolation',
+                          style: TextStyle(fontSize: 12),
+                        ),
                       ),
                       Expanded(
                         child: DropdownButton<EasingKind>(
@@ -172,7 +174,10 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                       hasKeyframes
                           ? 'Forme animée : toute modification écrit une keyframe au curseur.'
                           : 'Ajoute une keyframe (◆) pour animer toutes les propriétés.',
-                      style: const TextStyle(fontSize: 11, color: Colors.white54),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Colors.white54,
+                      ),
                     ),
                   ),
               ],

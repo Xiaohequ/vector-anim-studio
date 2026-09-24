@@ -81,7 +81,9 @@ class _BonePropertiesSheetState extends State<BonePropertiesSheet> {
         final keyframe = controller.nearestBoneKeyframe(rig, bone);
         final hasKeyframes = rig.hasKeyframes(bone.id);
         final deltaDegrees =
-            rig.angleDeltaAt(bone.id, controller.timeMs) * 180 / 3.141592653589793;
+            rig.angleDeltaAt(bone.id, controller.timeMs) *
+            180 /
+            3.141592653589793;
         final boundShapes = <String>[
           for (final binding in rig.bindings)
             if (binding.boneId == bone.id) binding.shapeId,
@@ -187,7 +189,10 @@ class _BonePropertiesSheetState extends State<BonePropertiesSheet> {
                         items: <DropdownMenuItem<String?>>[
                           const DropdownMenuItem<String?>(
                             value: null,
-                            child: Text('Racine (aucun)', style: TextStyle(fontSize: 12)),
+                            child: Text(
+                              'Racine (aucun)',
+                              style: TextStyle(fontSize: 12),
+                            ),
                           ),
                           for (final candidate in _eligibleParents)
                             DropdownMenuItem<String?>(
@@ -206,8 +211,10 @@ class _BonePropertiesSheetState extends State<BonePropertiesSheet> {
                   children: <Widget>[
                     const SizedBox(
                       width: 92,
-                      child:
-                          Text('Interpolation', style: TextStyle(fontSize: 12)),
+                      child: Text(
+                        'Interpolation',
+                        style: TextStyle(fontSize: 12),
+                      ),
                     ),
                     Expanded(
                       child: DropdownButton<EasingKind>(

@@ -16,27 +16,24 @@ import 'package:vector_anim_studio/ui/studio_screen.dart';
 /// `test/repository_test.dart` (tests `test()` classiques, async réelles).
 class _MemoryRepository extends ProjectRepository {
   _MemoryRepository()
-      : super(
-          factory: databaseFactoryFfiNoIsolate,
-          databasePath: ':memory:',
-        );
+    : super(factory: databaseFactoryFfiNoIsolate, databasePath: ':memory:');
 
   final Map<String, AnimationProject> _projects = <String, AnimationProject>{};
 
   @override
   Future<List<ProjectSummary>> listSummaries() async => <ProjectSummary>[
-        for (final project in _projects.values)
-          ProjectSummary(
-            id: project.id,
-            name: project.name,
-            width: project.width,
-            height: project.height,
-            durationMs: project.durationMs,
-            fps: project.fps,
-            shapeCount: project.shapes.length,
-            updatedAt: project.updatedAt,
-          ),
-      ];
+    for (final project in _projects.values)
+      ProjectSummary(
+        id: project.id,
+        name: project.name,
+        width: project.width,
+        height: project.height,
+        durationMs: project.durationMs,
+        fps: project.fps,
+        shapeCount: project.shapes.length,
+        updatedAt: project.updatedAt,
+      ),
+  ];
 
   @override
   Future<int> countProjects() async => _projects.length;
@@ -68,17 +65,18 @@ void main() {
 
   setUp(() => repository = _MemoryRepository());
 
-  testWidgets('l’écran principal affiche l’état vide et le bouton nouveau projet', (
-    tester,
-  ) async {
-    await tester.pumpWidget(VectorAnimStudioApp(repository: repository));
-    await tester.pumpAndSettle();
+  testWidgets(
+    'l’écran principal affiche l’état vide et le bouton nouveau projet',
+    (tester) async {
+      await tester.pumpWidget(VectorAnimStudioApp(repository: repository));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Vector Anim Studio'), findsOneWidget);
-    // Bouton de l'état vide + bouton flottant.
-    expect(find.text('Nouveau projet'), findsNWidgets(2));
-    expect(find.text('Aucun projet pour l’instant'), findsOneWidget);
-  });
+      expect(find.text('Vector Anim Studio'), findsOneWidget);
+      // Bouton de l'état vide + bouton flottant.
+      expect(find.text('Nouveau projet'), findsNWidgets(2));
+      expect(find.text('Aucun projet pour l’instant'), findsOneWidget);
+    },
+  );
 
   testWidgets('la création d’un projet l’ajoute à la liste', (tester) async {
     await tester.pumpWidget(VectorAnimStudioApp(repository: repository));
@@ -133,7 +131,8 @@ void main() {
     await pumpStudio(tester, repository, project);
 
     IconButton undoButton() => tester.widget<IconButton>(
-        find.widgetWithIcon(IconButton, Icons.undo).last);
+      find.widgetWithIcon(IconButton, Icons.undo).last,
+    );
 
     // Aucune annulation disponible au départ.
     expect(undoButton().onPressed, isNull);
@@ -158,7 +157,8 @@ void main() {
     await pumpStudio(tester, repository, seededProject(withShape: false));
 
     IconButton undoButton() => tester.widget<IconButton>(
-        find.widgetWithIcon(IconButton, Icons.undo).last);
+      find.widgetWithIcon(IconButton, Icons.undo).last,
+    );
 
     // Ajouter une forme : menu Formes ▸ Ajouter une forme… puis Enregistrer.
     await tester.tap(find.byTooltip('Formes'));
@@ -177,8 +177,9 @@ void main() {
     expect(find.text('Forme 1'), findsNothing);
   });
 
-  testWidgets('le dialogue de création propose vectorielle ou squelette',
-      (tester) async {
+  testWidgets('le dialogue de création propose vectorielle ou squelette', (
+    tester,
+  ) async {
     await tester.pumpWidget(VectorAnimStudioApp(repository: repository));
     await tester.pumpAndSettle();
 
@@ -199,8 +200,9 @@ void main() {
     expect(find.byTooltip('Animations'), findsNothing);
   });
 
-  testWidgets('le ◆ du playbar anime l’os sélectionné (projet squelette)',
-      (tester) async {
+  testWidgets('le ◆ du playbar anime l’os sélectionné (projet squelette)', (
+    tester,
+  ) async {
     final project = AnimationProject.blank(
       name: 'Rat',
       type: ProjectType.skeleton,
@@ -223,7 +225,9 @@ void main() {
     await tester.pumpAndSettle();
 
     // ◆ au curseur (0 s) : la piste de l'os reçoit sa première keyframe.
-    await tester.tap(find.byTooltip('Ajouter une keyframe d’angle à l’os au curseur'));
+    await tester.tap(
+      find.byTooltip('Ajouter une keyframe d’angle à l’os au curseur'),
+    );
     await tester.pumpAndSettle();
     expect(project.skeleton!.hasKeyframes(bone.id), isTrue);
     expect(project.skeleton!.trackOf(bone.id)!.single.timeMs, 0);
@@ -234,8 +238,9 @@ void main() {
     expect(project.skeleton!.hasKeyframes(bone.id), isFalse);
   });
 
-  testWidgets('un projet squelette affiche une barre d’os sur la timeline',
-      (tester) async {
+  testWidgets('un projet squelette affiche une barre d’os sur la timeline', (
+    tester,
+  ) async {
     final project = AnimationProject.blank(
       name: 'Rat',
       type: ProjectType.skeleton,

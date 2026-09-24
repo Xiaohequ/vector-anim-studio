@@ -43,12 +43,7 @@ void main() {
 
     test('le delta de la racine entraîne la chaîne (positions et angles)', () {
       final rig = SkeletonRig();
-      final root = RigBone(
-        name: 'R',
-        offsetX: 100,
-        offsetY: 100,
-        length: 100,
-      );
+      final root = RigBone(name: 'R', offsetX: 100, offsetY: 100, length: 100);
       final child = RigBone(
         name: 'C',
         parentId: root.id,
@@ -97,8 +92,10 @@ void main() {
       expect(rig.trackOf('b')!.map((k) => k.timeMs), <int>[500, 1000]);
       // Remplacement au même temps.
       rig.upsertKeyframe('b', 1000, 0.6);
-      expect(rig.trackOf('b')!.singleWhere((k) => k.timeMs == 1000).angleDelta,
-          0.6);
+      expect(
+        rig.trackOf('b')!.singleWhere((k) => k.timeMs == 1000).angleDelta,
+        0.6,
+      );
       expect(rig.keyframeNear('b', 990, 20)!.timeMs, 1000);
       expect(rig.keyframeNear('b', 100, 20), isNull);
       rig.removeKeyframeAt('b', 1000);
@@ -166,7 +163,10 @@ void main() {
 
       rig.removeBone(mid.id);
 
-      expect(rig.bones.map((b) => b.id), containsAll(<String>[root.id, leaf.id]));
+      expect(
+        rig.bones.map((b) => b.id),
+        containsAll(<String>[root.id, leaf.id]),
+      );
       expect(leaf.parentId, root.id); // re-parenté
       expect(rig.isBound('corps'), isFalse); // liaison purgée
       expect(rig.tracks.containsKey(mid.id), isFalse); // piste purgée
@@ -213,12 +213,7 @@ void main() {
   test('pose rig-aware : l\'origine de la pièce orbite l\'articulation', () {
     final shape = VectorShape(name: 'P', x: 150, y: 250);
     final rig = SkeletonRig();
-    final bone = RigBone(
-      name: 'B',
-      offsetX: 100,
-      offsetY: 100,
-      length: 50,
-    );
+    final bone = RigBone(name: 'B', offsetX: 100, offsetY: 100, length: 50);
     rig.addBone(bone);
     final pose = SkeletonPose.evaluate(rig, 500);
     final frame = pose.frameOf(bone.id)!;
@@ -233,13 +228,148 @@ void main() {
     rig.upsertKeyframe(bone.id, 1000, math.pi);
     final rotatedPose = SkeletonPose.evaluate(rig, 1000);
     final rotatedFrame = rotatedPose.frameOf(bone.id)!;
-    final moved =
-        SelectionGeometry.shapePoseWithRig(shape, 1000, rotatedFrame);
+    final moved = SelectionGeometry.shapePoseWithRig(shape, 1000, rotatedFrame);
     // p = (150, 250) ; jointRest = (100, 100) → p − joint = (50, 150)
     // R(180°) → (−50, −150) → origine = (50, −50).
     expect(moved.origin, closeToOffset(const Offset(50, -50)));
     // L'angle de repos (0) + delta 180° = π.
     expect(moved.rotation, closeTo(math.pi, 1e-9));
+  });
+
+  group('carry et translation du repos (v0.9.1)', () {
+    test(
+      'translateBoneRest : racine en projet, enfant dans le repère du parent',
+      () {
+        final rig = SkeletonRig();
+        final root = RigBone(
+          name: 'Root',
+          offsetX: 100,
+          offsetY: 100,
+          restAngle: math.pi / 2,
+          length: 100,
+        );
+        final child = RigBone(
+          name: 'Child',
+          parentId: root.id,
+          offsetX: 100,
+          offsetY: 0,
+          restAngle: 0,
+          length: 50,
+        );
+        rig.addBone(root);
+        rig.addBone(child);
+        final pose = SkeletonPose.evaluate(rig, 0);
+
+        // Racine : delta monde appliqué tel quel à l'offset projet.
+        rig.translateBoneRest(root, pose, const Offset(10, -5));
+        expect(root.offsetX, 110);
+        expect(root.offsetY, 95);
+
+        // Enfant : delta monde (0, 10) = le long du parent (qui pointe +y) →
+        // delta local +x.
+        rig.translateBoneRest(child, pose, const Offset(0, 10));
+        expect(child.offsetX, closeTo(110, 1e-9));
+        expect(child.offsetY, closeTo(0, 1e-9));
+      },
+    );
+
+    test('carryBoundPieces emporte la pièce liée lors d\'une pose du rig', () {
+      final project = AnimationProject.blank(type: ProjectType.skeleton);
+      final rig = SkeletonRig();
+      project.skeleton = rig;
+      final bone = RigBone(name: 'B', offsetX: 100, offsetY: 100, length: 80);
+      rig.addBone(bone);
+      final piece = VectorShape(name: 'P', x: 180, y: 100);
+      project.shapes.add(piece);
+      rig.bindShape(piece.id, bone.id);
+
+      final before = SkeletonPose.evaluate(rig, 0);
+      bone.restAngle = math.pi / 2; // pose : l'os tourne de 90°
+      final after = SkeletonPose.evaluate(rig, 0);
+      carryBoundPieces(project, rig, before, after, 0);
+
+      // Centre (180,100) tourné de 90° autour du joint (100,100) → (100,180) ;
+      // la rotation de la pièce suit.
+      expect(piece.x, closeTo(100, 1e-6));
+      expect(piece.y, closeTo(180, 1e-6));
+      expect(piece.rotation, closeTo(math.pi / 2, 1e-6));
+    });
+
+    test('carryBoundPieces descend la chaîne : pièce liée à un enfant', () {
+      final project = AnimationProject.blank(type: ProjectType.skeleton);
+      final rig = SkeletonRig();
+      project.skeleton = rig;
+      final root = RigBone(name: 'Root', offsetX: 0, offsetY: 0, length: 100);
+      final child = RigBone(
+        name: 'Child',
+        parentId: root.id,
+        offsetX: 100,
+        offsetY: 0,
+        restAngle: 0,
+        length: 50,
+      );
+      rig.addBone(root);
+      rig.addBone(child);
+      final piece = VectorShape(name: 'P', x: 100, y: 0);
+      project.shapes.add(piece);
+      rig.bindShape(piece.id, child.id);
+
+      final before = SkeletonPose.evaluate(rig, 0);
+      root.restAngle = math.pi / 2;
+      final after = SkeletonPose.evaluate(rig, 0);
+      carryBoundPieces(project, rig, before, after, 0);
+
+      // La pièce collée à l'articulation enfant (100,0) suit le rig :
+      // l'articulation passe à (0,100), rotation π/2.
+      expect(piece.x, closeTo(0, 1e-6));
+      expect(piece.y, closeTo(100, 1e-6));
+      expect(piece.rotation, closeTo(math.pi / 2, 1e-6));
+    });
+
+    test('carryBoundPieces ne touche pas les pièces non liées', () {
+      final project = AnimationProject.blank(type: ProjectType.skeleton);
+      final rig = SkeletonRig();
+      project.skeleton = rig;
+      rig.addBone(RigBone(name: 'B', offsetX: 100, offsetY: 100, length: 80));
+      final free = VectorShape(name: 'Libre', x: 42, y: 55);
+      project.shapes.add(free);
+
+      final before = SkeletonPose.evaluate(rig, 0);
+      rig.bones.first.restAngle = 1.0;
+      final after = SkeletonPose.evaluate(rig, 0);
+      carryBoundPieces(project, rig, before, after, 0);
+
+      expect(free.x, 42);
+      expect(free.y, 55);
+    });
+
+    test('carryBoundPieces avec pièce animée : pose écrite au curseur', () {
+      final project = AnimationProject.blank(type: ProjectType.skeleton);
+      final rig = SkeletonRig();
+      project.skeleton = rig;
+      final bone = RigBone(name: 'B', offsetX: 0, offsetY: 0, length: 80);
+      rig.addBone(bone);
+      final piece = VectorShape(name: 'P', x: 100, y: 0);
+      project.shapes.add(piece);
+      rig.bindShape(piece.id, bone.id);
+      piece.upsertKeyframe(0, piece.poseAt(0));
+      piece.upsertKeyframe(1000, piece.poseAt(1000));
+
+      final before = SkeletonPose.evaluate(rig, 500);
+      bone.restAngle = math.pi / 2;
+      final after = SkeletonPose.evaluate(rig, 500);
+      carryBoundPieces(project, rig, before, after, 500);
+
+      // La pose au curseur (500 ms) est mise à jour, les autres intactes.
+      final pose = piece.keyframeNear(500, 100)!;
+      expect(pose.valueOf(AnimatableProperty.x), closeTo(0, 1e-6));
+      expect(pose.valueOf(AnimatableProperty.y), closeTo(100, 1e-6));
+      expect(
+        pose.valueOf(AnimatableProperty.rotation),
+        closeTo(math.pi / 2, 1e-6),
+      );
+      expect(piece.keyframes.length, 3);
+    });
   });
 }
 

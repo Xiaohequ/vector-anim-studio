@@ -9,8 +9,8 @@ import 'dart:math' as math;
 /// l'édition. L'état de zoom vit en mémoire de session : rien n'est persisté.
 class TimelineZoomState {
   TimelineZoomState({required this.durationOf})
-      : viewMs = _clampView(durationOf(), _viewUpper(durationOf)),
-        offsetMs = 0;
+    : viewMs = _clampView(durationOf(), _viewUpper(durationOf)),
+      offsetMs = 0;
 
   /// Pleine largeur au zoom maximal : 500 ms (15 images à 30 fps).
   static const int minViewMs = 500;

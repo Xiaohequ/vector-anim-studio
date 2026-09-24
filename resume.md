@@ -6,8 +6,8 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Repo : https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`)
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
-- Dernière version : **0.9.0** (commit `289b463`, CI run #18 verte, release
-  `v0.9.0-build18`, 95/95 tests, `flutter analyze` 0 problème)
+- Dernière version : **0.9.1** (bugfix des 5 bugs v0.9.0 remontés en test
+  appareil ; 101 tests verts, `flutter analyze` 0 problème)
 - Détails techniques : `docs/PLAN.md` · Notes de version : `RELEASE_NOTES.md`
 
 ---
@@ -27,7 +27,7 @@ v0.9.0, l'**animation squelette** (rig maître).
 - **v0.8.0** : déplacement de segment sans limite (la durée s'étend), poignée droite
   sans borne haute, auto-scroll au bord de l'écran pendant les gestes, undo sur
   l'ajout de forme et d'instance.
-- **v0.9.0 (squelette — en attente de validation appareil)** :
+- **v0.9.0 (squelette — validé en partie, bugs corrigés en v0.9.1)** :
   - Type de projet : **Animation vectorielle** (historique) / **Animation squelette**
     au choix à la création ; badge type + sous-titre « pièce(s) » sur l'accueil.
   - Rig maître (2a) par projet squelette : arbre d'os hiérarchique
@@ -49,30 +49,42 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 ## ⏳ En attente (bloquant la suite)
 
-- **Validation v0.9.0 sur appareil réel** (APK `vector-anim-studio-0.9.0.apk`) :
-  1. Créer un projet → choisir « Squelette ».
-  2. Dessiner 2-3 pièces (Formes ▸ Ajouter).
-  3. Squelettes ▸ Ajouter un os… → toucher l'articulation puis l'extrémité ;
-     ressélectionner et recommencer pour une chaîne.
-  4. Squelettes ▸ Lier la pièce à un os… (répéter par pièce).
-  5. Sélectionner un os, ◆ à 0 s, avancer le curseur, tourner l'os, ◆ — la lecture
-     doit bouger la chaîne entière.
-  6. Timeline : glisser (appui long) une barre d'os ; losange rouge = supprimer.
-  7. Undo (⎌) sur chaque étape ; export MP4/GIF.
+- **Validation v0.9.1 sur appareil réel** (APK `vector-anim-studio-0.9.1.apk`),
+  scénario ciblé sur les 5 bugs corrigés :
+  1. Projet Squelette → 2-3 pièces → timeline : les rectangles de pièces
+     restent affichés AVANT et APRÈS la création d'un os.
+  2. Mode rig : premier tap SUR une pièce, second tap ailleurs → message
+     « os créé et lié » ; déplacer la pièce → l'os suit.
+  3. Tourner un os sur le preview → fluide ; la pièce liée suit la rotation.
+  4. Lier via Squelettes ▸ Lier la pièce… puis tourner l'os → la pièce suit.
+  5. Playback → la tête de lecture avance (ex. 0,xx s / 4,00 s), pas 0 s / 0 s.
+  6. Keyframes d'os (◆) : rotation auto-key, la pièce suit à la lecture.
+  7. Export MP4 sur un projet avec keyframes d'os → l'animation est rendue.
 - **Retours utilisateur** → le cas échéant patch v0.9.x.
 
 ---
 
 ## 🔜 Ce qui doit être fait (roadmap)
 
-### v0.9.1 (décidé, à faire)
-- **Liaison au niveau couche** : lier une couche précise (et plus seulement une forme
-  entière) à un os + panneau d'offset d'attache.
+### v0.9.1 (livrée — bugfix des retours v0.9.0)
+- Timeline : barres de pièces + barres d'os animés affichées ensemble.
+- Ancrage automatique os↔pièce au premier tap du mode rig sur une pièce.
+- Déplacer une pièce au repos → l'os suit (`translateBoneRest`) ; poser le
+  rig (glisser d'os sans keyframes) → les pièces liées suivent
+  (`carryBoundPieces`).
+- Rotation d'os fluide (setState par update du geste).
+- Playback : durée squelette incluant les pièces (plus de « 0 s / 0 s »).
+- Bonus : poses des instances imbriquées échantillonnées au temps de boucle.
+
+### v0.9.2 (décidé, pas entamé)
+- **Liaison au niveau couche** : lier une couche précise (et plus seulement
+  une forme entière) à un os + panneau d'offset d'attache.
 - **Import d'une animation squelette dans un projet vectoriel** : « Formes ▸
-  Insérer une animation… » liste les deux types ; le personnage riggé devient une
-  instance animable (position/échelle/keyframes de forme) dans une scène. Le painter
-  sait déjà rendre un sous-projet squelette (`_paintProjectShapes`) — il reste la
-  sélection/insertion + garde-fou « 1 niveau d'imbrication ».
+  Insérer une animation… » liste les deux types ; le personnage riggé
+  devient une instance animable (position/échelle/keyframes de forme) dans
+  une scène. Le painter sait déjà rendre un sous-projet squelette
+  (`_paintProjectShapes`) — il reste la sélection/insertion + garde-fou
+  « 1 niveau d'imbrication ».
 - Option proposée : test de rendu permanent en CI (capture PNG + comparaison).
 
 ### v0.10+ (proposé, non planifié)

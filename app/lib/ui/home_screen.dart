@@ -33,10 +33,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _open(String projectId) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => StudioScreen(
-          projectId: projectId,
-          repository: widget.repository,
-        ),
+        builder: (_) =>
+            StudioScreen(projectId: projectId, repository: widget.repository),
       ),
     );
     await _store.refresh();
@@ -202,7 +200,7 @@ class _ProjectTile extends StatelessWidget {
     final date = updated == null
         ? ''
         : ' · ${updated.day.toString().padLeft(2, '0')}/'
-            '${updated.month.toString().padLeft(2, '0')}/${updated.year}';
+              '${updated.month.toString().padLeft(2, '0')}/${updated.year}';
     final kind = summary.type == ProjectType.skeleton ? 'Squelette · ' : '';
     final unit = summary.type == ProjectType.skeleton ? 'pièce(s)' : 'forme(s)';
     return '$kind${summary.width.round()} × ${summary.height.round()} · '
@@ -250,7 +248,10 @@ class _ProjectTile extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       _subtitle,
-                      style: const TextStyle(fontSize: 12, color: Colors.white70),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.white70,
+                      ),
                       maxLines: 2,
                     ),
                   ],
@@ -409,14 +410,11 @@ class _NewProjectDialogState extends State<_NewProjectDialog> {
                 for (final format in ProjectFormat.values)
                   ButtonSegment<ProjectFormat>(
                     value: format,
-                    label: Text(
-                      switch (format) {
-                        ProjectFormat.portrait => 'Portrait',
-                        ProjectFormat.landscape => 'Paysage',
-                        ProjectFormat.square => 'Carré',
-                      },
-                      style: const TextStyle(fontSize: 12),
-                    ),
+                    label: Text(switch (format) {
+                      ProjectFormat.portrait => 'Portrait',
+                      ProjectFormat.landscape => 'Paysage',
+                      ProjectFormat.square => 'Carré',
+                    }, style: const TextStyle(fontSize: 12)),
                   ),
               ],
               selected: <ProjectFormat>{_format},
@@ -439,21 +437,13 @@ class _NewProjectDialogState extends State<_NewProjectDialog> {
         ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(
-            _NewProjectResult(
-              name: _name.text,
-              format: _format,
-              sample: true,
-            ),
+            _NewProjectResult(name: _name.text, format: _format, sample: true),
           ),
           child: const Text('Créer avec la démo'),
         ),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(
-            _NewProjectResult(
-              name: _name.text,
-              format: _format,
-              type: _type,
-            ),
+            _NewProjectResult(name: _name.text, format: _format, type: _type),
           ),
           child: const Text('Créer'),
         ),

@@ -6,40 +6,37 @@ import 'package:vector_anim_studio/engine/animation_presets.dart';
 import 'package:vector_anim_studio/engine/timeline_layout.dart';
 import 'package:vector_anim_studio/engine/undo_stack.dart';
 import 'package:vector_anim_studio/models/animation.dart';
+import 'package:vector_anim_studio/models/skeleton.dart';
 
 void main() {
   group('poses de keyframe', () {
     test('interpole toutes les propriétés entre deux poses', () {
       final shape = VectorShape(name: 'A', x: 0, y: 10, opacity: 1);
       shape.upsertKeyframe(0, shape.poseAt(0), easing: EasingKind.linear);
-      shape.upsertKeyframe(
-        1000,
-        <AnimatableProperty, double>{
-          ...shape.poseAt(0),
-          AnimatableProperty.x: 100,
-          AnimatableProperty.y: 60,
-          AnimatableProperty.opacity: 0,
-        },
-        easing: EasingKind.linear,
-      );
+      shape.upsertKeyframe(1000, <AnimatableProperty, double>{
+        ...shape.poseAt(0),
+        AnimatableProperty.x: 100,
+        AnimatableProperty.y: 60,
+        AnimatableProperty.opacity: 0,
+      }, easing: EasingKind.linear);
 
       expect(shape.valueAt(AnimatableProperty.x, 0), 0);
       expect(shape.valueAt(AnimatableProperty.x, 500), closeTo(50, 0.001));
       expect(shape.valueAt(AnimatableProperty.y, 500), closeTo(35, 0.001));
-      expect(shape.valueAt(AnimatableProperty.opacity, 500), closeTo(0.5, 0.001));
+      expect(
+        shape.valueAt(AnimatableProperty.opacity, 500),
+        closeTo(0.5, 0.001),
+      );
       expect(shape.valueAt(AnimatableProperty.x, 2000), 100);
     });
 
     test('easeInOut part et arrive en douceur', () {
       final shape = VectorShape(name: 'B', opacity: 0);
       shape.upsertKeyframe(0, shape.poseAt(0), easing: EasingKind.linear);
-      shape.upsertKeyframe(
-        1000,
-        <AnimatableProperty, double>{
-          ...shape.poseAt(0),
-          AnimatableProperty.opacity: 1,
-        },
-      );
+      shape.upsertKeyframe(1000, <AnimatableProperty, double>{
+        ...shape.poseAt(0),
+        AnimatableProperty.opacity: 1,
+      });
       expect(shape.valueAt(AnimatableProperty.opacity, 250), lessThan(0.25));
       expect(shape.valueAt(AnimatableProperty.opacity, 750), greaterThan(0.75));
     });
@@ -47,13 +44,10 @@ void main() {
     test('remplace la pose au même temps', () {
       final shape = VectorShape(name: 'C');
       shape.upsertKeyframe(0, shape.poseAt(0));
-      shape.upsertKeyframe(
-        0,
-        <AnimatableProperty, double>{
-          ...shape.poseAt(0),
-          AnimatableProperty.scale: 2,
-        },
-      );
+      shape.upsertKeyframe(0, <AnimatableProperty, double>{
+        ...shape.poseAt(0),
+        AnimatableProperty.scale: 2,
+      });
       expect(shape.keyframes.length, 1);
       expect(shape.keyframes.first.values[AnimatableProperty.scale], 2);
     });
@@ -204,6 +198,26 @@ void main() {
       );
       expect(restored.durationMs, 2000);
     });
+
+    test('durée squelette : les pièces comptent, plancher 4 s avec rig', () {
+      final project = AnimationProject.blank(type: ProjectType.skeleton);
+      final piece = VectorShape(name: 'Tête', startMs: 0, endMs: 4000);
+      project.shapes.add(piece);
+      // Bug v0.9.0 : sans rig, la durée d'un projet squelette valait 0 →
+      // playback mort et « 0 s / 0 s » malgré des pièces de 4 s.
+      expect(project.durationMs, 4000);
+
+      final rig = SkeletonRig();
+      project.skeleton = rig;
+      rig.addBone(RigBone(name: 'B'));
+      expect(project.durationMs, 4000); // plancher 4 s
+
+      piece.endMs = 6000;
+      expect(project.durationMs, 6000); // la pièce porte la durée
+
+      rig.upsertKeyframe('b1', 9000, 1);
+      expect(project.durationMs, 9000); // les keyframes dépassent
+    });
   });
 
   group('pile d\'annulation', () {
@@ -262,7 +276,10 @@ void main() {
     test('pulsation passe par un maximum au milieu', () {
       final shape = VectorShape(name: 'P', startMs: 0, endMs: 2000);
       applyPreset(shape, AnimationPreset.pulsation);
-      expect(shape.valueAt(AnimatableProperty.scale, 1000), closeTo(1.25, 0.001));
+      expect(
+        shape.valueAt(AnimatableProperty.scale, 1000),
+        closeTo(1.25, 0.001),
+      );
       expect(shape.valueAt(AnimatableProperty.scale, 0), closeTo(1, 0.001));
     });
 
@@ -384,14 +401,10 @@ void main() {
       shape.layers.add(ShapeLayer(name: 'Rect', kind: ShapeKind.rect));
       shape.layers.add(ShapeLayer(name: 'Cercle', kind: ShapeKind.circle));
       shape.upsertKeyframe(500, shape.poseAt(500), easing: EasingKind.linear);
-      shape.upsertKeyframe(
-        2500,
-        <AnimatableProperty, double>{
-          ...shape.poseAt(500),
-          AnimatableProperty.rotation: 1.5,
-        },
-        easing: EasingKind.easeOut,
-      );
+      shape.upsertKeyframe(2500, <AnimatableProperty, double>{
+        ...shape.poseAt(500),
+        AnimatableProperty.rotation: 1.5,
+      }, easing: EasingKind.easeOut);
 
       final clone = shape.duplicated();
 
@@ -437,7 +450,11 @@ void main() {
         shape.poseAt(1000),
         easing: EasingKind.easeInOut,
       );
-      shape.upsertKeyframe(3000, shape.poseAt(1000), easing: EasingKind.easeOut);
+      shape.upsertKeyframe(
+        3000,
+        shape.poseAt(1000),
+        easing: EasingKind.easeOut,
+      );
 
       shape.shiftBy(500);
       expect(shape.startMs, 1500);

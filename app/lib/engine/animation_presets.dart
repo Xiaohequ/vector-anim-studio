@@ -16,31 +16,31 @@ enum AnimationPreset {
 
 extension AnimationPresetInfo on AnimationPreset {
   String get label => switch (this) {
-        AnimationPreset.apparition => 'Apparition',
-        AnimationPreset.disparition => 'Disparition',
-        AnimationPreset.deplacement => 'Déplacement',
-        AnimationPreset.rotation => 'Rotation',
-        AnimationPreset.pulsation => 'Pulsation',
-        AnimationPreset.fondu => 'Fondu (aller-retour)',
-      };
+    AnimationPreset.apparition => 'Apparition',
+    AnimationPreset.disparition => 'Disparition',
+    AnimationPreset.deplacement => 'Déplacement',
+    AnimationPreset.rotation => 'Rotation',
+    AnimationPreset.pulsation => 'Pulsation',
+    AnimationPreset.fondu => 'Fondu (aller-retour)',
+  };
 
   String get description => switch (this) {
-        AnimationPreset.apparition => 'Opacité 0 → 1 en entrée de forme',
-        AnimationPreset.disparition => 'Opacité 1 → 0 en fin de forme',
-        AnimationPreset.deplacement => 'Glisse depuis la gauche vers sa place',
-        AnimationPreset.rotation => 'Rotation complète sur la durée affichée',
-        AnimationPreset.pulsation => 'Échelle 1 → 1,25 → 1',
-        AnimationPreset.fondu => 'Opacité 0 → 1 → 0 sur la durée affichée',
-      };
+    AnimationPreset.apparition => 'Opacité 0 → 1 en entrée de forme',
+    AnimationPreset.disparition => 'Opacité 1 → 0 en fin de forme',
+    AnimationPreset.deplacement => 'Glisse depuis la gauche vers sa place',
+    AnimationPreset.rotation => 'Rotation complète sur la durée affichée',
+    AnimationPreset.pulsation => 'Échelle 1 → 1,25 → 1',
+    AnimationPreset.fondu => 'Opacité 0 → 1 → 0 sur la durée affichée',
+  };
 
   IconData get icon => switch (this) {
-        AnimationPreset.apparition => Icons.blur_on,
-        AnimationPreset.disparition => Icons.blur_off,
-        AnimationPreset.deplacement => Icons.swap_horiz,
-        AnimationPreset.rotation => Icons.rotate_right,
-        AnimationPreset.pulsation => Icons.zoom_in,
-        AnimationPreset.fondu => Icons.gradient,
-      };
+    AnimationPreset.apparition => Icons.blur_on,
+    AnimationPreset.disparition => Icons.blur_off,
+    AnimationPreset.deplacement => Icons.swap_horiz,
+    AnimationPreset.rotation => Icons.rotate_right,
+    AnimationPreset.pulsation => Icons.zoom_in,
+    AnimationPreset.fondu => Icons.gradient,
+  };
 }
 
 /// Applique un preset à la forme : les keyframes (poses) existantes sont
@@ -60,12 +60,11 @@ void applyPreset(VectorShape shape, AnimationPreset preset) {
     int timeMs,
     Map<AnimatableProperty, double> overrides,
     EasingKind easing,
-  ) =>
-      ShapeKeyframe(
-        timeMs: timeMs,
-        values: <AnimatableProperty, double>{...base, ...overrides},
-        easing: easing,
-      );
+  ) => ShapeKeyframe(
+    timeMs: timeMs,
+    values: <AnimatableProperty, double>{...base, ...overrides},
+    easing: easing,
+  );
 
   switch (preset) {
     case AnimationPreset.apparition:

@@ -1,29 +1,26 @@
-# Vector Anim Studio 0.9.0
+# Vector Anim Studio 0.9.1
 
-Studio d'animation vectorielle pour Android : projets multiples, formes composées de couches, keyframes « pose », timeline zoomable à rectangles d'affichage, undo, export MP4 et GIF — et maintenant l'**animation squelette**.
+Studio d'animation vectorielle pour Android : projets multiples, formes composées de couches, keyframes « pose », timeline zoomable, undo, export MP4 et GIF, animation squelette. Cette version corrige les cinq bugs de la v0.9.0 signalés en test sur appareil réel — aucune nouvelle fonctionnalité, que des corrections.
 
-## Nouveautés (depuis 0.8.0)
+## Corrections (retours v0.9.0)
 
-- **Type de projet « Animation squelette »** : à la création d'un projet, on choisit entre *Vectorielle* (comportement historique) et *Squelette*. Un projet squelette = un personnage riggé : on dessine des pièces, on construit un rig d'os, et ce sont les os qui portent toute l'animation (rig maître, façon cut-out).
-- **Rig d'os hiérarchique** : création au toucher (articulation puis extrémité, l'os se parente à l'os sélectionné — les chaînes se construisent naturellement). Glisser l'extrémité d'un os = rotation FK, les os enfants suivent. Les sliders de la pièce liée restent utilisables comme offset de repos dans le repère de l'os.
-- **Keyframes d'angle par os** : bouton ◆ au curseur (mêmes sémantiques que les poses de forme : toggle, auto-key dès la première keyframe, snap à ~8 px, easings linéaire/entrée/sortie/entrée-sortie/palier). La timeline affiche une **barre verte par os animé** — appui long pour décaler toute la piste, losanges supprimables près de la tête de lecture.
-- **Durée dérivée avec plancher** : la durée d'un projet squelette suit la dernière keyframe (plancher de 4 s tant qu'un rig existe, pour garder le curseur déplaçable avant la première pose).
-- **Undo complet sur le rig** : création/suppression d'os, liaison/déliaison, keyframes, glissements — tout passe par la pile des 20 dernières actions.
-- **Export** : MP4, GIF, PNG et JSON fonctionnent sur les deux types de projet (le rig est évalué à chaque frame).
+- **Timeline : les pièces ne disparaissent plus dès qu'un os existe.** En mode squelette, v0.9.0 remplaçait les barres de pièces par les barres d'os animés. Les barres de pièces sont de retour, les barres d'os animés se posent en dessous.
+- **Os ancré à la pièce.** Au premier tap du mode rig, si le tap tombe sur une pièce, le nouvel os naît **lié** à cette pièce (confirmé par un message). Déplacer la pièce au repos déplace désormais l'ancrage de l'os : l'os (et sa chaîne) suit la pièce, qui reste collée à l'os.
+- **Liaison os → pièce qui marche.** Au repos, tourner un os emporte les pièces liées (et celles liées aux os descendants) : la pose de repos du rig entraîne les pièces au lieu de les laisser en place. Avec keyframes d'os, le comportement auto-key est inchangé.
+- **Rotation d'os fluide.** Le glisser d'os déclenchait des repaints erratiques (sauts visuels) : le canvas et la timeline se repeignent maintenant à chaque mise à jour du geste.
+- **Playback remis en marche.** La durée d'un projet squelette valait 0 tant qu'aucune keyframe d'os n'existait (affichage « 0 s / 0 s », lecture impossible) même avec des pièces de 4 s posées. La durée tient compte des pièces ET des keyframes d'os, avec le plancher de 4 s.
 
-## Hors périmètre (à venir)
+## Corrections annexes
 
-- Liaison au niveau **couche** (0.9.1) : une couche précise d'une pièce liée à un os.
-- **Import d'une animation squelette dans un projet vectoriel** (0.9.1) : le personnage riggé devient un acteur posable dans une scène.
-- IK 2 os, ordre de dessin par os, squash/stretch par os (0.10+).
+- Instances d'animation imbriquées : les poses du sous-projet sont échantillonnées à son temps de boucle propre (v0.9.0 les figeait au temps de la scène hôte).
 
-## Corrections
+## Analyse & tests
 
-- Analyse statique propre ; **95 tests verts** (FK : chaînes statiques/animées, échantillonnage, round-trip JSON, persistance v4, barres d'os, dialogue de création).
+- `flutter analyze` : 0 problème ; **101 tests verts** (FK, échantillonnage, round-trip JSON, persistance v4, durée dérivée squelette, translation d'ancrage, emport de pièces lors d'une pose du rig).
 
 ## Migration
 
-- Base v3 → v4 : deux colonnes ajoutées sur `projects` (`type`, `skeleton`). Additif et silencieux : les projets existants restent des projets vectoriels, aucune donnée touchée.
+- Aucune : la base reste en v4, aucune donnée touchée.
 
 ## Installation
 

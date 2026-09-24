@@ -45,11 +45,7 @@ class RigOverlayPainter extends CustomPainter {
           ..strokeCap = StrokeCap.round
           ..isAntiAlias = true,
       );
-      canvas.drawCircle(
-        joint,
-        4.5,
-        Paint()..color = const Color(0xFF0B0D12),
-      );
+      canvas.drawCircle(joint, 4.5, Paint()..color = const Color(0xFF0B0D12));
       canvas.drawCircle(
         joint,
         4.5,
@@ -76,10 +72,7 @@ class RigOverlayPainter extends CustomPainter {
           ),
           textDirection: TextDirection.ltr,
         )..layout();
-        painter.paint(
-          canvas,
-          tip + const Offset(10, -16),
-        );
+        painter.paint(canvas, tip + const Offset(10, -16));
       }
     }
   }
@@ -112,8 +105,7 @@ class RigOverlayPainter extends CustomPainter {
     final ab = b - a;
     final lengthSquared = ab.distanceSquared;
     if (lengthSquared < 0.0001) return (point - a).distance;
-    final t = ((point - a).dx * ab.dx + (point - a).dy * ab.dy) /
-        lengthSquared;
+    final t = ((point - a).dx * ab.dx + (point - a).dy * ab.dy) / lengthSquared;
     final clamped = t.clamp(0.0, 1.0);
     return (point - (a + ab * clamped)).distance;
   }
