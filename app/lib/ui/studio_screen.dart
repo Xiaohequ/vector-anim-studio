@@ -14,6 +14,7 @@ import '../engine/export_service.dart';
 import '../engine/scene_painter.dart';
 import '../engine/selection_geometry.dart';
 import '../engine/timeline_controller.dart';
+import '../engine/timeline_zoom.dart';
 import '../models/animation.dart';
 import 'shape_editor_screen.dart';
 import 'shape_properties_sheet.dart';
@@ -53,6 +54,9 @@ class _StudioScreenState extends State<StudioScreen>
   // Option : aimanter la rotation aux multiples de 90° (bouton de la barre).
   bool _snapRotation = false;
 
+  /// Zoom/défilement de la timeline (mémoire de session, non persisté).
+  TimelineZoomState? _zoom;
+
   // Geste en cours sur le canvas (déplacement, pinch, rotation par poignée).
   _CanvasGesture _gesture = _CanvasGesture.none;
   int _activePointers = 0;
@@ -81,6 +85,7 @@ class _StudioScreenState extends State<StudioScreen>
         _project = project;
         _controller = TimelineController(project);
         _selectedId = project.shapes.isEmpty ? null : project.shapes.last.id;
+        _zoom = TimelineZoomState(durationMs: project.durationMs);
       });
       _syncTicker();
     } catch (error) {
@@ -206,6 +211,9 @@ class _StudioScreenState extends State<StudioScreen>
     final controller = _controller;
     if (controller == null) return;
     if (delta.inMilliseconds >= 0) controller.advance(delta);
+    // Lecture : la tête de lecture reste visible dans la vue zoomée (l'offset
+    // est muté avant le rebuild déclenché par le tick, pas de setState).
+    _zoom?.follow(controller.timeMs);
     // Fin de lecture sans boucle : on arrête le ticker.
     if (!controller.playing) _syncTicker();
   }
@@ -292,6 +300,22 @@ class _StudioScreenState extends State<StudioScreen>
       _selectedId = project.shapes.isEmpty ? null : project.shapes.last.id;
     });
     await _flushSave();
+  }
+
+  /// Duplique la forme sélectionnée (couches + keyframes) à la même fenêtre :
+  /// le clone se superpose à l'original, qui atterrit sur la ligne du dessous.
+  void _cloneShape(VectorShape shape) {
+    final project = _project;
+    if (project == null) return;
+    final index = project.shapes.indexOf(shape);
+    if (index < 0) return;
+    final clone = shape.duplicated();
+    setState(() {
+      project.shapes.insert(index + 1, clone);
+      _selectedId = clone.id;
+    });
+    _scheduleSave();
+    _snack('Forme dupliquée (keyframes incluses)');
   }
 
   Future<void> _renameShape(VectorShape shape) async {
@@ -822,6 +846,7 @@ class _StudioScreenState extends State<StudioScreen>
   }
 
   Widget _buildTimeline(AnimationProject project, TimelineController controller) {
+    final zoom = _zoom;
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 4, 12, 0),
       padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
@@ -832,34 +857,76 @@ class _StudioScreenState extends State<StudioScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text(
-            '${(controller.timeMs / 1000).toStringAsFixed(2)} s'
-            ' / ${(project.durationMs / 1000).toStringAsFixed(2)} s'
-            ' · ${project.fps} fps',
-            style: const TextStyle(fontSize: 11),
+          Row(
+            children: <Widget>[
+              Text(
+                '${(controller.timeMs / 1000).toStringAsFixed(2)} s'
+                ' / ${(project.durationMs / 1000).toStringAsFixed(2)} s'
+                ' · ${project.fps} fps',
+                style: const TextStyle(fontSize: 11),
+              ),
+              const Spacer(),
+              if (zoom != null) ...<Widget>[
+                IconButton(
+                  tooltip: 'Zoom avant',
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+                  icon: const Icon(Icons.zoom_in, size: 18),
+                  onPressed: () => setState(zoom.zoomIn),
+                ),
+                IconButton(
+                  tooltip: 'Zoom arrière',
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+                  icon: const Icon(Icons.zoom_out, size: 18),
+                  onPressed: () => setState(zoom.zoomOut),
+                ),
+                IconButton(
+                  tooltip: 'Ajuster au projet',
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+                  icon: const Icon(Icons.fit_screen_outlined, size: 18),
+                  onPressed: () => setState(zoom.fit),
+                ),
+              ],
+            ],
           ),
           const SizedBox(height: 2),
           Expanded(
-            child: SingleChildScrollView(
-              child: TimelineView(
-                project: project,
-                timeMs: controller.timeMs,
-                selectedShapeId: _selectedId,
-                onSelect: (shape) => setState(() => _selectedId = shape.id),
-                onSeek: controller.setTime,
-                onRangeChanged: (shape, start, end) {
-                  setState(() {
-                    shape.startMs = start;
-                    shape.endMs = end;
-                  });
-                  _scheduleSave();
-                },
-                onDeleteKeyframe: (shape, timeMs) {
-                  setState(() => shape.removeKeyframeAt(timeMs));
-                  _scheduleSave();
-                },
-              ),
-            ),
+            child: zoom == null
+                ? const SizedBox.shrink()
+                : SingleChildScrollView(
+                    child: TimelineView(
+                      project: project,
+                      timeMs: controller.timeMs,
+                      zoom: zoom,
+                      selectedShapeId: _selectedId,
+                      onSelect: (shape) =>
+                          setState(() => _selectedId = shape.id),
+                      onSeek: controller.setTime,
+                      onRangeChanged: (shape, start, end) {
+                        setState(() {
+                          shape.startMs = start;
+                          shape.endMs = end;
+                        });
+                        _scheduleSave();
+                      },
+                      onMoveChanged: (shape, targetStartMs) {
+                        setState(
+                          () => shape.shiftBy(targetStartMs - shape.startMs),
+                        );
+                      },
+                      onMoveEnd: (_) => _scheduleSave(),
+                      onDeleteKeyframe: (shape, timeMs) {
+                        setState(() => shape.removeKeyframeAt(timeMs));
+                        _scheduleSave();
+                      },
+                      onZoomChanged: () => setState(() {}),
+                    ),
+                  ),
           ),
         ],
       ),
@@ -952,6 +1019,9 @@ class _StudioScreenState extends State<StudioScreen>
         } else if (value == 'rename') {
           final shape = _selected;
           if (shape != null) _renameShape(shape);
+        } else if (value == 'duplicate') {
+          final shape = _selected;
+          if (shape != null) _cloneShape(shape);
         } else if (value == 'delete') {
           final shape = _selected;
           if (shape != null) _deleteShape(shape);
@@ -1013,6 +1083,11 @@ class _StudioScreenState extends State<StudioScreen>
           value: 'rename',
           enabled: _selected != null,
           child: const Text('Renommer…'),
+        ),
+        PopupMenuItem<String>(
+          value: 'duplicate',
+          enabled: _selected != null,
+          child: const Text('Dupliquer (avec ses keyframes)'),
         ),
         PopupMenuItem<String>(
           value: 'delete',

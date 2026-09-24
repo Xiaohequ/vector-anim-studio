@@ -524,6 +524,35 @@ class VectorShape {
     return clone;
   }
 
+  /// Clone complet de la forme : couches régénérées (un id de couche est une
+  /// clé primaire en base : deux formes ne peuvent pas partager leurs ids)
+  /// et keyframes copiées à l'identique (mêmes temps, mêmes courbes). La
+  /// fenêtre d'affichage est conservée : le clone se superpose à l'original.
+  VectorShape duplicated({String? name}) {
+    final clone = copy(
+      id: generateId('shape'),
+      name: name ?? '${this.name} (copie)',
+    );
+    for (var i = 0; i < clone.layers.length; i++) {
+      clone.layers[i] = clone.layers[i].copy(id: generateId('layer'));
+    }
+    return clone;
+  }
+
+  /// Déplace la fenêtre d'affichage de [deltaMs] (durée inchangée) et décale
+  /// toutes les keyframes du même décalage — leurs écarts relatifs et leurs
+  /// courbes sont préservés. Pur décalage relatif : borner le décalage pour
+  /// que la fenêtre reste dans le projet est du ressort de l'appelant ; les
+  /// keyframes hors fenêtre qui passeraient sous zéro sont rabotées à zéro.
+  void shiftBy(int deltaMs) {
+    if (deltaMs == 0) return;
+    startMs += deltaMs;
+    endMs += deltaMs;
+    for (final key in keyframes) {
+      key.timeMs = math.max(0, key.timeMs + deltaMs);
+    }
+  }
+
   Map<String, Object?> toJson() => {
         'id': id,
         'name': name,

@@ -40,7 +40,7 @@ poses de la forme), et une pose fige les six propriétés.
 
 ## 3. Persistance
 
-sqflite, base `vector_anim_studio.db` (schéma v2) dans le dossier documents de l'application.
+sqflite, base `vector_anim_studio.db` (schéma v3) dans le dossier documents de l'application.
 
 - `projects` : métadonnées du projet (dont `cover_path`, `created_at`, `updated_at`)
 - `shapes` : forme, fenêtre d'affichage, transformation de groupe, ordre (`z`)
@@ -48,9 +48,11 @@ sqflite, base `vector_anim_studio.db` (schéma v2) dans le dossier documents de 
 - `shape_keyframes` : poses (`time_ms`, `easing`, `values_json` — les six propriétés)
 - `PRAGMA foreign_keys = ON` + `ON DELETE CASCADE` pour supprimer proprement un projet
 
-Le schéma est en **v2**. `onUpgrade` migre un schéma v1 (`tracks` + `keyframes` par
+Le schéma est en **v3**. `onUpgrade` migre un schéma v1 (`tracks` + `keyframes` par
 propriété) : chaque ancienne keyframe est échantillonnée sur les six propriétés pour
-produire une pose, puis les tables `tracks` / `keyframes` sont supprimées. Piège SQLite :
+produire une pose, puis les tables `tracks` / `keyframes` sont supprimées. La v3 ajoute
+les colonnes d'instance d'animation (`embedded_project_id`, `embedded_width`,
+`embedded_height`). Piège SQLite :
 `values` est un mot réservé, la colonne s'appelle donc `values_json`.
 
 L'écriture est différée de 600 ms côté éditeur (`_scheduleSave`) pour ne pas écrire à chaque frame ; un `flush` a lieu avant chaque export.
@@ -80,13 +82,23 @@ Après export, `share_plus` partage le fichier (feuille de partage système).
 2. **Éditeur** (`studio_screen`) : menus Formes / Animations / Calques / Export, canvas, inspecteur, timeline à rectangles, barre de lecture, sauvegarde différée.
 3. **Création de forme** (`shape_editor_screen`) : aperçu en haut, couches en bas, ajout de forme basique comme nouvelle couche, réglages taille / position / couleur, fenêtre d'affichage.
 3 bis. **Inspecteur** (`studio_screen`) : un curseur par propriété affichant la valeur **interpolée** à la tête de lecture (auto-key), un bouton keyframe unique (losange), un sélecteur de courbe pour le segment sous le curseur.
-4. **Timeline** (`timeline_view`) : règle temporelle, une piste par ligne, rectangles avec poignées gauche/droite, tête de lecture, un losange par pose. Quand la tête de lecture approche d'une keyframe (tolérance ≈ 8 px), le losange devient un bouton ✕ rouge de suppression ; le même seuil sert au snap à l'écriture.
+4. **Timeline** (`timeline_view`) : règle temporelle adaptative au zoom, une piste par
+ligne, rectangles avec poignées gauche/droite, tête de lecture, un losange par pose.
+Quand la tête de lecture approche d'une keyframe (tolérance ≈ 8 px), le losange devient
+un bouton ✕ rouge de suppression ; le même seuil sert au snap à l'écriture.
+L'échelle de temps se zoome de 500 ms à 30 minutes en pleine largeur : pincement à deux
+doigts (zoom ancré, détecté via `Listener` pour ne pas perturber le scroll vertical ni le
+scrub), glisser à deux doigts = défilement, boutons ＋/－/ajuster dans l'en-tête ; la tête
+de lecture reste visible pendant la lecture. Un appui long sur un rectangle déplace tout
+le segment (durée et keyframes conservées) ; le menu Formes propose « Dupliquer » qui
+clone couches et keyframes à la même fenêtre (ids régénérés).
 
 ## 7. Tests
 
 - `test/repository_test.dart` : persistance réelle (sqflite ffi), sauvegarde/rechargement des poses à l'identique, remplacement sans duplication, suppression, duplication.
 - `test/timeline_layout_test.dart` : empilement des lignes (chevauchements, réutilisation de ligne).
-- `test/animation_test.dart` : interpolation des poses (toutes propriétés), easing, remplacement au même temps, auto-key, snap, presets.
+- `test/animation_test.dart` : interpolation des poses (toutes propriétés), easing, remplacement au même temps, auto-key, snap, presets, duplication de forme (ids régénérés, keyframes copiées), déplacement de segment (`shiftBy`).
+- `test/timeline_zoom_test.dart` : bornes de vue (500 ms – 30 min), zoom ancré, défilement borné, suivi de la tête de lecture, mapping temps↔pixel.
 - `test/widget_test.dart` : écran d'accueil (état vide, création de projet et retour à la liste). Ces tests utilisent un dépôt en mémoire : `sqflite_common_ffi` ne progresse pas dans la zone fake-async de `testWidgets`, donc la couche SQLite reste couverte par `repository_test.dart`.
 
 ## 8. Reste à faire

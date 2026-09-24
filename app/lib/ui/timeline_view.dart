@@ -1,114 +1,214 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../engine/timeline_layout.dart';
+import '../engine/timeline_zoom.dart';
 import '../models/animation.dart';
 
 /// Timeline : une ligne par piste d'affichage, un rectangle par forme.
 ///
-/// Côté gauche du rectangle = début d'affichage, côté droit = fin.
-/// Deux fenêtres qui se chevauchent occupent deux lignes parallèles.
-class TimelineView extends StatelessWidget {
+/// L'échelle de temps est donnée par [zoom] (temps affiché sur la largeur +
+/// défilement) : pincement à deux doigts = zoom ancré, glisser à deux doigts
+/// = défilement horizontal. Appui long sur un rectangle = déplacer tout le
+/// segment (durée et keyframes conservées) ; la ligne d'atterrissage est
+/// recalculée automatiquement par l'empilement anti-chevauchement.
+class TimelineView extends StatefulWidget {
   const TimelineView({
     super.key,
     required this.project,
     required this.timeMs,
+    required this.zoom,
     required this.selectedShapeId,
     required this.onSelect,
     required this.onRangeChanged,
+    required this.onMoveChanged,
+    required this.onMoveEnd,
     required this.onSeek,
     required this.onDeleteKeyframe,
+    required this.onZoomChanged,
   });
 
   final AnimationProject project;
   final int timeMs;
+
+  /// Fenêtre de temps affichée (détenue et persistée par l'écran, mutée ici).
+  final TimelineZoomState zoom;
+
   final String? selectedShapeId;
   final ValueChanged<VectorShape> onSelect;
   final void Function(VectorShape shape, int startMs, int endMs) onRangeChanged;
+
+  /// Déplace le segment : [targetStartMs] est le nouveau début (borne par
+  /// l'appelant), la durée et les keyframes suivent.
+  final void Function(VectorShape shape, int targetStartMs) onMoveChanged;
+  final ValueChanged<VectorShape> onMoveEnd;
   final ValueChanged<int> onSeek;
   final void Function(VectorShape shape, int timeMs) onDeleteKeyframe;
+
+  /// Notifie l'écran d'un zoom/défilement (setState).
+  final VoidCallback onZoomChanged;
 
   static const double rulerHeight = 20;
   static const double laneHeight = 30;
   static const int minSpanMs = 100;
 
-  int get _duration => math.max(1, project.durationMs);
+  @override
+  State<TimelineView> createState() => _TimelineViewState();
+}
+
+class _TimelineViewState extends State<TimelineView> {
+  /// Pointeurs actifs : le pincement est détecté manuellement via [Listener],
+  /// qui ne participe pas à l'arène de gestes — le scrub d'un doigt et le
+  /// scroll vertical des lignes restent inchangés.
+  final Map<int, Offset> _pointers = <int, Offset>{};
+  double _pinchDistance = 0;
+  Offset _pinchFocal = Offset.zero;
+  double _width = 0;
+
+  bool get _pinching => _pointers.length >= 2;
+
+  void _onPointerDown(PointerDownEvent event) {
+    _pointers[event.pointer] = event.localPosition;
+    if (_pointers.length == 2) {
+      _pinchDistance = _distance();
+      _pinchFocal = _midpoint();
+      HapticFeedback.selectionClick();
+    }
+  }
+
+  void _onPointerMove(PointerMoveEvent event) {
+    if (!_pointers.containsKey(event.pointer)) return;
+    _pointers[event.pointer] = event.localPosition;
+    if (!_pinching || _width <= 0) return;
+    final distance = _distance();
+    final focal = _midpoint();
+    if (_pinchDistance > 0 && distance > 0) {
+      // Écartement des doigts = zoom avant (la vue rétrécit).
+      widget.zoom.zoomAt(
+        distance / _pinchDistance,
+        (focal.dx / _width).clamp(0.0, 1.0),
+      );
+    }
+    widget.zoom.panByPixels(focal.dx - _pinchFocal.dx, _width);
+    _pinchDistance = distance;
+    _pinchFocal = focal;
+    widget.onZoomChanged();
+  }
+
+  void _onPointerUp(PointerEvent event) {
+    _pointers.remove(event.pointer);
+    if (!_pinching) _pinchDistance = 0;
+  }
+
+  double _distance() {
+    final points = _pointers.values.toList();
+    if (points.length < 2) return 0;
+    return (points[0] - points[1]).distance;
+  }
+
+  Offset _midpoint() {
+    final points = _pointers.values.toList();
+    if (points.length < 2) return Offset.zero;
+    return Offset(
+      (points[0].dx + points[1].dx) / 2,
+      (points[0].dy + points[1].dy) / 2,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final lanes = TimelineLayout.packLanes(project.shapes);
-    final laneArea = math.max(1, lanes.length) * laneHeight;
+    final zoom = widget.zoom;
+    final lanes = TimelineLayout.packLanes(widget.project.shapes);
+    final laneArea = math.max(1, lanes.length) * TimelineView.laneHeight;
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
-
-        int timeFor(double dx) =>
-            ((dx / width).clamp(0.0, 1.0) * _duration).round();
+        _width = width;
 
         return SizedBox(
-          height: rulerHeight + laneArea,
-          child: Stack(
-            children: <Widget>[
-              Positioned.fill(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTapDown: (details) =>
-                      onSeek(timeFor(details.localPosition.dx)),
-                  onHorizontalDragUpdate: (details) =>
-                      onSeek(timeFor(details.localPosition.dx)),
+          height: TimelineView.rulerHeight + laneArea,
+          child: Listener(
+            onPointerDown: _onPointerDown,
+            onPointerMove: _onPointerMove,
+            onPointerUp: _onPointerUp,
+            onPointerCancel: _onPointerUp,
+            child: Stack(
+              clipBehavior: Clip.hardEdge,
+              children: <Widget>[
+                Positioned.fill(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTapUp: (details) =>
+                        widget.onSeek(zoom.timeFor(details.localPosition.dx, width)),
+                    onHorizontalDragUpdate: (details) {
+                      if (_pinching) return;
+                      widget.onSeek(
+                        zoom.timeFor(details.localPosition.dx, width),
+                      );
+                    },
+                  ),
                 ),
-              ),
-              Positioned(
-                left: 0,
-                right: 0,
-                top: 0,
-                height: rulerHeight,
-                child: _Ruler(durationMs: _duration),
-              ),
-              for (var lane = 0; lane < lanes.length; lane++)
                 Positioned(
                   left: 0,
                   right: 0,
-                  top: rulerHeight + lane * laneHeight,
-                  height: laneHeight,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      border: Border(
-                        bottom: BorderSide(
-                          color: Colors.white.withValues(alpha: 0.06),
+                  top: 0,
+                  height: TimelineView.rulerHeight,
+                  child: CustomPaint(
+                    painter: _RulerPainter(zoom: zoom, width: width),
+                  ),
+                ),
+                for (var lane = 0; lane < lanes.length; lane++)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    top: TimelineView.rulerHeight + lane * TimelineView.laneHeight,
+                    height: TimelineView.laneHeight,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.06),
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              for (var lane = 0; lane < lanes.length; lane++)
-                for (final shape in lanes[lane])
-                  _ShapeBar(
-                    shape: shape,
-                    durationMs: _duration,
-                    timeMs: timeMs,
-                    toleranceMs: keyframeSnapToleranceMs(_duration),
-                    laneTop: rulerHeight + lane * laneHeight,
-                    width: width,
-                    selected: shape.id == selectedShapeId,
-                    onSelect: () => onSelect(shape),
-                    onRangeChanged: (start, end) =>
-                        onRangeChanged(shape, start, end),
-                    onDeleteKeyframe: (time) =>
-                        onDeleteKeyframe(shape, time),
+                for (var lane = 0; lane < lanes.length; lane++)
+                  for (final shape in lanes[lane])
+                    _ShapeBar(
+                      shape: shape,
+                      zoom: zoom,
+                      durationMs: widget.project.durationMs,
+                      timeMs: widget.timeMs,
+                      toleranceMs:
+                          keyframeSnapToleranceMs(widget.project.durationMs),
+                      laneTop:
+                          TimelineView.rulerHeight + lane * TimelineView.laneHeight,
+                      width: width,
+                      selected: shape.id == widget.selectedShapeId,
+                      onSelect: () => widget.onSelect(shape),
+                      onRangeChanged: (start, end) =>
+                          widget.onRangeChanged(shape, start, end),
+                      onMoveChanged: (target) =>
+                          widget.onMoveChanged(shape, target),
+                      onMoveEnd: () => widget.onMoveEnd(shape),
+                      onDeleteKeyframe: (time) =>
+                          widget.onDeleteKeyframe(shape, time),
+                    ),
+                Positioned(
+                  left: zoom.xFor(widget.timeMs, width) - 1,
+                  top: 0,
+                  bottom: 0,
+                  width: 2,
+                  child: const IgnorePointer(
+                    child: ColoredBox(color: Color(0xFFFF5C5C)),
                   ),
-              Positioned(
-                left: (timeMs / _duration) * width - 1,
-                top: 0,
-                bottom: 0,
-                width: 2,
-                child: const IgnorePointer(
-                  child: ColoredBox(color: Color(0xFFFF5C5C)),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },
@@ -116,32 +216,103 @@ class TimelineView extends StatelessWidget {
   }
 }
 
-class _Ruler extends StatelessWidget {
-  const _Ruler({required this.durationMs});
+/// Règle graduée adaptative : le pas s'élargit avec le zoom (50 ms → 30 min),
+/// graduations majeures labellisées + quintillés mineurs si la place suffit.
+class _RulerPainter extends CustomPainter {
+  const _RulerPainter({required this.zoom, required this.width});
 
-  final int durationMs;
+  final TimelineZoomState zoom;
+  final double width;
+
+  static const List<int> _steps = <int>[
+    50, 100, 250, 500, 1000, 2000, 5000, 10000, 15000, 30000, //
+    60000, 120000, 300000, 600000, 1800000,
+  ];
 
   @override
-  Widget build(BuildContext context) {
-    const ticks = <double>[0, 0.25, 0.5, 0.75, 1];
-    return Stack(
-      children: <Widget>[
-        for (final tick in ticks)
-          Align(
-            alignment: Alignment(tick * 2 - 1, 0),
-            child: Text(
-              '${(durationMs * tick / 1000).toStringAsFixed(1)} s',
-              style: const TextStyle(fontSize: 9, color: Colors.white38),
-            ),
-          ),
-      ],
-    );
+  void paint(Canvas canvas, Size size) {
+    final pxPerMs = size.width / math.max(1, zoom.viewMs);
+    var step = _steps.last;
+    for (final candidate in _steps) {
+      if (candidate * pxPerMs >= 64) {
+        step = candidate;
+        break;
+      }
+    }
+    final minorStep = step ~/ 5;
+    final showMinor = minorStep > 0 && minorStep * pxPerMs >= 6;
+
+    final major = Paint()
+      ..color = Colors.white24
+      ..strokeWidth = 1;
+    final minor = Paint()
+      ..color = Colors.white12
+      ..strokeWidth = 1;
+
+    final tickStep = showMinor ? minorStep : step;
+    final first = (zoom.offsetMs / tickStep).floor() * tickStep;
+    final last = zoom.offsetMs + zoom.viewMs + step;
+    for (var t = first; t <= last; t += tickStep) {
+      if (t < 0) continue;
+      final x = (t - zoom.offsetMs) * pxPerMs;
+      if (t % step == 0) {
+        canvas.drawLine(
+          Offset(x, size.height - 8),
+          Offset(x, size.height),
+          major,
+        );
+        _label(canvas, size, _formatTime(t), x + 3);
+      } else {
+        canvas.drawLine(
+          Offset(x, size.height - 4),
+          Offset(x, size.height),
+          minor,
+        );
+      }
+    }
   }
+
+  static String _formatTime(int ms) {
+    if (ms < 60000) {
+      final seconds = ms / 1000;
+      if (seconds == seconds.truncateToDouble()) {
+        return '${seconds.toStringAsFixed(0)} s';
+      }
+      return seconds < 1
+          ? '${seconds.toStringAsFixed(2)} s'
+          : '${seconds.toStringAsFixed(1)} s';
+    }
+    final minutes = ms ~/ 60000;
+    final seconds = (ms % 60000) ~/ 1000;
+    return '$minutes:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  void _label(Canvas canvas, Size size, String text, double x) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: const TextStyle(fontSize: 9, color: Colors.white38),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    if (x + painter.width > size.width) return;
+    painter.paint(canvas, Offset(x, 2));
+  }
+
+  @override
+  bool shouldRepaint(_RulerPainter oldDelegate) =>
+      oldDelegate.zoom.viewMs != zoom.viewMs ||
+      oldDelegate.zoom.offsetMs != zoom.offsetMs ||
+      oldDelegate.width != width;
 }
 
-class _ShapeBar extends StatelessWidget {
+/// Rectangle d'une forme : sélection, poignées de redimensionnement,
+/// keyframes supprimables près de la tête de lecture et déplacement du
+/// segment entier par appui long + glisser horizontal.
+class _ShapeBar extends StatefulWidget {
   const _ShapeBar({
     required this.shape,
+    required this.zoom,
     required this.durationMs,
     required this.timeMs,
     required this.toleranceMs,
@@ -150,10 +321,13 @@ class _ShapeBar extends StatelessWidget {
     required this.selected,
     required this.onSelect,
     required this.onRangeChanged,
+    required this.onMoveChanged,
+    required this.onMoveEnd,
     required this.onDeleteKeyframe,
   });
 
   final VectorShape shape;
+  final TimelineZoomState zoom;
   final int durationMs;
   final int timeMs;
   final int toleranceMs;
@@ -162,12 +336,30 @@ class _ShapeBar extends StatelessWidget {
   final bool selected;
   final VoidCallback onSelect;
   final void Function(int startMs, int endMs) onRangeChanged;
+  final ValueChanged<int> onMoveChanged;
+  final VoidCallback onMoveEnd;
   final ValueChanged<int> onDeleteKeyframe;
 
   @override
+  State<_ShapeBar> createState() => _ShapeBarState();
+}
+
+class _ShapeBarState extends State<_ShapeBar> {
+  /// Début de la fenêtre au moment de l'appui long : la cible du déplacement
+  /// est toujours recalculée depuis cette origine, sans dérive d'incrément.
+  int _originStartMs = 0;
+  bool _moving = false;
+
+  @override
   Widget build(BuildContext context) {
-    final left = (shape.startMs / durationMs) * width;
-    final barWidth = math.max(24.0, ((shape.endMs - shape.startMs) / durationMs) * width);
+    final shape = widget.shape;
+    final zoom = widget.zoom;
+    final width = widget.width;
+    final pxPerMs = zoom.msPerPixel(width);
+    final left = zoom.xFor(shape.startMs, width);
+    final barWidth = math.max(24.0, shape.durationMs * pxPerMs);
+    // Un segment plus étroit que son minimum reste visible au bord droit.
+    final pinnedLeft = math.min(left, math.max(0.0, width - 24));
     final color = shape.isInstance
         ? const Color(0xFFC084FC)
         : Theme.of(context).colorScheme.primary;
@@ -178,12 +370,37 @@ class _ShapeBar extends StatelessWidget {
       ..sort();
 
     return Positioned(
-      left: math.min(left, math.max(0, width - 24)),
-      top: laneTop + 3,
+      left: shape.durationMs * pxPerMs < 24 ? pinnedLeft : left,
+      top: widget.laneTop + 3,
       width: barWidth,
       height: TimelineView.laneHeight - 8,
       child: GestureDetector(
-        onTap: onSelect,
+        onTap: widget.onSelect,
+        onLongPressStart: (details) {
+          HapticFeedback.mediumImpact();
+          _originStartMs = shape.startMs;
+          setState(() => _moving = true);
+        },
+        onLongPressMoveUpdate: (details) {
+          if (!_moving) return;
+          final deltaMs = (details.localOffsetFromOrigin.dx * pxPerMs).round();
+          final span = shape.durationMs;
+          final target = math.max(
+            0,
+            math.min(_originStartMs + deltaMs, widget.durationMs - span),
+          );
+          widget.onMoveChanged(target);
+        },
+        onLongPressEnd: (details) {
+          if (!_moving) return;
+          setState(() => _moving = false);
+          widget.onMoveEnd();
+        },
+        onLongPressCancel: () {
+          if (!_moving) return;
+          setState(() => _moving = false);
+          widget.onMoveEnd();
+        },
         child: Stack(
           clipBehavior: Clip.none,
           children: <Widget>[
@@ -192,9 +409,22 @@ class _ShapeBar extends StatelessWidget {
                 color: color.withValues(alpha: shape.visible ? 0.30 : 0.12),
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(
-                  color: selected ? color : color.withValues(alpha: 0.5),
-                  width: selected ? 2 : 1,
+                  color: _moving
+                      ? Colors.white
+                      : widget.selected
+                          ? color
+                          : color.withValues(alpha: 0.5),
+                  width: _moving || widget.selected ? 2 : 1,
                 ),
+                boxShadow: _moving
+                    ? <BoxShadow>[
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.45),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
+                        ),
+                      ]
+                    : null,
               ),
               alignment: Alignment.centerLeft,
               padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -218,10 +448,10 @@ class _ShapeBar extends StatelessWidget {
                       1,
                   0.75,
                 ),
-                child: (keyTime - timeMs).abs() <= toleranceMs
+                child: (keyTime - widget.timeMs).abs() <= widget.toleranceMs
                     ? GestureDetector(
                         behavior: HitTestBehavior.opaque,
-                        onTap: () => onDeleteKeyframe(keyTime),
+                        onTap: () => widget.onDeleteKeyframe(keyTime),
                         child: Tooltip(
                           message: 'Supprimer la keyframe',
                           child: Container(
@@ -250,22 +480,22 @@ class _ShapeBar extends StatelessWidget {
               ),
             _Handle(
               alignment: Alignment.centerLeft,
-              msPerPixel: durationMs / width,
+              msPerPixel: zoom.msPerPixel(width),
               tooltip: 'Début d’affichage',
               onDrag: (deltaMs) {
                 final next = (shape.startMs + deltaMs)
                     .clamp(0, shape.endMs - TimelineView.minSpanMs);
-                onRangeChanged(next, shape.endMs);
+                widget.onRangeChanged(next, shape.endMs);
               },
             ),
             _Handle(
               alignment: Alignment.centerRight,
-              msPerPixel: durationMs / width,
+              msPerPixel: zoom.msPerPixel(width),
               tooltip: 'Fin d’affichage',
               onDrag: (deltaMs) {
                 final next = (shape.endMs + deltaMs)
-                    .clamp(shape.startMs + TimelineView.minSpanMs, durationMs);
-                onRangeChanged(shape.startMs, next);
+                    .clamp(shape.startMs + TimelineView.minSpanMs, widget.durationMs);
+                widget.onRangeChanged(shape.startMs, next);
               },
             ),
           ],

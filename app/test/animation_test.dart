@@ -298,4 +298,116 @@ void main() {
       expect(instanceTimeMs(1500, 500, 0), 0);
     });
   });
+
+  group('duplication de forme', () {
+    test('duplicated clone couches et keyframes avec de nouveaux ids', () {
+      final shape = VectorShape(
+        name: 'Carré',
+        x: 10,
+        y: 20,
+        startMs: 500,
+        endMs: 2500,
+      );
+      shape.layers.add(ShapeLayer(name: 'Rect', kind: ShapeKind.rect));
+      shape.layers.add(ShapeLayer(name: 'Cercle', kind: ShapeKind.circle));
+      shape.upsertKeyframe(500, shape.poseAt(500), easing: EasingKind.linear);
+      shape.upsertKeyframe(
+        2500,
+        <AnimatableProperty, double>{
+          ...shape.poseAt(500),
+          AnimatableProperty.rotation: 1.5,
+        },
+        easing: EasingKind.easeOut,
+      );
+
+      final clone = shape.duplicated();
+
+      expect(clone.id, isNot(shape.id));
+      expect(clone.name, 'Carré (copie)');
+      expect(clone.startMs, 500);
+      expect(clone.endMs, 2500);
+      for (var i = 0; i < shape.layers.length; i++) {
+        expect(clone.layers[i].id, isNot(shape.layers[i].id));
+        expect(clone.layers[i].name, shape.layers[i].name);
+        expect(clone.layers[i].kind, shape.layers[i].kind);
+      }
+      expect(clone.keyframes.length, 2);
+      expect(clone.keyframes[0].timeMs, 500);
+      expect(clone.keyframes[0].easing, EasingKind.linear);
+      expect(clone.keyframes[1].timeMs, 2500);
+      expect(clone.keyframes[1].values[AnimatableProperty.rotation], 1.5);
+      expect(clone.keyframes[1].easing, EasingKind.easeOut);
+      // L'original reste intact.
+      expect(shape.keyframes.length, 2);
+    });
+
+    test('duplicated conserve une instance d\'animation', () {
+      final shape = VectorShape(
+        name: 'Instance',
+        embeddedProjectId: 'src-1',
+        embeddedWidth: 360,
+        embeddedHeight: 640,
+      );
+      final clone = shape.duplicated();
+      expect(clone.isInstance, isTrue);
+      expect(clone.embeddedProjectId, 'src-1');
+      expect(clone.id, isNot(shape.id));
+    });
+  });
+
+  group('déplacement de segment', () {
+    test('shiftBy décale fenêtre et keyframes, durée inchangée', () {
+      final shape = VectorShape(name: 'A', startMs: 1000, endMs: 3000);
+      shape.upsertKeyframe(1000, shape.poseAt(1000), easing: EasingKind.linear);
+      shape.upsertKeyframe(
+        2000,
+        shape.poseAt(1000),
+        easing: EasingKind.easeInOut,
+      );
+      shape.upsertKeyframe(3000, shape.poseAt(1000), easing: EasingKind.easeOut);
+
+      shape.shiftBy(500);
+      expect(shape.startMs, 1500);
+      expect(shape.endMs, 3500);
+      expect(shape.durationMs, 2000);
+      expect(
+        [for (final key in shape.keyframes) key.timeMs],
+        <int>[1500, 2500, 3500],
+      );
+      expect(
+        [for (final key in shape.keyframes) key.easing],
+        <EasingKind>[
+          EasingKind.linear,
+          EasingKind.easeInOut,
+          EasingKind.easeOut,
+        ],
+      );
+
+      shape.shiftBy(-1200);
+      expect(shape.startMs, 300);
+      expect(shape.endMs, 2300);
+      expect(
+        [for (final key in shape.keyframes) key.timeMs],
+        <int>[300, 1300, 2300],
+      );
+    });
+
+    test('shiftBy décalage nul ne change rien', () {
+      final shape = VectorShape(name: 'A', startMs: 100, endMs: 500);
+      shape.upsertKeyframe(300, shape.poseAt(300));
+      shape.shiftBy(0);
+      expect(shape.startMs, 100);
+      expect(shape.endMs, 500);
+      expect(shape.keyframes.single.timeMs, 300);
+    });
+
+    test('shiftBy rabote les keyframes passées sous zéro', () {
+      final shape = VectorShape(name: 'A', startMs: 0, endMs: 1000);
+      shape.upsertKeyframe(500, shape.poseAt(500));
+      shape.keyframes.add(ShapeKeyframe(timeMs: -400)); // hors fenêtre
+      shape.shiftBy(-200);
+      expect([for (final key in shape.keyframes) key.timeMs], contains(0));
+      expect(shape.keyframes.length, 2);
+    });
+  });
 }
