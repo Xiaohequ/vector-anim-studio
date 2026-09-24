@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vector_anim_studio/engine/animation_presets.dart';
+import 'package:vector_anim_studio/engine/timeline_layout.dart';
 import 'package:vector_anim_studio/engine/undo_stack.dart';
 import 'package:vector_anim_studio/models/animation.dart';
 
@@ -480,6 +481,40 @@ void main() {
       shape.shiftBy(-200);
       expect([for (final key in shape.keyframes) key.timeMs], contains(0));
       expect(shape.keyframes.length, 2);
+    });
+
+    test('shiftBy déplace au-delà de la fin : la durée projet s\'étend', () {
+      final project = AnimationProject.blank(name: 'P');
+      final shape = VectorShape(name: 'A', startMs: 0, endMs: 2000);
+      shape.upsertKeyframe(1000, shape.poseAt(1000));
+      project.shapes.add(shape);
+      expect(project.durationMs, 2000);
+
+      // Déplacer bien au-delà de la fin actuelle : aucun butoir, la durée
+      // dérivée suit la fenêtre et les keyframes suivent d'un même delta.
+      shape.shiftBy(6000);
+      expect(shape.startMs, 6000);
+      expect(shape.endMs, 8000);
+      expect(shape.keyframes.single.timeMs, 7000);
+      expect(project.durationMs, 8000);
+    });
+
+    test('allonger la fin d\'une forme au-delà de la fin étend le projet', () {
+      final project = AnimationProject.blank(name: 'P');
+      final shape = VectorShape(name: 'A', startMs: 0, endMs: 2000);
+      shape.layers.add(ShapeLayer(name: 'L', kind: ShapeKind.rect));
+      project.shapes.add(shape);
+
+      // La poignée droite de la timeline écrit directement la fenêtre.
+      shape.endMs = 5000;
+      expect(project.durationMs, 5000);
+
+      // Un trou reste possible : deux formes espacées tiennent sur la même
+      // ligne (l'empilement glouton réutilise une ligne après un trou).
+      final b = VectorShape(name: 'B', startMs: 6000, endMs: 7000);
+      b.layers.add(ShapeLayer(name: 'L', kind: ShapeKind.rect));
+      project.shapes.add(b);
+      expect(TimelineLayout.packLanes(project.shapes).length, 1);
     });
   });
 }

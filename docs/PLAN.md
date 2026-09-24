@@ -79,7 +79,7 @@ Après export, `share_plus` partage le fichier (feuille de partage système).
 ## 6. Interface
 
 1. **Accueil** (`home_screen`) : liste des projets, nouvel projet, projet d'exemple, renommage, duplication, suppression, état vide explicite.
-2. **Éditeur** (`studio_screen`) : menus Formes / Animations / Calques / Export, canvas, timeline à rectangles, barre de lecture avec bouton ⎌ Annuler (20 dernières actions, pile de snapshots en session), sauvegarde différée. L'export MP4/GIF ouvre un dialogue de réglage des fps (`fps` = dernier choix).
+2. **Éditeur** (`studio_screen`) : menus Formes / Animations / Calques / Export, canvas, timeline à rectangles, barre de lecture avec bouton ⎌ Annuler (20 dernières actions, pile de snapshots en session — ajout de forme, insertion d'instance, suppression, gestes et réglages inclus), sauvegarde différée. L'export MP4/GIF ouvre un dialogue de réglage des fps (`fps` = dernier choix).
 
 La **durée du projet est dérivée du contenu** : `AnimationProject.durationMs` est un getter = max des `endMs` des formes (projet vide → 0) ; rien n'est fixé à la création (nom + format seulement) ; une forme posée au-delà de la fin courante étend le projet, supprimer la dernière forme le raccourcit ; la colonne DB `duration_ms` est réécrite à chaque save.
 3. **Création de forme** (`shape_editor_screen`) : aperçu en haut, couches en bas, ajout de forme basique comme nouvelle couche, réglages taille / position / couleur, fenêtre d'affichage.
@@ -92,16 +92,21 @@ L'échelle de temps se zoome de 500 ms à 30 minutes en pleine largeur : pinceme
 doigts (zoom ancré, détecté via `Listener` pour ne pas perturber le scroll vertical ni le
 scrub), glisser à deux doigts = défilement, boutons ＋/－/ajuster dans l'en-tête ; la tête
 de lecture reste visible pendant la lecture. Un appui long sur un rectangle déplace tout
-le segment (durée et keyframes conservées) ; le menu Formes propose « Dupliquer » qui
-clone couches et keyframes à la même fenêtre (ids régénérés).
+le segment (durée et keyframes conservées) **sans limite horizontale** : dépasser la fin
+du projet l'étend (durée dérivée), un trou entre deux segments reste possible (même
+ligne), et la timeline défile automatiquement sous le doigt quand le bord manipulé
+atteint 95 % de la vue (`TimelineZoomState.followEdge`). La poignée droite étire la fin
+sans borne haute (la durée s'étend) ; la poignée gauche reste bornée à ≥ 0. Le menu
+Formes propose « Dupliquer » qui clone couches et keyframes à la même fenêtre (ids
+régénérés).
 
 ## 7. Tests
 
 - `test/repository_test.dart` : persistance réelle (sqflite ffi), sauvegarde/rechargement des poses à l'identique, remplacement sans duplication, suppression, duplication.
 - `test/timeline_layout_test.dart` : empilement des lignes (chevauchements, réutilisation de ligne).
-- `test/animation_test.dart` : interpolation des poses (toutes propriétés), easing, remplacement au même temps, auto-key, snap, presets, duplication de forme (ids régénérés, keyframes copiées), déplacement de segment (`shiftBy`).
-- `test/timeline_zoom_test.dart` : bornes de vue (500 ms – 30 min), zoom ancré, défilement borné, suivi de la tête de lecture, mapping temps↔pixel.
-- `test/widget_test.dart` : écran d'accueil (état vide, création de projet et retour à la liste). Ces tests utilisent un dépôt en mémoire : `sqflite_common_ffi` ne progresse pas dans la zone fake-async de `testWidgets`, donc la couche SQLite reste couverte par `repository_test.dart`.
+- `test/animation_test.dart` : interpolation des poses (toutes propriétés), easing, remplacement au même temps, auto-key, snap, presets, duplication de forme (ids régénérés, keyframes copiées), déplacement de segment (`shiftBy` — y compris au-delà de la fin : la durée dérivée s'étend, trous possibles sur une même ligne).
+- `test/timeline_zoom_test.dart` : bornes de vue (500 ms – 30 min, s'adaptant aux projets plus longs), zoom ancré, défilement borné, suivi de la tête de lecture et de l'edge pendant un geste, mapping temps↔pixel.
+- `test/widget_test.dart` : écran d'accueil (état vide, création de projet et retour à la liste) + undo d'ajout et de suppression de forme dans le studio (dépôt en mémoire : `sqflite_common_ffi` ne progresse pas dans la zone fake-async de `testWidgets`, donc la couche SQLite reste couverte par `repository_test.dart`).
 
 ## 8. Reste à faire
 

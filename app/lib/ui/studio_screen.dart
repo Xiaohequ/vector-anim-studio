@@ -167,6 +167,7 @@ class _StudioScreenState extends State<StudioScreen>
     if (picked == null || !mounted) return;
     final sub = await widget.repository.load(picked.id);
     if (!mounted) return;
+    _pushUndo(); // annuler l'insertion doit restaurer l'état sans l'instance
     final start = controller.timeMs;
     final end = math.min(
       project.durationMs,
@@ -323,6 +324,7 @@ class _StudioScreenState extends State<StudioScreen>
       ),
     );
     if (shape == null || !mounted) return;
+    _pushUndo(); // annuler l'ajout doit restaurer l'état sans la forme
     setState(() {
       project.shapes.add(shape);
       _selectedId = shape.id;

@@ -9,7 +9,7 @@ import 'dart:math' as math;
 /// l'édition. L'état de zoom vit en mémoire de session : rien n'est persisté.
 class TimelineZoomState {
   TimelineZoomState({required this.durationOf})
-      : viewMs = _clampView(durationOf()),
+      : viewMs = _clampView(durationOf(), _viewUpper(durationOf)),
         offsetMs = 0;
 
   /// Pleine largeur au zoom maximal : 500 ms (15 images à 30 fps).
@@ -27,8 +27,15 @@ class TimelineZoomState {
   /// Temps affiché au bord gauche.
   int offsetMs;
 
-  static int _clampView(int value) =>
-      value.clamp(minViewMs, math.max(minViewMs, maxViewMs));
+  /// Borne haute de la vue : 30 minutes, sauf un projet plus long — « ajuster »
+  /// doit toujours pouvoir cadrer un projet allongé au-delà de cette limite.
+  int get viewUpperMs => math.max(maxViewMs, durationOf());
+
+  static int _viewUpper(int Function() durationOf) =>
+      math.max(maxViewMs, durationOf());
+
+  static int _clampView(int value, int upper) =>
+      value.clamp(minViewMs, math.max(minViewMs, upper));
 
   /// Décalage maximal : si la vue dépasse la durée du projet, celui-ci est
   /// collé au bord gauche (offset nul).
@@ -46,7 +53,7 @@ class TimelineZoomState {
     }
     final anchor = anchorFraction.clamp(0.0, 1.0);
     final anchorTime = offsetMs + anchor * viewMs;
-    viewMs = _clampView((viewMs / scale).round());
+    viewMs = _clampView((viewMs / scale).round(), viewUpperMs);
     offsetMs = (anchorTime - anchor * viewMs).round();
     _clampOffset();
   }
@@ -66,7 +73,7 @@ class TimelineZoomState {
 
   /// Réinitialise : toute la durée du projet sur la largeur.
   void fit() {
-    viewMs = _clampView(durationOf());
+    viewMs = _clampView(durationOf(), viewUpperMs);
     _clampOffset();
   }
 
@@ -83,6 +90,20 @@ class TimelineZoomState {
       return false;
     }
     final clamped = next.clamp(0, maxOffset);
+    if (clamped == offsetMs) return false;
+    offsetMs = clamped;
+    return true;
+  }
+
+  /// Défilement automatique pendant un déplacement/étirement de segment :
+  /// garde le temps [timeMs] (bord manipulé) visible à 95 % de la vue quand il
+  /// dépasse le bord droit — on peut ainsi déplacer ou allonger bien au-delà
+  /// de l'écran en un seul geste, la timeline défilant sous le doigt.
+  /// Renvoie true si l'offset a changé.
+  bool followEdge(int timeMs) {
+    if (timeMs <= offsetMs + viewMs * 0.95) return false;
+    final target = (timeMs - viewMs * 0.95).round();
+    final clamped = target.clamp(0, maxOffset);
     if (clamped == offsetMs) return false;
     offsetMs = clamped;
     return true;

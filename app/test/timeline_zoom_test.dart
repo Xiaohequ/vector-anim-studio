@@ -78,5 +78,31 @@ void main() {
       zoom.zoomOut();
       expect(zoom.viewMs, closeTo(40000, 2)); // arrondi intermédiaire ±1 ms
     });
+
+    test('followEdge défile quand un bord manipulé dépasse la vue', () {
+      final zoom = TimelineZoomState(durationOf: () => 4000);
+      zoom.zoomAt(4, 0.0); // vue = 1000 ms, offset 0
+      expect(zoom.followEdge(900), isFalse); // sous 95 % → inchangé
+      expect(zoom.followEdge(1200), isTrue); // dépasse → l'offset suit
+      // Le bord manipulé reste épinglé à 95 % de la largeur.
+      expect(zoom.offsetMs, (1200 - 1000 * 0.95).round());
+      expect(zoom.xFor(1200, 360), 0.95 * 360);
+    });
+
+    test('followEdge est borné à la durée du projet', () {
+      final zoom = TimelineZoomState(durationOf: () => 4000);
+      zoom.zoomAt(4, 0.0); // vue = 1000 ms ; maxOffset = 3000
+      zoom.followEdge(20000); // au-delà du maximum possible
+      expect(zoom.offsetMs, zoom.maxOffset);
+    });
+
+    test('la borne de vue s\'adapte aux projets plus longs que 30 minutes', () {
+      const long = 45 * 60 * 1000;
+      final zoom = TimelineZoomState(durationOf: () => long);
+      zoom.fit();
+      expect(zoom.viewMs, long); // au-delà de maxViewMs
+      zoom.zoomAt(0.0001, 0.5); // zoom arrière extrême
+      expect(zoom.viewMs, long); // pas de vue au-delà de la durée
+    });
   });
 }

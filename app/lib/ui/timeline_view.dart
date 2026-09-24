@@ -41,8 +41,9 @@ class TimelineView extends StatefulWidget {
   final ValueChanged<VectorShape> onSelect;
   final void Function(VectorShape shape, int startMs, int endMs) onRangeChanged;
 
-  /// Déplace le segment : [targetStartMs] est le nouveau début (borne par
-  /// l'appelant), la durée et les keyframes suivent.
+  /// Déplace le segment : [targetStartMs] est le nouveau début (borné à ≥ 0
+  /// par l'appelant, sans limite au-delà de la fin du projet — la durée suit),
+  /// la durée et les keyframes suivent.
   final void Function(VectorShape shape, int targetStartMs) onMoveChanged;
   final ValueChanged<VectorShape> onMoveEnd;
   final ValueChanged<int> onSeek;
@@ -154,6 +155,15 @@ class _TimelineViewState extends State<TimelineView> {
       return;
     }
     widget.onMoveChanged(shape, targetStartMs);
+    // La fin du segment doit rester visible : défilement automatique quand
+    // le geste dépasse le bord droit (sinon le doigt bute sur l'écran).
+    _followEdge(shape.endMs);
+  }
+
+  /// Défilement automatique : garde le bord manipulé dans la vue (95 % de la
+  /// largeur), comme le suivi de la tête de lecture pendant la lecture.
+  void _followEdge(int timeMs) {
+    if (widget.zoom.followEdge(timeMs)) widget.onZoomChanged();
   }
 
   void _handleMoveEnd(VectorShape shape) {
@@ -236,7 +246,6 @@ class _TimelineViewState extends State<TimelineView> {
                     _ShapeBar(
                       shape: shape,
                       zoom: zoom,
-                      durationMs: widget.project.durationMs,
                       timeMs: widget.timeMs,
                       toleranceMs:
                           keyframeSnapToleranceMs(widget.project.durationMs),
@@ -258,6 +267,7 @@ class _TimelineViewState extends State<TimelineView> {
                       onDeleteKeyframe: (time) =>
                           widget.onDeleteKeyframe(shape, time),
                       onGestureStart: () => widget.onGestureStart(shape),
+                      onFollowEdge: _followEdge,
                     ),
                 Positioned(
                   left: zoom.xFor(widget.timeMs, width) - 1,
@@ -374,7 +384,6 @@ class _ShapeBar extends StatelessWidget {
   const _ShapeBar({
     required this.shape,
     required this.zoom,
-    required this.durationMs,
     required this.timeMs,
     required this.toleranceMs,
     required this.laneTop,
@@ -391,11 +400,11 @@ class _ShapeBar extends StatelessWidget {
     required this.onMoveEnd,
     required this.onDeleteKeyframe,
     required this.onGestureStart,
+    required this.onFollowEdge,
   });
 
   final VectorShape shape;
   final TimelineZoomState zoom;
-  final int durationMs;
   final int timeMs;
   final int toleranceMs;
   final double laneTop;
@@ -419,6 +428,9 @@ class _ShapeBar extends StatelessWidget {
 
   /// Début d'un geste sur les poignées (redimensionnement) : snapshot undo.
   final VoidCallback onGestureStart;
+
+  /// Défilement automatique pendant l'étirement : garde la fin dans la vue.
+  final ValueChanged<int> onFollowEdge;
 
   @override
   Widget build(BuildContext context) {
@@ -458,10 +470,9 @@ class _ShapeBar extends StatelessWidget {
         onLongPressMoveUpdate: (details) {
           if (!moving) return;
           final deltaMs = (details.localOffsetFromOrigin.dx * msPerPx).round();
-          final target = math.max(
-            0,
-            math.min(movingOriginMs + deltaMs, durationMs - shape.durationMs),
-          );
+          // Sans borne haute : dépasser la fin du projet l'étend (durée
+          // dérivée), et le défilement automatique suit le geste.
+          final target = math.max(0, movingOriginMs + deltaMs);
           onMoveChanged(target);
         },
         onLongPressEnd: (details) {
@@ -566,9 +577,15 @@ class _ShapeBar extends StatelessWidget {
               onDragStart: () => onGestureStart(),
               onDragEnd: () {},
               onDrag: (deltaMs) {
-                final next = (shape.endMs + deltaMs)
-                    .clamp(shape.startMs + TimelineView.minSpanMs, durationMs);
+                // Sans borne haute : allonger la fin au-delà de la fin du
+                // projet étend la durée (dérivée du contenu) ; le
+                // défilement automatique garde la fin dans la vue.
+                final next = math.max(
+                  shape.startMs + TimelineView.minSpanMs,
+                  shape.endMs + deltaMs,
+                );
                 onRangeChanged(shape.startMs, next);
+                onFollowEdge(next);
               },
             ),
           ],

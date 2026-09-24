@@ -4,6 +4,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:vector_anim_studio/data/project_repository.dart';
 import 'package:vector_anim_studio/main.dart';
 import 'package:vector_anim_studio/models/animation.dart';
+import 'package:vector_anim_studio/ui/studio_screen.dart';
 
 /// Dépôt en mémoire pour les tests de widgets.
 ///
@@ -98,5 +99,80 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Mon film'), findsOneWidget);
     expect(find.text('Aucun projet pour l’instant'), findsNothing);
+  });
+
+  /// Ouvre l'écran studio avec un projet seedé dans le dépôt mémoire.
+  Future<void> pumpStudio(
+    WidgetTester tester,
+    _MemoryRepository repository,
+    AnimationProject project,
+  ) async {
+    await repository.save(project);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StudioScreen(projectId: project.id, repository: repository),
+      ),
+    );
+    await tester.pumpAndSettle();
+  }
+
+  AnimationProject seededProject({bool withShape = true}) {
+    final project = AnimationProject.blank(name: 'Film');
+    if (withShape) {
+      final shape = VectorShape(name: 'Bloc', startMs: 0, endMs: 2000);
+      shape.layers.add(ShapeLayer(name: 'L', kind: ShapeKind.rect));
+      project.shapes.add(shape);
+    }
+    return project;
+  }
+
+  testWidgets('undo annule la suppression d’une forme', (tester) async {
+    final repository = _MemoryRepository();
+    final project = seededProject();
+    await pumpStudio(tester, repository, project);
+
+    IconButton undoButton() => tester.widget<IconButton>(
+        find.widgetWithIcon(IconButton, Icons.undo).last);
+
+    // Aucune annulation disponible au départ.
+    expect(undoButton().onPressed, isNull);
+
+    // Supprimer la forme via le menu Formes.
+    await tester.tap(find.byTooltip('Formes'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Supprimer'));
+    await tester.pumpAndSettle();
+    expect(project.shapes, isEmpty);
+    expect(undoButton().onPressed, isNotNull);
+
+    // Annuler : la forme revient sur la timeline et la pile est vide.
+    await tester.tap(find.byIcon(Icons.undo).last);
+    await tester.pumpAndSettle();
+    expect(undoButton().onPressed, isNull);
+    expect(find.text('Bloc'), findsOneWidget);
+  });
+
+  testWidgets('undo annule l’ajout d’une forme', (tester) async {
+    final repository = _MemoryRepository();
+    await pumpStudio(tester, repository, seededProject(withShape: false));
+
+    IconButton undoButton() => tester.widget<IconButton>(
+        find.widgetWithIcon(IconButton, Icons.undo).last);
+
+    // Ajouter une forme : menu Formes ▸ Ajouter une forme… puis Enregistrer.
+    await tester.tap(find.byTooltip('Formes'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ajouter une forme…'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Enregistrer'));
+    await tester.pumpAndSettle();
+    expect(find.text('Forme 1'), findsOneWidget);
+    expect(undoButton().onPressed, isNotNull);
+
+    // Annuler : la forme disparaît de la timeline.
+    await tester.tap(find.byIcon(Icons.undo).last);
+    await tester.pumpAndSettle();
+    expect(undoButton().onPressed, isNull);
+    expect(find.text('Forme 1'), findsNothing);
   });
 }
