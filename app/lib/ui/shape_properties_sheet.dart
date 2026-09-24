@@ -18,6 +18,8 @@ class ShapePropertiesSheet extends StatefulWidget {
     required this.onKeyframeEasing,
     required this.onEditLayers,
     this.onOpenSource,
+    this.skeletonPiece = false,
+    this.skeletonNote,
   });
 
   final AnimationProject project;
@@ -33,6 +35,13 @@ class ShapePropertiesSheet extends StatefulWidget {
 
   /// Ouvre le projet source (instances d'animation uniquement).
   final VoidCallback? onOpenSource;
+
+  /// Pièce d'un projet squelette : la forme est un élément statique du rig,
+  /// pas d'animation de pose propre — keyframes/interpolation masquées.
+  final bool skeletonPiece;
+
+  /// État de liaison au rig (projet squelette), affiché sous le titre.
+  final String? skeletonNote;
 
   @override
   State<ShapePropertiesSheet> createState() => _ShapePropertiesSheetState();
@@ -70,22 +79,25 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    IconButton(
-                      tooltip: keyframe == null
-                          ? 'Ajouter une keyframe au curseur'
-                          : 'Retirer la keyframe au curseur',
-                      iconSize: 20,
-                      icon: Icon(
-                        keyframe == null
-                            ? Icons.diamond_outlined
-                            : Icons.diamond,
-                        color: hasKeyframes ? const Color(0xFFF2C94C) : null,
+                    if (widget.skeletonPiece)
+                      const SizedBox(width: 48)
+                    else
+                      IconButton(
+                        tooltip: keyframe == null
+                            ? 'Ajouter une keyframe au curseur'
+                            : 'Retirer la keyframe au curseur',
+                        iconSize: 20,
+                        icon: Icon(
+                          keyframe == null
+                              ? Icons.diamond_outlined
+                              : Icons.diamond,
+                          color: hasKeyframes ? const Color(0xFFF2C94C) : null,
+                        ),
+                        onPressed: () async {
+                          await widget.onToggleKeyframe();
+                          _refresh();
+                        },
                       ),
-                      onPressed: () async {
-                        await widget.onToggleKeyframe();
-                        _refresh();
-                      },
-                    ),
                     if (shape.isInstance)
                       TextButton.icon(
                         onPressed: () {
@@ -107,10 +119,12 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                   ],
                 ),
                 Text(
-                  'Affichée de ${(shape.startMs / 1000).toStringAsFixed(2)} s à '
-                  '${(shape.endMs / 1000).toStringAsFixed(2)} s'
-                  '${shape.visible ? '' : ' · masquée'}'
-                  '${hasKeyframes ? '' : ' · aucune keyframe'}',
+                  widget.skeletonPiece
+                      ? widget.skeletonNote ?? 'Pièce du rig'
+                      : 'Affichée de ${(shape.startMs / 1000).toStringAsFixed(2)} s à '
+                          '${(shape.endMs / 1000).toStringAsFixed(2)} s'
+                          '${shape.visible ? '' : ' · masquée'}'
+                          '${hasKeyframes ? '' : ' · aucune keyframe'}',
                   style: const TextStyle(fontSize: 11, color: Colors.white70),
                 ),
                 const SizedBox(height: 4),
@@ -118,47 +132,49 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                   if (property != AnimatableProperty.strokeWidth ||
                       !shape.isInstance)
                     _buildPropertyRow(shape, property, controller),
-                Row(
-                  children: <Widget>[
-                    const SizedBox(
-                      width: 92,
-                      child:
-                          Text('Interpolation', style: TextStyle(fontSize: 12)),
-                    ),
-                    Expanded(
-                      child: DropdownButton<EasingKind>(
-                        isExpanded: true,
-                        value: keyframe?.easing ?? EasingKind.easeInOut,
-                        onChanged: keyframe == null
-                            ? null
-                            : (value) async {
-                                if (value == null) return;
-                                await widget.onKeyframeEasing(value);
-                                _refresh();
-                              },
-                        items: <DropdownMenuItem<EasingKind>>[
-                          for (final easing in EasingKind.values)
-                            DropdownMenuItem<EasingKind>(
-                              value: easing,
-                              child: Text(
-                                easingLabel(easing),
-                                style: const TextStyle(fontSize: 12),
-                              ),
-                            ),
-                        ],
+                if (!widget.skeletonPiece)
+                  Row(
+                    children: <Widget>[
+                      const SizedBox(
+                        width: 92,
+                        child:
+                            Text('Interpolation', style: TextStyle(fontSize: 12)),
                       ),
-                    ),
-                  ],
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: Text(
-                    hasKeyframes
-                        ? 'Forme animée : toute modification écrit une keyframe au curseur.'
-                        : 'Ajoute une keyframe (◆) pour animer toutes les propriétés.',
-                    style: const TextStyle(fontSize: 11, color: Colors.white54),
+                      Expanded(
+                        child: DropdownButton<EasingKind>(
+                          isExpanded: true,
+                          value: keyframe?.easing ?? EasingKind.easeInOut,
+                          onChanged: keyframe == null
+                              ? null
+                              : (value) async {
+                                  if (value == null) return;
+                                  await widget.onKeyframeEasing(value);
+                                  _refresh();
+                                },
+                          items: <DropdownMenuItem<EasingKind>>[
+                            for (final easing in EasingKind.values)
+                              DropdownMenuItem<EasingKind>(
+                                value: easing,
+                                child: Text(
+                                  easingLabel(easing),
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                ),
+                if (!widget.skeletonPiece)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      hasKeyframes
+                          ? 'Forme animée : toute modification écrit une keyframe au curseur.'
+                          : 'Ajoute une keyframe (◆) pour animer toutes les propriétés.',
+                      style: const TextStyle(fontSize: 11, color: Colors.white54),
+                    ),
+                  ),
               ],
             ),
           ),

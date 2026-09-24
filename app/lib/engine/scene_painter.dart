@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import '../models/animation.dart';
+import '../models/skeleton.dart';
 import 'selection_geometry.dart';
 
 /// Dessine la scène vectorielle à un instant donné.
@@ -55,10 +56,7 @@ class ScenePainter extends CustomPainter {
       );
     }
 
-    for (final shape in project.shapes) {
-      if (!shape.isVisibleAt(timeMs)) continue;
-      _paintShape(canvas, shape, depth: 0);
-    }
+    _paintProjectShapes(canvas, project, timeMs, depth: 0);
 
     canvas.restore();
 
@@ -108,13 +106,60 @@ class ScenePainter extends CustomPainter {
       _paintPoseOverlay(
         canvas,
         bounds,
-        SelectionGeometry.shapePose(selected, timeMs),
+        SelectionGeometry.shapePoseWithRig(
+          selected,
+          timeMs,
+          _rigFrameFor(project, selected),
+        ),
         geo,
       );
     }
   }
 
-  void _paintShape(Canvas canvas, VectorShape shape, {required int depth}) {
+  /// Os portant une forme (rig maître), pour la composition de rendu.
+  BoneFrame? _rigFrameFor(
+    AnimationProject project,
+    VectorShape shape,
+  ) {
+    if (!project.isSkeleton || project.skeleton == null) return null;
+    final pose = SkeletonPose.evaluate(project.skeleton!, timeMs);
+    return pose.frameOf(project.skeleton!.boneIdForShape(shape.id));
+  }
+
+  /// Peint toutes les formes d'un projet à un instant (le projet principal
+  /// comme les sous-projets imbriqués — le rig, s'il existe, est évalué au
+  /// temps de CE projet).
+  void _paintProjectShapes(
+    Canvas canvas,
+    AnimationProject project,
+    int timeMs, {
+    required int depth,
+  }) {
+    final rig = project.skeleton;
+    final SkeletonPose? rigPose =
+        project.isSkeleton && rig != null && rig.bones.isNotEmpty
+            ? SkeletonPose.evaluate(rig, timeMs)
+            : null;
+    for (final shape in project.shapes) {
+      // Projet squelette : les pièces sont visibles en permanence (le rig
+      // porte toute l'animation) — pas de fenêtre d'affichage.
+      final show =
+          project.isSkeleton ? shape.visible : shape.isVisibleAt(timeMs);
+      if (!show) continue;
+      BoneFrame? frame;
+      if (rigPose != null) {
+        frame = rigPose.frameOf(rig!.boneIdForShape(shape.id));
+      }
+      _paintShape(canvas, shape, depth: depth, boneFrame: frame);
+    }
+  }
+
+  void _paintShape(
+    Canvas canvas,
+    VectorShape shape, {
+    required int depth,
+    BoneFrame? boneFrame,
+  }) {
     final x = shape.valueAt(AnimatableProperty.x, timeMs);
     final y = shape.valueAt(AnimatableProperty.y, timeMs);
     final rotation = shape.valueAt(AnimatableProperty.rotation, timeMs);
@@ -123,6 +168,9 @@ class ScenePainter extends CustomPainter {
     final strokeFactor = shape.valueAt(AnimatableProperty.strokeWidth, timeMs);
 
     canvas.save();
+    // Rig maître : l'os emporte la pièce (transformée os(t) ∘ os(repos)⁻¹),
+    // la pose de la forme sert ensuite d'offset de repos.
+    if (boneFrame != null) _applyBoneDelta(canvas, boneFrame);
     canvas.translate(x, y);
     canvas.rotate(rotation);
     canvas.scale(scale <= 0 ? 0.0001 : scale);
@@ -137,6 +185,16 @@ class ScenePainter extends CustomPainter {
     }
 
     canvas.restore();
+  }
+
+  /// Mouvement rigide de l'os entre son repos et l'instant courant :
+  /// `translate(joint_t) · rotate(worldAngle_t) · rotate(−angleRest) ·
+  /// translate(−jointRest)` — identité au repos.
+  void _applyBoneDelta(Canvas canvas, BoneFrame frame) {
+    canvas.translate(frame.joint.dx, frame.joint.dy);
+    canvas.rotate(frame.worldAngle);
+    canvas.rotate(-frame.worldAngleRest);
+    canvas.translate(-frame.jointRest.dx, -frame.jointRest.dy);
   }
 
   /// Instance d'animation : rend le projet source (en boucle) dans la pose de
@@ -176,10 +234,9 @@ class ScenePainter extends CustomPainter {
         Paint()..color = Colors.white.withValues(alpha: opacity),
       );
     }
-    for (final subShape in sub.shapes) {
-      if (!subShape.isVisibleAt(subTime)) continue;
-      _paintShape(canvas, subShape, depth: depth + 1);
-    }
+    // Le sous-projet (vectoriel ou squelette) est rendu à son temps de
+    // boucle ; son rig, s'il en a un, est évalué par _paintProjectShapes.
+    _paintProjectShapes(canvas, sub, subTime, depth: depth + 1);
     if (opacity < 1) canvas.restore();
   }
 

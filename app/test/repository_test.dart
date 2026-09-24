@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:vector_anim_studio/data/project_repository.dart';
 import 'package:vector_anim_studio/models/animation.dart';
+import 'package:vector_anim_studio/models/skeleton.dart';
 
 void main() {
   late Directory tmp;
@@ -169,5 +170,65 @@ void main() {
     expect(instance.embeddedProjectId, 'source-123');
     expect(instance.embeddedWidth, 1080);
     expect(instance.embeddedHeight, 1920);
+  });
+
+  test('un projet squelette persiste son rig (os, pistes, liaisons)', () async {
+    final project = AnimationProject.blank(
+      name: 'Rig rat',
+      type: ProjectType.skeleton,
+    );
+    final piece = VectorShape(
+      name: 'Corps',
+      x: 150,
+      y: 250,
+      startMs: 0,
+      endMs: 1000,
+    );
+    piece.layers.add(ShapeLayer(name: 'L', kind: ShapeKind.rect));
+    project.shapes.add(piece);
+
+    final rig = SkeletonRig(name: 'Rig test');
+    final bone = RigBone(
+      name: 'Torse',
+      offsetX: 150,
+      offsetY: 280,
+      restAngle: 0,
+      length: 60,
+    );
+    rig.addBone(bone);
+    rig.bindShape(piece.id, bone.id);
+    rig.upsertKeyframe(bone.id, 0, 0, easing: EasingKind.linear);
+    rig.upsertKeyframe(bone.id, 1400, 0.9, easing: EasingKind.easeOut);
+    project.skeleton = rig;
+
+    await repository.save(project);
+    final summaries = await repository.listSummaries();
+    expect(summaries.single.type, ProjectType.skeleton);
+
+    final loaded = await repository.load(project.id);
+    expect(loaded.type, ProjectType.skeleton);
+    // Plancher éditable de 4 s : les keyframes (1,4 s) sont en dessous.
+    expect(loaded.durationMs, 4000);
+    final loadedRig = loaded.skeleton!;
+    expect(loadedRig.name, 'Rig test');
+    expect(loadedRig.bones.single.name, 'Torse');
+    expect(loadedRig.bones.single.length, 60);
+    expect(loadedRig.boneIdForShape(piece.id), bone.id);
+    expect(loadedRig.trackOf(bone.id)![1].angleDelta, closeTo(0.9, 1e-9));
+
+    // La duplication emporte le rig avec un id de projet différent.
+    final copy = await repository.duplicate(project.id);
+    expect(copy.type, ProjectType.skeleton);
+    expect(copy.skeleton!.name, 'Rig test');
+    expect(copy.skeleton!.bones.single.id, bone.id);
+    expect(copy.id, isNot(project.id));
+  });
+
+  test('les projets vectoriels créés avant la v4 restent vectoriels', () async {
+    final project = AnimationProject.blank(name: 'Ancien');
+    await repository.save(project);
+    final loaded = await repository.load(project.id);
+    expect(loaded.type, ProjectType.vector);
+    expect(loaded.isSkeleton, isFalse);
   });
 }

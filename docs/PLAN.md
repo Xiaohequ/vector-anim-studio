@@ -14,13 +14,19 @@ Toolchain :
 
 ```
 AnimationProject { id, name, format (portrait/landscape/square), width, height,
-                   fps (fps du dernier export), background, createdAt, updatedAt, coverPath }
+                   fps (fps du dernier export), background, createdAt, updatedAt, coverPath,
+                   type (vector | skeleton), skeleton (rig, JSON) }
  └─ VectorShape   { id, name, startMs, endMs, visible, z,
                      x, y, rotation, scale, opacity, strokeWidth, keyframes }
      ├─ ShapeLayer    { id, name, kind (rect/circle/line/path), x, y, width, height,
      │                  rotation, scale, opacity, strokeWidth, color, filled, points }
      └─ ShapeKeyframe { timeMs, easing, values { x, y, rotation, scale, opacity,
                                                  strokeWidth } }
+
+SkeletonRig (projet de type `skeleton` uniquement, colonne JSON `projects.skeleton`)
+ ├─ RigBone     { id, name, parentId, offsetX, offsetY, restAngle, length }
+ ├─ BoneBinding { shapeId, boneId }              — rig maître : la pièce suit l'os
+ └─ tracks      { boneId → [ BoneKeyframe { timeMs, easing, angleDelta } ] }
 ```
 
 Deux niveaux de transformation : la **forme** (groupe) porte la fenêtre d'affichage
@@ -38,21 +44,54 @@ curseur (**auto-key**), avec un snap de ~8 px sur une pose voisine
 Conséquence assumée : deux presets ne se combinent pas (appliquer un preset remplace les
 poses de la forme), et une pose fige les six propriétés.
 
+## 2 bis. Animation squelette (v0.9.0)
+
+Un projet de type `skeleton` = un personnage : les pièces (formes) sont **toujours
+visibles** (pas de fenêtre d'affichage) et l'animation passe entièrement par le rig.
+
+- **Hiérarchie** : `RigBone.offset` est exprimé dans le repère de repos du parent
+  (origine = articulation du parent, X le long du parent) ; `restAngle` est **relatif**
+  au parent (monde pour la racine). Bouger/tourner un parent entraîne toute la chaîne,
+  au repos comme à l'animation.
+- **Rig maître (2a)** : la pièce liée est rendue sous la transformée
+  `os(t) ∘ os(repos)⁻¹ ∘ pose_forme` — identité au repos. La pose de base de la forme
+  (ses sliders) sert d'offset de repos : RIEN n'est figé à la liaison. Glisser une pièce
+  liée écrit le décalage corrigé par `R(−worldDelta)` pour que la pièce suive le doigt.
+- **FK** (`SkeletonPose.evaluate`) : parents résolus avant enfants ; angle monde =
+  repos en chaîne + delta du parent + delta propre ; keyframes d'os = delta d'angle
+  (même échantillonnage clampé que les poses de forme).
+- **Édition** : glisser l'extrémité d'un os = rotation FK. Sans keyframe → écrit
+  `restAngle` (pose du rig, relative à l'angle monde courant du parent) ; avec
+  keyframes → auto-key de `angleDelta` au curseur (snap ~8 px).
+- **Durée** : `maxKeyframeTimeMs`, avec plancher 4 s tant que le rig a au moins un os
+  (le curseur doit rester déplaçable avant la première keyframe) ; 0 sans rig/os.
+- **Timeline** : une barre verte par piste d'os (`packBoneLanes`, plage
+  première→dernière keyframe) ; appui long = décaler la piste (`shiftTrackTo`,
+  keyframes rabotées à zéro). Pas de poignées de fenêtre.
+- **Overlay rig** : `RigOverlayPainter` en espace écran (segments + articulations +
+  poignées d'extrémité), même `SceneGeometry` que `ScenePainter` (jamais exporté).
+  Hit-test : extrémités d'abord (26 px écran), puis segments (13 px).
+- **0.9.1 prévu** : liaison au niveau couche, import d'un projet squelette comme
+  instance dans un projet vectoriel (le painter sait déjà rendre un sous-projet
+  squelette via `_paintProjectShapes`).
+
 ## 3. Persistance
 
-sqflite, base `vector_anim_studio.db` (schéma v3) dans le dossier documents de l'application.
+sqflite, base `vector_anim_studio.db` (schéma v4) dans le dossier documents de l'application.
 
-- `projects` : métadonnées du projet (dont `cover_path`, `created_at`, `updated_at`)
+- `projects` : métadonnées du projet (dont `cover_path`, `created_at`, `updated_at`,
+  `type` — `vector`/`skeleton` — et `skeleton`, le rig sérialisé en JSON)
 - `shapes` : forme, fenêtre d'affichage, transformation de groupe, ordre (`z`)
 - `layers` : formes basiques rattachées à une forme
 - `shape_keyframes` : poses (`time_ms`, `easing`, `values_json` — les six propriétés)
 - `PRAGMA foreign_keys = ON` + `ON DELETE CASCADE` pour supprimer proprement un projet
 
-Le schéma est en **v3**. `onUpgrade` migre un schéma v1 (`tracks` + `keyframes` par
+Le schéma est en **v4**. `onUpgrade` migre un schéma v1 (`tracks` + `keyframes` par
 propriété) : chaque ancienne keyframe est échantillonnée sur les six propriétés pour
 produire une pose, puis les tables `tracks` / `keyframes` sont supprimées. La v3 ajoute
 les colonnes d'instance d'animation (`embedded_project_id`, `embedded_width`,
-`embedded_height`). Piège SQLite :
+`embedded_height`). La v4 ajoute `type` (défaut `vector`) et `skeleton` (JSON) sur
+`projects` — additif, aucun projet existant n'est modifié. Piège SQLite :
 `values` est un mot réservé, la colonne s'appelle donc `values_json`.
 
 L'écriture est différée de 600 ms côté éditeur (`_scheduleSave`) pour ne pas écrire à chaque frame ; un `flush` a lieu avant chaque export.

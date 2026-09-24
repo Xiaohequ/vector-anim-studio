@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 import 'dart:ui' show Offset;
 
+import 'skeleton.dart';
+
 /// Type de forme basique dessinable dans une couche.
 enum ShapeKind { rect, circle, line, path, triangle, star, hexagon, cross, heart, arrow }
 
@@ -25,6 +27,17 @@ enum EasingKind { linear, easeIn, easeOut, easeInOut, step }
 
 /// Formats de projet proposés à la création.
 enum ProjectFormat { portrait, landscape, square }
+
+/// Type de projet : vectoriel (formes + keyframes de pose, comportement
+/// historique) ou squelette (un rig d'os anime les pièces — rig maître).
+enum ProjectType { vector, skeleton }
+
+extension ProjectTypeInfo on ProjectType {
+  String get label => switch (this) {
+        ProjectType.vector => 'Animation vectorielle',
+        ProjectType.skeleton => 'Animation squelette',
+      };
+}
 
 extension ProjectFormatInfo on ProjectFormat {
   String get label => switch (this) {
@@ -606,6 +619,8 @@ class AnimationProject {
   AnimationProject({
     String? id,
     this.name = 'Nouvelle animation',
+    this.type = ProjectType.vector,
+    this.skeleton,
     this.width = 360,
     this.height = 640,
     this.fps = 30,
@@ -619,6 +634,17 @@ class AnimationProject {
 
   final String id;
   String name;
+
+  /// Type de projet : `vector` (comportement historique) ou `skeleton`
+  /// (un rig d'os anime les pièces du personnage).
+  ProjectType type;
+
+  /// Rig du projet squelette (os, liaisons, pistes d'angle). Null pour un
+  /// projet vectoriel. Sérialisé en JSON dans la colonne `skeleton`.
+  SkeletonRig? skeleton;
+
+  bool get isSkeleton => type == ProjectType.skeleton;
+
   double width;
   double height;
 
@@ -631,11 +657,17 @@ class AnimationProject {
   DateTime? updatedAt;
   final List<VectorShape> shapes;
 
-  /// Durée du projet : le maximum des fins de segments des formes — dernier
-  /// instant d'affichage sur la timeline. La durée n'est PAS définie à la
-  /// création : elle grandit quand une forme dépasse la fin courante et
-  /// rétrécit si la dernière forme est supprimée. Projet vide → 0.
+  /// Durée du projet : pour un projet vectoriel, le maximum des fins de
+  /// segments des formes ; pour un projet squelette, le maximum des temps de
+  /// keyframes d'os (les pièces sont visibles en permanence) — avec un
+  /// plancher de 4 s tant qu'un rig existe, pour que le curseur reste
+  /// déplaçable avant la première keyframe. Projet vide → 0.
   int get durationMs {
+    if (isSkeleton) {
+      final rig = skeleton;
+      if (rig == null || rig.bones.isEmpty) return 0;
+      return math.max(rig.maxKeyframeTimeMs, 4000);
+    }
     var max = 0;
     for (final shape in shapes) {
       if (shape.endMs > max) max = shape.endMs;
@@ -665,6 +697,8 @@ class AnimationProject {
   Map<String, Object?> toJson() => {
         'id': id,
         'name': name,
+        'type': type.name,
+        'skeleton': skeleton?.toJson(),
         'width': width,
         'height': height,
         'durationMs': durationMs,
@@ -680,6 +714,15 @@ class AnimationProject {
       AnimationProject(
         id: json['id'] as String?,
         name: json['name'] as String? ?? 'Projet',
+        type: ProjectType.values.firstWhere(
+          (t) => t.name == json['type'],
+          orElse: () => ProjectType.vector,
+        ),
+        skeleton: json['skeleton'] == null
+            ? null
+            : SkeletonRig.fromJson(
+                (json['skeleton'] as Map).cast<String, Object?>(),
+              ),
         width: (json['width'] as num?)?.toDouble() ?? 360,
         height: (json['height'] as num?)?.toDouble() ?? 640,
         fps: (json['fps'] as num?)?.toInt() ?? 30,
@@ -702,9 +745,11 @@ class AnimationProject {
   static AnimationProject blank({
     String name = 'Nouvelle animation',
     ProjectFormat format = ProjectFormat.portrait,
+    ProjectType type = ProjectType.vector,
   }) =>
       AnimationProject(
         name: name,
+        type: type,
         width: format.width,
         height: format.height,
         createdAt: DateTime.now(),

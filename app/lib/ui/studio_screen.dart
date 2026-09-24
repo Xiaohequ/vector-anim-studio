@@ -11,18 +11,21 @@ import 'package:share_plus/share_plus.dart';
 import '../data/project_repository.dart';
 import '../engine/animation_presets.dart';
 import '../engine/export_service.dart';
+import '../engine/rig_overlay_painter.dart';
 import '../engine/scene_painter.dart';
 import '../engine/selection_geometry.dart';
 import '../engine/timeline_controller.dart';
 import '../engine/timeline_zoom.dart';
 import '../engine/undo_stack.dart';
 import '../models/animation.dart';
+import '../models/skeleton.dart';
+import 'bone_properties_sheet.dart';
 import 'shape_editor_screen.dart';
 import 'shape_properties_sheet.dart';
 import 'timeline_view.dart';
 
 /// Geste en cours sur le canvas.
-enum _CanvasGesture { none, move, scale, rotate }
+enum _CanvasGesture { none, move, scale, rotate, boneRotate }
 
 /// Éditeur d'un projet : canvas, timeline, menus Formes/Animations.
 class StudioScreen extends StatefulWidget {
@@ -67,6 +70,23 @@ class _StudioScreenState extends State<StudioScreen>
   // Option : aimanter la rotation aux multiples de 90° (bouton de la barre).
   bool _snapRotation = false;
 
+  // ------------------------------------------------------------- squelette
+
+  /// Os sélectionné (mode squelette) ; null → aucune sélection d'os.
+  String? _selectedBoneId;
+
+  /// Mode « ajouter un os » : premier tap = articulation, second = extrémité.
+  bool _addBoneMode = false;
+
+  /// Articulation du nouvel os en attente de son extrémité (scène).
+  Offset? _pendingJoint;
+
+  /// Parent de l'os en attente (os sélectionné au moment du premier tap).
+  String? _pendingParentId;
+
+  /// Os en cours de rotation (glisser de son extrémité).
+  String? _dragBoneId;
+
   /// Zoom/défilement de la timeline (mémoire de session, non persisté).
   TimelineZoomState? _zoom;
 
@@ -81,6 +101,11 @@ class _StudioScreenState extends State<StudioScreen>
   Offset _gestureStartPoint = Offset.zero;
 
   VectorShape? get _selected => _project?.shapeById(_selectedId);
+
+  /// Rig du projet squelette courant (null pour un projet vectoriel).
+  SkeletonRig? get _rig => _project?.skeleton;
+
+  RigBone? get _selectedBone => _rig?.boneById(_selectedBoneId);
 
   @override
   void initState() {
@@ -304,6 +329,12 @@ class _StudioScreenState extends State<StudioScreen>
       _selectedId = previous.shapeById(selectedId) != null
           ? selectedId
           : (previous.shapes.isEmpty ? null : previous.shapes.last.id);
+      _selectedBoneId =
+          previous.skeleton?.boneById(_selectedBoneId) != null
+              ? _selectedBoneId
+              : null;
+      _addBoneMode = false;
+      _pendingJoint = null;
       _zoom = TimelineZoomState(durationOf: () => _project!.durationMs);
     });
     // L'ancien controller est désabonné par le rebuild : on le dispose après.
@@ -361,6 +392,7 @@ class _StudioScreenState extends State<StudioScreen>
     _pushUndo();
     setState(() {
       project.shapes.remove(shape);
+      project.skeleton?.unbindShape(shape.id);
       _selectedId = project.shapes.isEmpty ? null : project.shapes.last.id;
     });
     await _flushSave();
@@ -503,6 +535,287 @@ class _StudioScreenState extends State<StudioScreen>
         onKeyframeEasing: _setKeyframeEasing,
         onEditLayers: () => _editShape(shape),
         onOpenSource: () => _openSourceProject(shape),
+        skeletonPiece: project.isSkeleton,
+        skeletonNote: _bindingNote(shape),
+      ),
+    );
+    if (mounted) setState(() {});
+  }
+
+  /// État de liaison d'une pièce au rig, affiché dans sa bottom sheet.
+  String? _bindingNote(VectorShape shape) {
+    final rig = _rig;
+    if (rig == null) return null;
+    final boneId = rig.boneIdForShape(shape.id);
+    final bone = rig.boneById(boneId);
+    return bone == null
+        ? 'Pièce non liée au rig (os : —)'
+        : 'Pièce liée à l’os « ${bone.name} »';
+  }
+
+  // ------------------------------------------------------------- squelette
+
+  /// Crée le rig au premier os (le projet passe en mode squelette animable).
+  void _createRigIfNeeded() {
+    final project = _project;
+    if (project == null || project.skeleton != null) return;
+    project.skeleton = SkeletonRig(name: 'Squelette');
+  }
+
+  void _startAddBone() {
+    setState(() {
+      _addBoneMode = !_addBoneMode;
+      _pendingJoint = null;
+      _pendingParentId = null;
+    });
+    if (_addBoneMode) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Mode rig : touche l’articulation, puis l’extrémité'),
+        ),
+      );
+    }
+  }
+
+  /// Deuxième tap du mode création : crée l'os entre l'articulation en
+  /// attente et le point touché, parenté à l'os sélectionné au premier tap.
+  void _finishAddBone(Offset scenePoint, SceneGeometry geo) {
+    final project = _project;
+    final joint = _pendingJoint;
+    if (project == null || joint == null) return;
+    _pushUndo(); // couvre aussi la création du rig au premier os
+    _createRigIfNeeded();
+    final rig = project.skeleton!;
+    final parent = rig.boneById(_pendingParentId);
+    final parentFrame =
+        SkeletonPose.evaluate(rig, _controller?.timeMs ?? 0)
+            .frameOf(parent?.id);
+    final length = math.max(4.0, (scenePoint - joint).distance);
+    final bone = RigBone(
+      name: 'Os ${rig.bones.length + 1}',
+      parentId: parent?.id,
+      length: length,
+    );
+    bone.restAngle = math.atan2(
+          scenePoint.dy - joint.dy,
+          scenePoint.dx - joint.dx,
+        ) -
+        (parentFrame?.worldAngleRest ?? 0);
+    if (parentFrame == null) {
+      // Racine : articulation en coordonnées projet, angle monde.
+      bone.offsetX = joint.dx;
+      bone.offsetY = joint.dy;
+    } else {
+      // Enfant : offset dans le repère de repos du parent. Le point touché
+      // est exprimé au temps courant : on le ramène dans le repos du parent
+      // (identité quand le parent est au repos, le cas nominal du rigging).
+      final restPoint = parentFrame.jointRest +
+          rotateVector(scenePoint - parentFrame.joint, -parentFrame.worldDelta);
+      final local = rotateVector(
+        restPoint - parentFrame.jointRest,
+        -parentFrame.worldAngleRest,
+      );
+      bone.offsetX = local.dx;
+      bone.offsetY = local.dy;
+    }
+    setState(() {
+      rig.addBone(bone);
+      _selectedBoneId = bone.id;
+      _addBoneMode = false;
+      _pendingJoint = null;
+      _pendingParentId = null;
+    });
+    _scheduleSave();
+  }
+
+  /// Lie la pièce sélectionnée à un os (rig maître : ses sliders deviennent
+  /// l'offset de repos dans le repère de l'os).
+  Future<void> _bindSelectedShape() async {
+    final project = _project;
+    final rig = _rig;
+    final shape = _selected;
+    if (project == null || rig == null || shape == null) return;
+    if (rig.bones.isEmpty) {
+      _snack('Crée d’abord un os (Squelettes ▸ Ajouter un os…)');
+      return;
+    }
+    final picked = await showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: Text('Lier « ${shape.name} » à quel os ?'),
+        children: <Widget>[
+          for (final bone in rig.bones)
+            SimpleDialogOption(
+              onPressed: () => Navigator.of(context).pop(bone.id),
+              child: Text(
+                '${'—' * rig.depthOf(bone.id)} ${bone.name}',
+              ),
+            ),
+        ],
+      ),
+    );
+    if (picked == null || !mounted) return;
+    _pushUndo();
+    setState(() => rig.bindShape(shape.id, picked));
+    await _flushSave();
+    final bone = rig.boneById(picked);
+    _snack('Pièce liée à l’os « ${bone?.name ?? '?'} »');
+  }
+
+  Future<void> _unbindSelectedShape() async {
+    final rig = _rig;
+    final shape = _selected;
+    if (rig == null || shape == null) return;
+    _pushUndo();
+    setState(() => rig.unbindShape(shape.id));
+    await _flushSave();
+  }
+
+  Future<void> _toggleBoneKeyframe() async {
+    final rig = _rig;
+    final bone = _selectedBone;
+    final controller = _controller;
+    if (rig == null || bone == null || controller == null) return;
+    _pushUndo();
+    setState(() => controller.toggleBoneKeyframe(rig, bone));
+    await _flushSave();
+  }
+
+  Future<void> _setBoneEasing(EasingKind easing) async {
+    final rig = _rig;
+    final bone = _selectedBone;
+    final controller = _controller;
+    if (rig == null || bone == null || controller == null) return;
+    final near = controller.nearestBoneKeyframe(rig, bone);
+    if (near == null) return;
+    _pushUndo();
+    setState(() => rig.setKeyframeEasing(bone.id, near.timeMs, easing));
+    await _flushSave();
+  }
+
+  /// Longueur de l'os : slider coalescé en une entrée d'annulation.
+  void _setBoneLength(double value) {
+    final bone = _selectedBone;
+    if (bone == null) return;
+    _pushUndo(tag: 'boneLen:${bone.id}');
+    bone.length = value;
+    _scheduleSave();
+  }
+
+  /// Re-parente l'os (les descendants sont exclus par la sheet).
+  void _setBoneParent(String? parentId) {
+    final rig = _rig;
+    final bone = _selectedBone;
+    if (rig == null || bone == null) return;
+    _pushUndo();
+    setState(() => bone.parentId = parentId);
+    _flushSave();
+  }
+
+  Future<void> _renameBone() async {
+    final bone = _selectedBone;
+    if (bone == null) return;
+    final controller = TextEditingController(text: bone.name);
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Renommer l’os'),
+        content: TextField(controller: controller, autofocus: true),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(controller.text),
+            child: const Text('Valider'),
+          ),
+        ],
+      ),
+    );
+    if (name == null || name.trim().isEmpty || !mounted) return;
+    _pushUndo();
+    setState(() => bone.name = name.trim());
+    await _flushSave();
+  }
+
+  Future<void> _deleteBone() async {
+    final rig = _rig;
+    final bone = _selectedBone;
+    if (rig == null || bone == null) return;
+    Navigator.of(context).pop(); // fermer la sheet
+    _pushUndo();
+    setState(() {
+      rig.removeBone(bone.id);
+      if (_selectedBoneId == bone.id) _selectedBoneId = null;
+    });
+    await _flushSave();
+    _snack('Os supprimé (enfants re-parentés)');
+  }
+
+  Future<void> _renameRig() async {
+    final rig = _rig;
+    if (rig == null) return;
+    final controller = TextEditingController(text: rig.name);
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Renommer le squelette'),
+        content: TextField(controller: controller, autofocus: true),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(controller.text),
+            child: const Text('Valider'),
+          ),
+        ],
+      ),
+    );
+    if (name == null || name.trim().isEmpty || !mounted) return;
+    _pushUndo();
+    setState(() => rig.name = name.trim());
+    await _flushSave();
+  }
+
+  Future<void> _deleteRig() async {
+    final project = _project;
+    if (project == null || project.skeleton == null) return;
+    _pushUndo();
+    setState(() {
+      project.skeleton = null;
+      _selectedBoneId = null;
+      _addBoneMode = false;
+      _pendingJoint = null;
+    });
+    await _flushSave();
+    _snack('Squelette supprimé');
+  }
+
+  /// Bottom sheet « Propriétés de l'os » pour l'os sélectionné.
+  Future<void> _showBoneSheet() async {
+    final rig = _rig;
+    final bone = _selectedBone;
+    final controller = _controller;
+    if (rig == null || bone == null || controller == null) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      backgroundColor: const Color(0xFF151922),
+      builder: (sheetContext) => BonePropertiesSheet(
+        rig: rig,
+        bone: bone,
+        controller: controller,
+        onLengthChanged: _setBoneLength,
+        onParentChanged: _setBoneParent,
+        onRenameBone: _renameBone,
+        onDeleteBone: _deleteBone,
+        onToggleKeyframe: _toggleBoneKeyframe,
+        onKeyframeEasing: _setBoneEasing,
       ),
     );
     if (mounted) setState(() {});
@@ -531,6 +844,21 @@ class _StudioScreenState extends State<StudioScreen>
     _gestureMutated = true;
   }
 
+  /// Os portant la forme en cours de geste (composition rig), capturé au
+  /// début du geste : le delta monde de l'os est constant pendant le geste.
+  BoneFrame? _gestureBoneFrame;
+
+  /// Os portant une forme (rig maître) — évalué au temps courant.
+  BoneFrame? _frameForShape(
+    AnimationProject project,
+    VectorShape shape,
+    int timeMs,
+  ) {
+    if (!project.isSkeleton || project.skeleton == null) return null;
+    return SkeletonPose.evaluate(project.skeleton!, timeMs)
+        .frameOf(project.skeleton!.boneIdForShape(shape.id));
+  }
+
   void _onCanvasGestureStart(
     ScaleStartDetails details,
     AnimationProject project,
@@ -538,6 +866,32 @@ class _StudioScreenState extends State<StudioScreen>
     Size canvasSize,
   ) {
     _gestureStartPoint = details.localFocalPoint;
+    // Mode création d'os : aucun geste de transformation, des taps seulement.
+    if (_addBoneMode) {
+      _gesture = _CanvasGesture.none;
+      return;
+    }
+    // Priorité rig : extrémité (ou segment) d'os proche → rotation de l'os.
+    final rig = project.skeleton;
+    if (project.isSkeleton && rig != null && rig.bones.isNotEmpty) {
+      final pose = SkeletonPose.evaluate(rig, controller.timeMs);
+      final geo = SceneGeometry.fitFor(project, canvasSize);
+      final boneId = RigOverlayPainter.hitBone(
+        pose,
+        rig,
+        geo,
+        details.localFocalPoint,
+      );
+      if (boneId != null) {
+        _gesture = _CanvasGesture.boneRotate;
+        _dragBoneId = boneId;
+        _gestureBoneFrame = null;
+        _gestureUndo = AnimationProject.fromJson(project.toJson());
+        _gestureMutated = false;
+        setState(() => _selectedBoneId = boneId);
+        return;
+      }
+    }
     final shape = _selected;
     final bounds = shape == null
         ? null
@@ -547,7 +901,12 @@ class _StudioScreenState extends State<StudioScreen>
       return;
     }
     final geo = SceneGeometry.fitFor(project, canvasSize);
-    final pose = SelectionGeometry.shapePose(shape, controller.timeMs);
+    _gestureBoneFrame = _frameForShape(project, shape, controller.timeMs);
+    final pose = SelectionGeometry.shapePoseWithRig(
+      shape,
+      controller.timeMs,
+      _gestureBoneFrame,
+    );
     if (_activePointers >= 2) {
       // Pinch : échelle de la forme sélectionnée.
       _gesture = _CanvasGesture.scale;
@@ -592,23 +951,72 @@ class _StudioScreenState extends State<StudioScreen>
     Size canvasSize,
   ) {
     final shape = _selected;
-    if (shape == null || _gesture == _CanvasGesture.none) return;
+    if (_gesture == _CanvasGesture.none) return;
+    if (shape == null && _gesture != _CanvasGesture.boneRotate) return;
     switch (_gesture) {
+      case _CanvasGesture.boneRotate:
+        final rig = project.skeleton;
+        final bone = rig?.boneById(_dragBoneId);
+        if (rig == null || bone == null) break;
+        final pose = SkeletonPose.evaluate(rig, controller.timeMs);
+        final frame = pose.frameOf(bone.id);
+        if (frame == null) break;
+        final geo = SceneGeometry.fitFor(project, canvasSize);
+        final scene = geo.canvasToScene(details.localFocalPoint);
+        var desired = math.atan2(
+          scene.dy - frame.joint.dy,
+          scene.dx - frame.joint.dx,
+        );
+        if (_snapRotation) desired = _snapAngle(desired);
+        final parentFrame = pose.frameOf(bone.parentId);
+        if (rig.hasKeyframes(bone.id)) {
+          // Auto-key : pose d'angle au curseur (snap sur une keyframe proche).
+          final target = rig
+                  .keyframeNear(
+                    bone.id,
+                    controller.timeMs,
+                    controller.snapToleranceMs,
+                  )
+                  ?.timeMs ??
+              controller.timeMs;
+          rig.upsertKeyframe(
+            bone.id,
+            target,
+            desired - frame.worldAngleRest - (parentFrame?.worldDelta ?? 0),
+          );
+        } else {
+          // Rig non animé : glisser = poser le rig (angle de repos relatif
+          // au parent, évalué au temps courant pour suivre le doigt).
+          bone.restAngle = desired - (parentFrame?.worldAngle ?? 0);
+        }
+        _gestureMutated = true;
       case _CanvasGesture.move:
         final geo = SceneGeometry.fitFor(project, canvasSize);
         final sceneDelta = geo.canvasToScene(details.localFocalPoint) -
             geo.canvasToScene(_gestureStartPoint);
-        _applyGestureValue(shape, controller, AnimatableProperty.x,
-            _gestureBaseX + sceneDelta.dx);
-        _applyGestureValue(shape, controller, AnimatableProperty.y,
-            _gestureBaseY + sceneDelta.dy);
+        var dx = _gestureBaseX + sceneDelta.dx;
+        var dy = _gestureBaseY + sceneDelta.dy;
+        // Pièce liée à un os : écrire le décalage dans le repère de repos
+        // pour que la pièce suive exactement le doigt dans le monde.
+        final frame = _gestureBoneFrame;
+        if (frame != null && frame.worldDelta != 0) {
+          final corrected = rotateVector(sceneDelta, -frame.worldDelta);
+          dx = _gestureBaseX + corrected.dx;
+          dy = _gestureBaseY + corrected.dy;
+        }
+        _applyGestureValue(shape!, controller, AnimatableProperty.x, dx);
+        _applyGestureValue(shape, controller, AnimatableProperty.y, dy);
       case _CanvasGesture.scale:
         final next = (_gestureBaseScale * details.scale).clamp(0.05, 4.0);
         _applyGestureValue(
-            shape, controller, AnimatableProperty.scale, next.toDouble());
+            shape!, controller, AnimatableProperty.scale, next.toDouble());
       case _CanvasGesture.rotate:
         final geo = SceneGeometry.fitFor(project, canvasSize);
-        final pose = SelectionGeometry.shapePose(shape, controller.timeMs);
+        final pose = SelectionGeometry.shapePoseWithRig(
+          shape!,
+          controller.timeMs,
+          _gestureBoneFrame,
+        );
         final center = SelectionGeometry.center(pose, geo);
         final angle = math.atan2(
           details.localFocalPoint.dy - center.dy,
@@ -641,10 +1049,14 @@ class _StudioScreenState extends State<StudioScreen>
       _scheduleSave();
     }
     _gestureUndo = null;
+    _gestureBoneFrame = null;
+    _dragBoneId = null;
     _gesture = _CanvasGesture.none;
   }
 
-  /// Tap sur une forme : la sélectionne (du premier plan vers l'arrière-plan).
+  /// Tap sur le canvas : en mode rig (création d'os) tap 1 = articulation,
+  /// tap 2 = extrémité ; sinon sélection d'os (extrémités/segments) puis
+  /// sélection de forme (du premier plan vers l'arrière-plan).
   void _onCanvasTapUp(
     TapUpDetails details,
     AnimationProject project,
@@ -652,13 +1064,65 @@ class _StudioScreenState extends State<StudioScreen>
     Size canvasSize,
   ) {
     final geo = SceneGeometry.fitFor(project, canvasSize);
+    if (_addBoneMode) {
+      final scene = geo.canvasToScene(details.localPosition);
+      if (_pendingJoint == null) {
+        // Premier tap : le parent = os sélectionné ; si le tap tombe sur une
+        // extrémité d'os, elle devient l'articulation (chaînes naturelles).
+        String? parent = _selectedBoneId;
+        var joint = scene;
+        final rig = project.skeleton;
+        if (rig != null && rig.bones.isNotEmpty) {
+          final pose = SkeletonPose.evaluate(rig, controller.timeMs);
+          for (final bone in rig.bones.reversed) {
+            final frame = pose.frameOf(bone.id);
+            if (frame == null) continue;
+            final tip = geo.sceneToCanvas(frame.tip);
+            if ((details.localPosition - tip).distance <=
+                RigOverlayPainter.tipTouchSlop) {
+              parent = bone.id;
+              joint = frame.tip;
+              break;
+            }
+          }
+        }
+        setState(() {
+          _pendingJoint = joint;
+          _pendingParentId = parent;
+        });
+        return;
+      }
+      _finishAddBone(scene, geo);
+      return;
+    }
+    // Sélection d'os d'abord (mode squelette).
+    final rig = project.skeleton;
+    if (project.isSkeleton && rig != null && rig.bones.isNotEmpty) {
+      final pose = SkeletonPose.evaluate(rig, controller.timeMs);
+      final boneId = RigOverlayPainter.hitBone(
+        pose,
+        rig,
+        geo,
+        details.localPosition,
+      );
+      if (boneId != null) {
+        setState(() => _selectedBoneId = boneId);
+        return;
+      }
+    }
     for (final shape in project.shapes.reversed) {
-      if (!shape.isVisibleAt(controller.timeMs)) continue;
+      final show =
+          project.isSkeleton ? shape.visible : shape.isVisibleAt(controller.timeMs);
+      if (!show) continue;
       final bounds = ScenePainter.shapeBounds(shape, controller.timeMs);
       if (bounds == null) continue;
       if (SelectionGeometry.hit(
         bounds,
-        SelectionGeometry.shapePose(shape, controller.timeMs),
+        SelectionGeometry.shapePoseWithRig(
+          shape,
+          controller.timeMs,
+          _frameForShape(project, shape, controller.timeMs),
+        ),
         geo,
         details.localPosition,
       )) {
@@ -929,7 +1393,8 @@ class _StudioScreenState extends State<StudioScreen>
                       painter: ScenePainter(
                         project: project,
                         timeMs: controller.timeMs,
-                        selectedShapeId: _selectedId,
+                        selectedShapeId:
+                            _addBoneMode ? null : _selectedId,
                         showFrame: true,
                         embeddedProjects: _embedded,
                       ),
@@ -938,7 +1403,27 @@ class _StudioScreenState extends State<StudioScreen>
                   ),
                 ),
               ),
-              if (shape != null && shape.isVisibleAt(controller.timeMs))
+              if (project.isSkeleton && project.skeleton != null)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: CustomPaint(
+                      painter: RigOverlayPainter(
+                        rig: project.skeleton!,
+                        pose: SkeletonPose.evaluate(
+                          project.skeleton!,
+                          controller.timeMs,
+                        ),
+                        geo: SceneGeometry.fitFor(project, canvasSize),
+                        selectedBoneId: _selectedBoneId,
+                      ),
+                    ),
+                  ),
+                ),
+              if (!_addBoneMode &&
+                  shape != null &&
+                  (project.isSkeleton
+                      ? shape.visible
+                      : shape.isVisibleAt(controller.timeMs)))
                 _buildPropertiesButton(shape, controller, canvasSize),
             ],
           );
@@ -1069,6 +1554,22 @@ class _StudioScreenState extends State<StudioScreen>
                         setState(() => shape.removeKeyframeAt(timeMs));
                         _scheduleSave();
                       },
+                      skeletonRig:
+                          project.isSkeleton ? project.skeleton : null,
+                      selectedBoneId: _selectedBoneId,
+                      onSelectBone: (bone) =>
+                          setState(() => _selectedBoneId = bone.id),
+                      onBoneMoveChanged: (bone, target) {
+                        setState(() =>
+                            project.skeleton!.shiftTrackTo(bone.id, target));
+                      },
+                      onBoneMoveEnd: (_) => _scheduleSave(),
+                      onBoneGestureStart: (_) => _pushUndo(),
+                      onDeleteBoneKeyframe: (bone, timeMs) {
+                        setState(() =>
+                            project.skeleton!.removeKeyframeAt(bone.id, timeMs));
+                        _scheduleSave();
+                      },
                       onZoomChanged: () => setState(() {}),
                     ),
                   ),
@@ -1079,9 +1580,19 @@ class _StudioScreenState extends State<StudioScreen>
   }
 
   Widget _buildPlaybar(TimelineController controller) {
+    final project = _project;
+    final skeleton = project?.isSkeleton ?? false;
+    final rig = _rig;
     final shape = _selected;
+    final bone = _selectedBone;
     final keyframe = shape == null ? null : controller.nearestKeyframe(shape);
-    final hasKeyframes = shape?.hasKeyframes ?? false;
+    final boneKeyframe = skeleton && rig != null && bone != null
+        ? controller.nearestBoneKeyframe(rig, bone)
+        : null;
+    final hasKeyframes = skeleton
+        ? (rig != null && bone != null && rig.hasKeyframes(bone.id))
+        : (shape?.hasKeyframes ?? false);
+    final diamondKeyframe = skeleton ? boneKeyframe : keyframe;
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 2, 12, 2),
       child: Row(
@@ -1092,33 +1603,48 @@ class _StudioScreenState extends State<StudioScreen>
             onPressed: _undoStack.canUndo ? _undo : null,
             icon: const Icon(Icons.undo),
           ),
-          IconButton(
-            tooltip: 'Retour au début',
-            onPressed: controller.rewind,
-            icon: const Icon(Icons.skip_previous),
-          ),
-          IconButton.filledTonal(
-            onPressed: () {
-              controller.togglePlay();
-              _syncTicker();
-            },
-            icon: Icon(controller.playing ? Icons.pause : Icons.play_arrow),
-          ),
-          IconButton(
-            tooltip: keyframe == null
-                ? 'Ajouter une keyframe au curseur'
-                : 'Retirer la keyframe au curseur',
-            onPressed: _toggleKeyframe,
-            icon: Icon(
-              keyframe == null ? Icons.diamond_outlined : Icons.diamond,
-              color: hasKeyframes ? const Color(0xFFF2C94C) : null,
+          if (_addBoneMode)
+            IconButton(
+              tooltip: 'Terminer le mode rig',
+              onPressed: _startAddBone,
+              icon: const Icon(
+                Icons.check_circle,
+                color: Color(0xFF3ECF8E),
+              ),
+            )
+          else ...<Widget>[
+            IconButton(
+              tooltip: 'Retour au début',
+              onPressed: controller.rewind,
+              icon: const Icon(Icons.skip_previous),
             ),
-          ),
-          IconButton(
-            tooltip: 'Boucle',
-            onPressed: () => controller.setLoop(!controller.loop),
-            icon: Icon(controller.loop ? Icons.repeat_on : Icons.repeat),
-          ),
+            IconButton.filledTonal(
+              onPressed: () {
+                controller.togglePlay();
+                _syncTicker();
+              },
+              icon: Icon(controller.playing ? Icons.pause : Icons.play_arrow),
+            ),
+            IconButton(
+              tooltip: diamondKeyframe == null
+                  ? (skeleton
+                      ? 'Ajouter une keyframe d’angle à l’os au curseur'
+                      : 'Ajouter une keyframe au curseur')
+                  : 'Retirer la keyframe au curseur',
+              onPressed: skeleton ? _toggleBoneKeyframe : _toggleKeyframe,
+              icon: Icon(
+                diamondKeyframe == null
+                    ? Icons.diamond_outlined
+                    : Icons.diamond,
+                color: hasKeyframes ? const Color(0xFFF2C94C) : null,
+              ),
+            ),
+            IconButton(
+              tooltip: 'Boucle',
+              onPressed: () => controller.setLoop(!controller.loop),
+              icon: Icon(controller.loop ? Icons.repeat_on : Icons.repeat),
+            ),
+          ],
           IconButton(
             tooltip: 'Snap rotation 90°',
             isSelected: _snapRotation,
@@ -1131,18 +1657,19 @@ class _StudioScreenState extends State<StudioScreen>
     );
   }
 
-  /// Barre d'outils en bas : menus Formes, Animations, Calques.
+  /// Barre d'outils en bas : menus Formes, Animations (ou Squelettes),
+  /// Calques.
   Widget _buildToolbar(AnimationProject project) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
       child: Row(
         children: <Widget>[
           _shapesMenu(project),
-          _animationsMenu(),
+          project.isSkeleton ? _skeletonsMenu(project) : _animationsMenu(),
           _layersMenu(project),
           const Spacer(),
           Text(
-            '${project.shapes.length} forme(s)',
+            '${project.shapes.length} ${project.isSkeleton ? 'pièce(s)' : 'forme(s)'}',
             style: const TextStyle(fontSize: 12),
           ),
         ],
@@ -1187,15 +1714,18 @@ class _StudioScreenState extends State<StudioScreen>
             title: Text('Ajouter une forme…'),
           ),
         ),
-        const PopupMenuItem<String>(
-          value: 'insert_anim',
-          child: ListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            leading: Icon(Icons.movie_outlined),
-            title: Text('Insérer une animation…'),
+        // Projet squelette : pas d'instances imbriquées (0.9 — l'import
+        // d'animation squelette dans le vectoriel arrive en 0.9.1).
+        if (!project.isSkeleton)
+          const PopupMenuItem<String>(
+            value: 'insert_anim',
+            child: ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.movie_outlined),
+              title: Text('Insérer une animation…'),
+            ),
           ),
-        ),
         const PopupMenuDivider(),
         if (project.shapes.isEmpty)
           const PopupMenuItem<String>(
@@ -1300,6 +1830,102 @@ class _StudioScreenState extends State<StudioScreen>
         const PopupMenuItem<String>(
           value: 'clear',
           child: Text('Effacer toutes les animations'),
+        ),
+      ],
+    );
+  }
+
+  /// Menu « Squelettes » (projet squelette) : création d'os, liaison des
+  /// pièces, sélection d'os, propriétés.
+  Widget _skeletonsMenu(AnimationProject project) {
+    final rig = project.skeleton;
+    final bone = _selectedBone;
+    final bound = _selected != null && (rig?.isBound(_selectedId!) ?? false);
+    return PopupMenuButton<String>(
+      tooltip: 'Squelettes',
+      icon: const Icon(Icons.accessibility_new),
+      onSelected: (value) {
+        if (value == 'add_bone') {
+          _startAddBone();
+        } else if (value == 'bind') {
+          _bindSelectedShape();
+        } else if (value == 'unbind') {
+          _unbindSelectedShape();
+        } else if (value == 'bone_props') {
+          _showBoneSheet();
+        } else if (value == 'rename_rig') {
+          _renameRig();
+        } else if (value == 'delete_rig') {
+          _deleteRig();
+        } else if (value.startsWith('select:')) {
+          setState(() {
+            _selectedBoneId = value.substring(7);
+            _addBoneMode = false;
+            _pendingJoint = null;
+          });
+        }
+      },
+      itemBuilder: (context) => <PopupMenuEntry<String>>[
+        PopupMenuItem<String>(
+          value: 'add_bone',
+          child: Text(_addBoneMode ? 'Terminer le mode rig' : 'Ajouter un os…'),
+        ),
+        PopupMenuItem<String>(
+          value: 'bind',
+          enabled: _selected != null && rig != null && rig.bones.isNotEmpty,
+          child: const Text('Lier la pièce à un os…'),
+        ),
+        PopupMenuItem<String>(
+          value: 'unbind',
+          enabled: bound,
+          child: const Text('Délier la pièce'),
+        ),
+        const PopupMenuDivider(),
+        if (rig == null || rig.bones.isEmpty)
+          const PopupMenuItem<String>(
+            enabled: false,
+            value: 'none',
+            child: Text('Aucun os'),
+          ),
+        for (final candidate in rig?.orderedParentsFirst() ?? const <RigBone>[])
+          PopupMenuItem<String>(
+            value: 'select:${candidate.id}',
+            child: ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(
+                candidate.id == _selectedBoneId
+                    ? Icons.check_circle
+                    : Icons.radio_button_unchecked,
+                size: 18,
+              ),
+              title: Text(
+                '${'\u2500' * rig!.depthOf(candidate.id)} ${candidate.name}',
+              ),
+              subtitle: Text(
+                rig.hasKeyframes(candidate.id)
+                    ? '${rig.trackOf(candidate.id)!.length} keyframe(s) · '
+                        '${candidate.length.round()} px'
+                    : 'repos · ${candidate.length.round()} px',
+                style: const TextStyle(fontSize: 11),
+              ),
+            ),
+          ),
+        const PopupMenuDivider(),
+        PopupMenuItem<String>(
+          value: 'bone_props',
+          enabled: bone != null,
+          child: const Text('Propriétés de l’os…'),
+        ),
+        PopupMenuItem<String>(
+          value: 'rename_rig',
+          enabled: rig != null,
+          child: const Text('Renommer le squelette…'),
+        ),
+        PopupMenuItem<String>(
+          value: 'delete_rig',
+          enabled: rig != null,
+          child: const Text('Supprimer le squelette'),
         ),
       ],
     );

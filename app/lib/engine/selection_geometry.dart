@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:ui' show Offset, Rect, Size;
 
 import '../models/animation.dart';
+import '../models/skeleton.dart';
 
 /// Pose d'un objet en coordonnées scène : origine (centre de rotation et
 /// d'échelle), rotation (radians), échelle. Sert autant pour une forme que
@@ -93,6 +94,28 @@ class SelectionGeometry {
         rotation: shape.valueAt(AnimatableProperty.rotation, timeMs),
         scale: shape.valueAt(AnimatableProperty.scale, timeMs),
       );
+
+  /// Pose d'une forme liée à un os : composition `os(t) ∘ os(repos)⁻¹ ∘ pose`.
+  /// Le mouvement de l'os (rigide) emporte l'origine de la forme (elle orbite
+  /// l'articulation) et s'ajoute à sa rotation ; l'échelle passe inchangée.
+  /// Sans os (ou hors rig), équivalent à [shapePose].
+  static Pose2D shapePoseWithRig(
+    VectorShape shape,
+    int timeMs,
+    BoneFrame? frame,
+  ) {
+    if (frame == null) return shapePose(shape, timeMs);
+    final origin = Offset(
+      shape.valueAt(AnimatableProperty.x, timeMs),
+      shape.valueAt(AnimatableProperty.y, timeMs),
+    );
+    return Pose2D(
+      origin: frame.mapPoint(origin),
+      rotation: shape.valueAt(AnimatableProperty.rotation, timeMs) +
+          frame.worldDelta,
+      scale: shape.valueAt(AnimatableProperty.scale, timeMs),
+    );
+  }
 
   /// Pose d'une couche : composition de la transforme de la forme ∘ couche.
   /// L'origine de la couche (son centre, positionné par layer.x/y dans le

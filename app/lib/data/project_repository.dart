@@ -6,12 +6,14 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
 import '../models/animation.dart';
+import '../models/skeleton.dart';
 
 /// Résumé de projet affiché sur l'écran d'accueil.
 class ProjectSummary {
   const ProjectSummary({
     required this.id,
     required this.name,
+    this.type = ProjectType.vector,
     required this.width,
     required this.height,
     required this.durationMs,
@@ -22,6 +24,7 @@ class ProjectSummary {
 
   final String id;
   final String name;
+  final ProjectType type;
   final double width;
   final double height;
   final int durationMs;
@@ -41,7 +44,9 @@ class ProjectRepository {
   static const String fileName = 'vector_anim_studio.db';
 
   /// v2 : les keyframes sont des « poses » (toutes les propriétés à un temps).
-  static const int schemaVersion = 3;
+  /// v3 : instances d'animation (colonnes embedded_*). v4 : type de projet
+  /// (vector/skeleton) + rig squelette sérialisé en JSON sur la ligne projet.
+  static const int schemaVersion = 4;
 
   final DatabaseFactory _factory;
   final String? databasePath;
@@ -63,6 +68,8 @@ class ProjectRepository {
             CREATE TABLE projects (
               id TEXT PRIMARY KEY,
               name TEXT NOT NULL,
+              type TEXT NOT NULL DEFAULT 'vector',
+              skeleton TEXT,
               width REAL NOT NULL,
               height REAL NOT NULL,
               duration_ms INTEGER NOT NULL,
@@ -137,6 +144,7 @@ class ProjectRepository {
         onUpgrade: (db, oldVersion, newVersion) async {
           if (oldVersion < 2) await _migrateKeysToPoses(db);
           if (oldVersion < 3) await _addEmbeddedColumns(db);
+          if (oldVersion < 4) await _addTypeAndSkeletonColumns(db);
         },
       ),
     );
@@ -151,6 +159,15 @@ class ProjectRepository {
     await db.execute(
       'ALTER TABLE shapes ADD COLUMN embedded_height REAL NOT NULL DEFAULT 0',
     );
+  }
+
+  /// Schéma v3 → v4 : type de projet + rig squelette (JSON). Additif : les
+  /// projets existants restent des projets vectoriels (défaut).
+  Future<void> _addTypeAndSkeletonColumns(Database db) async {
+    await db.execute(
+      "ALTER TABLE projects ADD COLUMN type TEXT NOT NULL DEFAULT 'vector'",
+    );
+    await db.execute('ALTER TABLE projects ADD COLUMN skeleton TEXT');
   }
 
   /// Schéma v1 → v2 : les pistes par propriété sont regroupées en poses.
@@ -295,7 +312,7 @@ class ProjectRepository {
   Future<List<ProjectSummary>> listSummaries() async {
     final db = await database;
     final rows = await db.rawQuery('''
-      SELECT p.id, p.name, p.width, p.height, p.duration_ms, p.fps, p.updated_at,
+      SELECT p.id, p.name, p.type, p.width, p.height, p.duration_ms, p.fps, p.updated_at,
              (SELECT COUNT(*) FROM shapes s WHERE s.project_id = p.id) AS shape_count
       FROM projects p
       ORDER BY COALESCE(p.updated_at, 0) DESC
@@ -305,6 +322,10 @@ class ProjectRepository {
           (row) => ProjectSummary(
             id: row['id'] as String,
             name: row['name'] as String,
+            type: ProjectType.values.firstWhere(
+              (t) => t.name == row['type'],
+              orElse: () => ProjectType.vector,
+            ),
             width: (row['width'] as num).toDouble(),
             height: (row['height'] as num).toDouble(),
             durationMs: (row['duration_ms'] as num).toInt(),
@@ -341,6 +362,16 @@ class ProjectRepository {
     final project = AnimationProject(
       id: projectRow['id'] as String,
       name: projectRow['name'] as String,
+      type: ProjectType.values.firstWhere(
+        (t) => t.name == projectRow['type'],
+        orElse: () => ProjectType.vector,
+      ),
+      skeleton: projectRow['skeleton'] == null
+          ? null
+          : SkeletonRig.fromJson(
+              jsonDecode(projectRow['skeleton'] as String)
+                  as Map<String, Object?>,
+            ),
       width: (projectRow['width'] as num).toDouble(),
       height: (projectRow['height'] as num).toDouble(),
       fps: (projectRow['fps'] as num).toInt(),
@@ -436,6 +467,9 @@ class ProjectRepository {
       final values = <String, Object?>{
         'id': project.id,
         'name': project.name,
+        'type': project.type.name,
+        'skeleton':
+            project.skeleton == null ? null : jsonEncode(project.skeleton!.toJson()),
         'width': project.width,
         'height': project.height,
         'duration_ms': project.durationMs,
@@ -565,11 +599,13 @@ class ProjectRepository {
     );
   }
 
-  /// Duplique un projet et toutes ses formes.
+  /// Duplique un projet et toutes ses formes (et son rig pour un squelette).
   Future<AnimationProject> duplicate(String id) async {
     final source = await load(id);
     final copy = AnimationProject(
       name: '${source.name} (copie)',
+      type: source.type,
+      skeleton: source.skeleton?.copy(),
       width: source.width,
       height: source.height,
       fps: source.fps,

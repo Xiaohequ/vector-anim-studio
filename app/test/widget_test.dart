@@ -4,6 +4,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:vector_anim_studio/data/project_repository.dart';
 import 'package:vector_anim_studio/main.dart';
 import 'package:vector_anim_studio/models/animation.dart';
+import 'package:vector_anim_studio/models/skeleton.dart';
 import 'package:vector_anim_studio/ui/studio_screen.dart';
 
 /// Dépôt en mémoire pour les tests de widgets.
@@ -174,5 +175,82 @@ void main() {
     await tester.pumpAndSettle();
     expect(undoButton().onPressed, isNull);
     expect(find.text('Forme 1'), findsNothing);
+  });
+
+  testWidgets('le dialogue de création propose vectorielle ou squelette',
+      (tester) async {
+    await tester.pumpWidget(VectorAnimStudioApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Nouveau projet'));
+    await tester.pumpAndSettle();
+    expect(find.text('Vectorielle'), findsOneWidget);
+    expect(find.text('Squelette'), findsOneWidget);
+
+    // Créer un projet squelette : le studio s'ouvre en mode squelette.
+    await tester.tap(find.text('Squelette'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, 'Rat rig');
+    await tester.tap(find.widgetWithText(FilledButton, 'Créer'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Rat rig'), findsWidgets);
+    expect(find.byTooltip('Squelettes'), findsOneWidget);
+    expect(find.byTooltip('Animations'), findsNothing);
+  });
+
+  testWidgets('le ◆ du playbar anime l’os sélectionné (projet squelette)',
+      (tester) async {
+    final project = AnimationProject.blank(
+      name: 'Rat',
+      type: ProjectType.skeleton,
+    );
+    final piece = VectorShape(name: 'Bloc', startMs: 0, endMs: 2000);
+    piece.layers.add(ShapeLayer(name: 'L', kind: ShapeKind.rect));
+    project.shapes.add(piece);
+    final rig = SkeletonRig(name: 'Rig');
+    final bone = RigBone(name: 'Queue', offsetX: 180, offsetY: 320, length: 50);
+    rig.addBone(bone);
+    rig.bindShape(piece.id, bone.id);
+    project.skeleton = rig;
+
+    await pumpStudio(tester, repository, project);
+
+    // Sélectionner l'os via le menu Squelettes.
+    await tester.tap(find.byTooltip('Squelettes'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('Queue').last);
+    await tester.pumpAndSettle();
+
+    // ◆ au curseur (0 s) : la piste de l'os reçoit sa première keyframe.
+    await tester.tap(find.byTooltip('Ajouter une keyframe d’angle à l’os au curseur'));
+    await tester.pumpAndSettle();
+    expect(project.skeleton!.hasKeyframes(bone.id), isTrue);
+    expect(project.skeleton!.trackOf(bone.id)!.single.timeMs, 0);
+
+    // Second appui au même endroit : la keyframe est retirée.
+    await tester.tap(find.byTooltip('Retirer la keyframe au curseur'));
+    await tester.pumpAndSettle();
+    expect(project.skeleton!.hasKeyframes(bone.id), isFalse);
+  });
+
+  testWidgets('un projet squelette affiche une barre d’os sur la timeline',
+      (tester) async {
+    final project = AnimationProject.blank(
+      name: 'Rat',
+      type: ProjectType.skeleton,
+    );
+    final rig = SkeletonRig();
+    final bone = RigBone(name: 'Queue');
+    rig.addBone(bone);
+    rig.upsertKeyframe(bone.id, 500, 0.2);
+    rig.upsertKeyframe(bone.id, 1500, 0.4);
+    project.skeleton = rig;
+
+    await pumpStudio(tester, repository, project);
+
+    expect(find.textContaining('\u{1F9B4} Queue'), findsOneWidget);
+    // Les barres de formes n'existent pas en mode squelette.
+    expect(find.textContaining('\u{1F3AC}'), findsNothing);
   });
 }

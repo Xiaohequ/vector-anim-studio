@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../models/animation.dart';
+import '../models/skeleton.dart';
 
 /// État de lecture de la timeline : temps courant, boucle, play/pause.
 class TimelineController extends ChangeNotifier {
@@ -86,4 +87,21 @@ class TimelineController extends ChangeNotifier {
 
   bool hasKeyframeAtPlayhead(VectorShape shape) =>
       nearestKeyframe(shape) != null;
+
+  /// Keyframe d'angle la plus proche du curseur pour un os.
+  BoneKeyframe? nearestBoneKeyframe(SkeletonRig rig, RigBone bone) =>
+      rig.keyframeNear(bone.id, _timeMs, snapToleranceMs);
+
+  /// Ajoute une keyframe d'angle à l'os au curseur (valeur échantillonnée
+  /// courante), ou la retire si le curseur est dessus — mêmes sémantiques
+  /// de toggle que pour une pose de forme.
+  void toggleBoneKeyframe(SkeletonRig rig, RigBone bone) {
+    final near = nearestBoneKeyframe(rig, bone);
+    if (near != null) {
+      rig.removeKeyframeAt(bone.id, near.timeMs);
+    } else {
+      rig.upsertKeyframe(bone.id, _timeMs, rig.angleDeltaAt(bone.id, _timeMs));
+    }
+    notifyListeners();
+  }
 }

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../engine/timeline_layout.dart';
 import '../engine/timeline_zoom.dart';
 import '../models/animation.dart';
+import '../models/skeleton.dart';
 
 /// Timeline : une ligne par piste d'affichage, un rectangle par forme.
 ///
@@ -29,6 +30,13 @@ class TimelineView extends StatefulWidget {
     required this.onDeleteKeyframe,
     required this.onZoomChanged,
     required this.onGestureStart,
+    this.skeletonRig,
+    this.selectedBoneId,
+    this.onSelectBone,
+    this.onBoneMoveChanged,
+    this.onBoneMoveEnd,
+    this.onBoneGestureStart,
+    this.onDeleteBoneKeyframe,
   });
 
   final AnimationProject project;
@@ -56,6 +64,19 @@ class TimelineView extends StatefulWidget {
   /// y prend le snapshot d'annulation AVANT modification.
   final void Function(VectorShape shape) onGestureStart;
 
+  /// Mode squelette : rig du projet — une barre par os animé remplace les
+  /// barres de formes. Null → comportement vectoriel historique.
+  final SkeletonRig? skeletonRig;
+  final String? selectedBoneId;
+  final ValueChanged<RigBone>? onSelectBone;
+
+  /// Déplace la piste d'os : [targetFirstMs] = nouveau temps de la première
+  /// keyframe (décalage relatif, keyframes rabotées à zéro).
+  final void Function(RigBone bone, int targetFirstMs)? onBoneMoveChanged;
+  final ValueChanged<RigBone>? onBoneMoveEnd;
+  final void Function(RigBone bone)? onBoneGestureStart;
+  final void Function(RigBone bone, int timeMs)? onDeleteBoneKeyframe;
+
   static const double rulerHeight = 20;
   static const double laneHeight = 30;
   static const int minSpanMs = 100;
@@ -78,6 +99,10 @@ class _TimelineViewState extends State<TimelineView> {
   VectorShape? _movingShape;
   int _movingOriginMs = 0;
 
+  /// Piste d'os en cours de déplacement (appui long, mode squelette).
+  RigBone? _movingBone;
+  int _movingBoneOriginMs = 0;
+
   bool get _pinching => _pointers.length >= 2;
 
   void _onPointerDown(PointerDownEvent event) {
@@ -86,11 +111,16 @@ class _TimelineViewState extends State<TimelineView> {
       _pinchDistance = _distance();
       _pinchFocal = _midpoint();
       HapticFeedback.selectionClick();
-      // Un pincement interrompt un déplacement de segment en cours.
+      // Un pincement interrompt un déplacement de segment (forme ou os).
       final moving = _movingShape;
+      final movingBone = _movingBone;
       if (moving != null) {
         _movingShape = null;
         widget.onMoveEnd(moving);
+      }
+      if (movingBone != null) {
+        _movingBone = null;
+        widget.onBoneMoveEnd?.call(movingBone);
       }
       setState(() {}); // reconstruire les barres avec le pincement en cours
     }
@@ -179,11 +209,56 @@ class _TimelineViewState extends State<TimelineView> {
     setState(() {});
   }
 
+  // --------------------------------------------- déplacement de piste d'os
+
+  void _handleBoneMoveStart(RigBone bone) {
+    if (_pinching) return;
+    final rig = widget.skeletonRig;
+    final track = rig?.trackOf(bone.id);
+    if (rig == null || track == null || track.isEmpty) return;
+    widget.onBoneGestureStart?.call(bone);
+    HapticFeedback.mediumImpact();
+    setState(() {
+      _movingBone = bone;
+      _movingBoneOriginMs = track.first.timeMs;
+    });
+  }
+
+  void _handleBoneMoveUpdate(RigBone bone, int targetFirstMs) {
+    if (_movingBone?.id != bone.id) return;
+    if (_pinching) {
+      _cancelBoneMove(bone);
+      return;
+    }
+    widget.onBoneMoveChanged?.call(bone, targetFirstMs);
+    final track = widget.skeletonRig?.trackOf(bone.id);
+    if (track != null && track.isNotEmpty) _followEdge(track.last.timeMs);
+  }
+
+  void _handleBoneMoveEnd(RigBone bone) {
+    if (_movingBone?.id != bone.id) return;
+    setState(() => _movingBone = null);
+    widget.onBoneMoveEnd?.call(bone);
+  }
+
+  void _cancelBoneMove(RigBone bone) {
+    if (_movingBone?.id != bone.id) return;
+    _movingBone = null;
+    widget.onBoneMoveEnd?.call(bone);
+    setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     final zoom = widget.zoom;
-    final lanes = TimelineLayout.packLanes(widget.project.shapes);
-    final laneArea = math.max(1, lanes.length) * TimelineView.laneHeight;
+    final rig = widget.skeletonRig;
+    final boneMode = rig != null;
+    final lanes = boneMode
+        ? const <List<VectorShape>>[]
+        : TimelineLayout.packLanes(widget.project.shapes);
+    final boneLanes = boneMode ? TimelineLayout.packBoneLanes(rig) : const <List<RigBone>>[];
+    final laneCount = math.max(1, math.max(lanes.length, boneLanes.length));
+    final laneArea = laneCount * TimelineView.laneHeight;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -222,7 +297,7 @@ class _TimelineViewState extends State<TimelineView> {
                     painter: _RulerPainter(zoom: zoom, width: width),
                   ),
                 ),
-                for (var lane = 0; lane < lanes.length; lane++)
+                for (var lane = 0; lane < laneCount; lane++)
                   Positioned(
                     left: 0,
                     right: 0,
@@ -241,9 +316,10 @@ class _TimelineViewState extends State<TimelineView> {
                       ),
                     ),
                   ),
-                for (var lane = 0; lane < lanes.length; lane++)
-                  for (final shape in lanes[lane])
-                    _ShapeBar(
+                if (!boneMode)
+                  for (var lane = 0; lane < lanes.length; lane++)
+                    for (final shape in lanes[lane])
+                      _ShapeBar(
                       shape: shape,
                       zoom: zoom,
                       timeMs: widget.timeMs,
@@ -269,6 +345,33 @@ class _TimelineViewState extends State<TimelineView> {
                       onGestureStart: () => widget.onGestureStart(shape),
                       onFollowEdge: _followEdge,
                     ),
+                if (boneMode)
+                  for (var lane = 0; lane < boneLanes.length; lane++)
+                    for (final bone in boneLanes[lane])
+                      _BoneBar(
+                        bone: bone,
+                        rig: rig,
+                        zoom: zoom,
+                        timeMs: widget.timeMs,
+                        toleranceMs:
+                            keyframeSnapToleranceMs(widget.project.durationMs),
+                        laneTop: TimelineView.rulerHeight +
+                            lane * TimelineView.laneHeight,
+                        width: width,
+                        pinching: _pinching,
+                        moving: _movingBone?.id == bone.id,
+                        movingOriginMs: _movingBoneOriginMs,
+                        selected: bone.id == widget.selectedBoneId,
+                        onSelect: () => widget.onSelectBone?.call(bone),
+                        onSeek: (t) => widget.onSeek(t),
+                        onMoveStart: () => _handleBoneMoveStart(bone),
+                        onMoveChanged: (target) =>
+                            _handleBoneMoveUpdate(bone, target),
+                        onMoveEnd: () => _handleBoneMoveEnd(bone),
+                        onDeleteKeyframe: (time) =>
+                            widget.onDeleteBoneKeyframe?.call(bone, time),
+                        onFollowEdge: _followEdge,
+                      ),
                 Positioned(
                   left: zoom.xFor(widget.timeMs, width) - 1,
                   top: 0,
@@ -636,15 +739,179 @@ class _Handle extends StatelessWidget {
                 color: Colors.white.withValues(alpha: 0.22),
                 borderRadius: BorderRadius.circular(4),
               ),
-              child: const Center(
-                child: SizedBox(
-                  width: 2,
-                  height: 12,
-                  child: ColoredBox(color: Colors.white70),
+               child: const Center(
+                 child: SizedBox(
+                   width: 2,
+                   height: 12,
+                   child: ColoredBox(color: Colors.white70),
+                 ),
+               ),
+             ),
+           ),
+         ),
+       ),
+     );
+   }
+}
+
+/// Barre d'une piste d'os (mode squelette) : plage première → dernière
+/// keyframe de la piste, losanges de keyframes supprimables près de la tête
+/// de lecture, déplacement de toute la piste par appui long + glisser
+/// horizontal (keyframes décalées en bloc, courbes conservées). Pas de
+/// poignées de fenêtre : une piste d'os n'a pas de fenêtre d'affichage.
+class _BoneBar extends StatelessWidget {
+  const _BoneBar({
+    required this.bone,
+    required this.rig,
+    required this.zoom,
+    required this.timeMs,
+    required this.toleranceMs,
+    required this.laneTop,
+    required this.width,
+    required this.pinching,
+    required this.moving,
+    required this.movingOriginMs,
+    required this.selected,
+    required this.onSelect,
+    required this.onSeek,
+    required this.onMoveStart,
+    required this.onMoveChanged,
+    required this.onMoveEnd,
+    required this.onDeleteKeyframe,
+    required this.onFollowEdge,
+  });
+
+  final RigBone bone;
+  final SkeletonRig rig;
+  final TimelineZoomState zoom;
+  final int timeMs;
+  final int toleranceMs;
+  final double laneTop;
+  final double width;
+  final bool pinching;
+  final bool moving;
+  final int movingOriginMs;
+  final bool selected;
+  final VoidCallback onSelect;
+  final ValueChanged<int> onSeek;
+  final VoidCallback onMoveStart;
+  final ValueChanged<int> onMoveChanged;
+  final VoidCallback onMoveEnd;
+  final ValueChanged<int> onDeleteKeyframe;
+  final ValueChanged<int> onFollowEdge;
+
+  static const Color _color = Color(0xFF3ECF8E);
+
+  @override
+  Widget build(BuildContext context) {
+    final track = rig.trackOf(bone.id)!;
+    final first = track.first.timeMs;
+    final last = track.last.timeMs;
+    final msPerPx = zoom.msPerPixel(width);
+    final left = zoom.xFor(first, width);
+    final barWidth = math.max(24.0, (last - first) / msPerPx);
+    final pinnedLeft = math.min(left, math.max(0.0, width - 24));
+
+    return Positioned(
+      left: pinnedLeft,
+      top: laneTop + 3,
+      width: barWidth,
+      height: TimelineView.laneHeight - 8,
+      child: GestureDetector(
+        onTap: onSelect,
+        onHorizontalDragUpdate: (details) {
+          // Scrub de la tête de lecture, même au-dessus d'une barre.
+          if (pinching || moving) return;
+          onSeek(zoom.timeFor(details.localPosition.dx, width));
+        },
+        onLongPressStart: (details) => onMoveStart(),
+        onLongPressMoveUpdate: (details) {
+          if (!moving) return;
+          final deltaMs = (details.localOffsetFromOrigin.dx * msPerPx).round();
+          final target = math.max(0, movingOriginMs + deltaMs);
+          onMoveChanged(target);
+          onFollowEdge(math.max(0, last + (target - movingOriginMs)));
+        },
+        onLongPressEnd: (details) {
+          if (moving) onMoveEnd();
+        },
+        onLongPressCancel: () {
+          if (moving) onMoveEnd();
+        },
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: <Widget>[
+            Container(
+              decoration: BoxDecoration(
+                color: _color.withValues(alpha: 0.28),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: moving
+                      ? Colors.white
+                      : selected
+                          ? _color
+                          : _color.withValues(alpha: 0.5),
+                  width: moving || selected ? 2 : 1,
                 ),
+                boxShadow: moving
+                    ? <BoxShadow>[
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.45),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
+                        ),
+                      ]
+                    : null,
+              ),
+              alignment: Alignment.centerLeft,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Text(
+                '\u{1F9B4} ${bone.name}',
+                style: const TextStyle(fontSize: 11, color: Colors.white),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
-          ),
+            for (final key in track)
+              Align(
+                alignment: Alignment(
+                  ((key.timeMs - first) / math.max(1, last - first))
+                          .clamp(0.0, 1.0) *
+                      2 -
+                      1,
+                  0.75,
+                ),
+                child: (key.timeMs - timeMs).abs() <= toleranceMs
+                    ? GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => onDeleteKeyframe(key.timeMs),
+                        child: Tooltip(
+                          message: 'Supprimer la keyframe',
+                          child: Container(
+                            width: 16,
+                            height: 16,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFFF5C5C),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.close,
+                              size: 11,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      )
+                    : Transform.rotate(
+                        angle: 0.785398,
+                        child: Container(
+                          width: 7,
+                          height: 7,
+                          color: const Color(0xFFF2C94C),
+                        ),
+                      ),
+              ),
+          ],
         ),
       ),
     );
