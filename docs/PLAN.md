@@ -14,7 +14,7 @@ Toolchain :
 
 ```
 AnimationProject { id, name, format (portrait/landscape/square), width, height,
-                   durationMs, fps, background, createdAt, updatedAt, coverPath }
+                   fps (fps du dernier export), background, createdAt, updatedAt, coverPath }
  └─ VectorShape   { id, name, startMs, endMs, visible, z,
                      x, y, rotation, scale, opacity, strokeWidth, keyframes }
      ├─ ShapeLayer    { id, name, kind (rect/circle/line/path), x, y, width, height,
@@ -79,7 +79,9 @@ Après export, `share_plus` partage le fichier (feuille de partage système).
 ## 6. Interface
 
 1. **Accueil** (`home_screen`) : liste des projets, nouvel projet, projet d'exemple, renommage, duplication, suppression, état vide explicite.
-2. **Éditeur** (`studio_screen`) : menus Formes / Animations / Calques / Export, canvas, inspecteur, timeline à rectangles, barre de lecture, sauvegarde différée.
+2. **Éditeur** (`studio_screen`) : menus Formes / Animations / Calques / Export, canvas, timeline à rectangles, barre de lecture avec bouton ⎌ Annuler (20 dernières actions, pile de snapshots en session), sauvegarde différée. L'export MP4/GIF ouvre un dialogue de réglage des fps (`fps` = dernier choix).
+
+La **durée du projet est dérivée du contenu** : `AnimationProject.durationMs` est un getter = max des `endMs` des formes (projet vide → 0) ; rien n'est fixé à la création (nom + format seulement) ; une forme posée au-delà de la fin courante étend le projet, supprimer la dernière forme le raccourcit ; la colonne DB `duration_ms` est réécrite à chaque save.
 3. **Création de forme** (`shape_editor_screen`) : aperçu en haut, couches en bas, ajout de forme basique comme nouvelle couche, réglages taille / position / couleur, fenêtre d'affichage.
 3 bis. **Inspecteur** (`studio_screen`) : un curseur par propriété affichant la valeur **interpolée** à la tête de lecture (auto-key), un bouton keyframe unique (losange), un sélecteur de courbe pour le segment sous le curseur.
 4. **Timeline** (`timeline_view`) : règle temporelle adaptative au zoom, une piste par
