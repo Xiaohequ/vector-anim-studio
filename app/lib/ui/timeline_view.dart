@@ -67,6 +67,11 @@ class _TimelineViewState extends State<TimelineView> {
   Offset _pinchFocal = Offset.zero;
   double _width = 0;
 
+  /// Segment en cours de déplacement (appui long) : détenu ici pour pouvoir
+  /// l'annuler immédiatement dès qu'un pincement à deux doigts démarre.
+  VectorShape? _movingShape;
+  int _movingOriginMs = 0;
+
   bool get _pinching => _pointers.length >= 2;
 
   void _onPointerDown(PointerDownEvent event) {
@@ -75,6 +80,13 @@ class _TimelineViewState extends State<TimelineView> {
       _pinchDistance = _distance();
       _pinchFocal = _midpoint();
       HapticFeedback.selectionClick();
+      // Un pincement interrompt un déplacement de segment en cours.
+      final moving = _movingShape;
+      if (moving != null) {
+        _movingShape = null;
+        widget.onMoveEnd(moving);
+      }
+      setState(() {}); // reconstruire les barres avec le pincement en cours
     }
   }
 
@@ -117,6 +129,39 @@ class _TimelineViewState extends State<TimelineView> {
     );
   }
 
+  // ------------------------------------------------- déplacement de segment
+
+  void _handleMoveStart(VectorShape shape) {
+    if (_pinching) return;
+    HapticFeedback.mediumImpact();
+    setState(() {
+      _movingShape = shape;
+      _movingOriginMs = shape.startMs;
+    });
+  }
+
+  void _handleMoveUpdate(VectorShape shape, int targetStartMs) {
+    if (_movingShape?.id != shape.id) return;
+    if (_pinching) {
+      _cancelMove(shape);
+      return;
+    }
+    widget.onMoveChanged(shape, targetStartMs);
+  }
+
+  void _handleMoveEnd(VectorShape shape) {
+    if (_movingShape?.id != shape.id) return;
+    setState(() => _movingShape = null);
+    widget.onMoveEnd(shape);
+  }
+
+  void _cancelMove(VectorShape shape) {
+    if (_movingShape?.id != shape.id) return;
+    _movingShape = null;
+    widget.onMoveEnd(shape);
+    setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     final zoom = widget.zoom;
@@ -141,7 +186,7 @@ class _TimelineViewState extends State<TimelineView> {
                 Positioned.fill(
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onTapUp: (details) =>
+                    onTapDown: (details) =>
                         widget.onSeek(zoom.timeFor(details.localPosition.dx, width)),
                     onHorizontalDragUpdate: (details) {
                       if (_pinching) return;
@@ -166,11 +211,14 @@ class _TimelineViewState extends State<TimelineView> {
                     right: 0,
                     top: TimelineView.rulerHeight + lane * TimelineView.laneHeight,
                     height: TimelineView.laneHeight,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        border: Border(
-                          bottom: BorderSide(
-                            color: Colors.white.withValues(alpha: 0.06),
+                    child: IgnorePointer(
+                      // Décoratif : ne doit pas bloquer le seek sur le fond.
+                      child: Container(
+                        decoration: BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(
+                              color: Colors.white.withValues(alpha: 0.06),
+                            ),
                           ),
                         ),
                       ),
@@ -188,13 +236,18 @@ class _TimelineViewState extends State<TimelineView> {
                       laneTop:
                           TimelineView.rulerHeight + lane * TimelineView.laneHeight,
                       width: width,
+                      pinching: _pinching,
+                      moving: _movingShape?.id == shape.id,
+                      movingOriginMs: _movingOriginMs,
                       selected: shape.id == widget.selectedShapeId,
                       onSelect: () => widget.onSelect(shape),
+                      onSeek: (t) => widget.onSeek(t),
                       onRangeChanged: (start, end) =>
                           widget.onRangeChanged(shape, start, end),
+                      onMoveStart: () => _handleMoveStart(shape),
                       onMoveChanged: (target) =>
-                          widget.onMoveChanged(shape, target),
-                      onMoveEnd: () => widget.onMoveEnd(shape),
+                          _handleMoveUpdate(shape, target),
+                      onMoveEnd: () => _handleMoveEnd(shape),
                       onDeleteKeyframe: (time) =>
                           widget.onDeleteKeyframe(shape, time),
                     ),
@@ -309,7 +362,7 @@ class _RulerPainter extends CustomPainter {
 /// Rectangle d'une forme : sélection, poignées de redimensionnement,
 /// keyframes supprimables près de la tête de lecture et déplacement du
 /// segment entier par appui long + glisser horizontal.
-class _ShapeBar extends StatefulWidget {
+class _ShapeBar extends StatelessWidget {
   const _ShapeBar({
     required this.shape,
     required this.zoom,
@@ -318,9 +371,14 @@ class _ShapeBar extends StatefulWidget {
     required this.toleranceMs,
     required this.laneTop,
     required this.width,
+    required this.pinching,
+    required this.moving,
+    required this.movingOriginMs,
     required this.selected,
     required this.onSelect,
+    required this.onSeek,
     required this.onRangeChanged,
+    required this.onMoveStart,
     required this.onMoveChanged,
     required this.onMoveEnd,
     required this.onDeleteKeyframe,
@@ -333,32 +391,35 @@ class _ShapeBar extends StatefulWidget {
   final int toleranceMs;
   final double laneTop;
   final double width;
+
+  /// Pincement en cours : les gestes de la barre (déplacement, scrub) sont
+  /// gelés pour laisser la main au zoom/défilement à deux doigts.
+  final bool pinching;
+
+  /// Segment soulevé par un appui long (état détenu par la vue parente).
+  final bool moving;
+  final int movingOriginMs;
   final bool selected;
   final VoidCallback onSelect;
+  final ValueChanged<int> onSeek;
   final void Function(int startMs, int endMs) onRangeChanged;
+  final VoidCallback onMoveStart;
   final ValueChanged<int> onMoveChanged;
   final VoidCallback onMoveEnd;
   final ValueChanged<int> onDeleteKeyframe;
 
   @override
-  State<_ShapeBar> createState() => _ShapeBarState();
-}
-
-class _ShapeBarState extends State<_ShapeBar> {
-  /// Début de la fenêtre au moment de l'appui long : la cible du déplacement
-  /// est toujours recalculée depuis cette origine, sans dérive d'incrément.
-  int _originStartMs = 0;
-  bool _moving = false;
-
-  @override
   Widget build(BuildContext context) {
-    final shape = widget.shape;
-    final zoom = widget.zoom;
-    final width = widget.width;
-    final pxPerMs = zoom.msPerPixel(width);
+    final shape = this.shape;
+    final zoom = this.zoom;
+    final width = this.width;
+    final msPerPx = zoom.msPerPixel(width);
     final left = zoom.xFor(shape.startMs, width);
-    final barWidth = math.max(24.0, shape.durationMs * pxPerMs);
-    // Un segment plus étroit que son minimum reste visible au bord droit.
+    // Largeur du segment : durée × pixels/ms — PAS ms/pixel (sinon la barre
+    // couvre tout l'écran et bloque le seek et le défilement).
+    final barWidth = math.max(24.0, shape.durationMs / msPerPx);
+    // Épinglée au bord droit : une barre plus large que son minimum doit
+    // rester visible quand sa fin touche le bord droit de la vue.
     final pinnedLeft = math.min(left, math.max(0.0, width - 24));
     final color = shape.isInstance
         ? const Color(0xFFC084FC)
@@ -370,36 +431,32 @@ class _ShapeBarState extends State<_ShapeBar> {
       ..sort();
 
     return Positioned(
-      left: shape.durationMs * pxPerMs < 24 ? pinnedLeft : left,
-      top: widget.laneTop + 3,
+      left: pinnedLeft,
+      top: laneTop + 3,
       width: barWidth,
       height: TimelineView.laneHeight - 8,
       child: GestureDetector(
-        onTap: widget.onSelect,
-        onLongPressStart: (details) {
-          HapticFeedback.mediumImpact();
-          _originStartMs = shape.startMs;
-          setState(() => _moving = true);
+        onTap: onSelect,
+        onHorizontalDragUpdate: (details) {
+          // Scrub de la tête de lecture, même au-dessus d'une barre.
+          if (pinching || moving) return;
+          onSeek(zoom.timeFor(details.localPosition.dx, width));
         },
+        onLongPressStart: (details) => onMoveStart(),
         onLongPressMoveUpdate: (details) {
-          if (!_moving) return;
-          final deltaMs = (details.localOffsetFromOrigin.dx * pxPerMs).round();
-          final span = shape.durationMs;
+          if (!moving) return;
+          final deltaMs = (details.localOffsetFromOrigin.dx * msPerPx).round();
           final target = math.max(
             0,
-            math.min(_originStartMs + deltaMs, widget.durationMs - span),
+            math.min(movingOriginMs + deltaMs, durationMs - shape.durationMs),
           );
-          widget.onMoveChanged(target);
+          onMoveChanged(target);
         },
         onLongPressEnd: (details) {
-          if (!_moving) return;
-          setState(() => _moving = false);
-          widget.onMoveEnd();
+          if (moving) onMoveEnd();
         },
         onLongPressCancel: () {
-          if (!_moving) return;
-          setState(() => _moving = false);
-          widget.onMoveEnd();
+          if (moving) onMoveEnd();
         },
         child: Stack(
           clipBehavior: Clip.none,
@@ -409,14 +466,14 @@ class _ShapeBarState extends State<_ShapeBar> {
                 color: color.withValues(alpha: shape.visible ? 0.30 : 0.12),
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(
-                  color: _moving
+                  color: moving
                       ? Colors.white
-                      : widget.selected
+                      : selected
                           ? color
                           : color.withValues(alpha: 0.5),
-                  width: _moving || widget.selected ? 2 : 1,
+                  width: moving || selected ? 2 : 1,
                 ),
-                boxShadow: _moving
+                boxShadow: moving
                     ? <BoxShadow>[
                         BoxShadow(
                           color: Colors.black.withValues(alpha: 0.45),
@@ -448,10 +505,10 @@ class _ShapeBarState extends State<_ShapeBar> {
                       1,
                   0.75,
                 ),
-                child: (keyTime - widget.timeMs).abs() <= widget.toleranceMs
+                child: (keyTime - timeMs).abs() <= toleranceMs
                     ? GestureDetector(
                         behavior: HitTestBehavior.opaque,
-                        onTap: () => widget.onDeleteKeyframe(keyTime),
+                        onTap: () => onDeleteKeyframe(keyTime),
                         child: Tooltip(
                           message: 'Supprimer la keyframe',
                           child: Container(
@@ -485,7 +542,7 @@ class _ShapeBarState extends State<_ShapeBar> {
               onDrag: (deltaMs) {
                 final next = (shape.startMs + deltaMs)
                     .clamp(0, shape.endMs - TimelineView.minSpanMs);
-                widget.onRangeChanged(next, shape.endMs);
+                onRangeChanged(next, shape.endMs);
               },
             ),
             _Handle(
@@ -494,8 +551,8 @@ class _ShapeBarState extends State<_ShapeBar> {
               tooltip: 'Fin d’affichage',
               onDrag: (deltaMs) {
                 final next = (shape.endMs + deltaMs)
-                    .clamp(shape.startMs + TimelineView.minSpanMs, widget.durationMs);
-                widget.onRangeChanged(shape.startMs, next);
+                    .clamp(shape.startMs + TimelineView.minSpanMs, durationMs);
+                onRangeChanged(shape.startMs, next);
               },
             ),
           ],

@@ -2,7 +2,7 @@ name: vector_anim_studio
 description: "Studio d'animation vectorielle mobile : formes, couches, keyframes, export MP4/GIF."
 publish_to: 'none'
 
-version: 0.6.0+1
+version: 0.6.1+1
 
 environment:
   sdk: ^3.12.0
