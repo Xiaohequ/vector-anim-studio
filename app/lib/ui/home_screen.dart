@@ -57,8 +57,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final project = await _store.createProject(
       name: result.name,
       format: result.format,
-      durationMs: result.durationMs,
-      fps: result.fps,
     );
     if (!mounted) return;
     await _open(project.id);
@@ -322,15 +320,11 @@ class _NewProjectResult {
   const _NewProjectResult({
     required this.name,
     required this.format,
-    required this.durationMs,
-    required this.fps,
     this.sample = false,
   });
 
   final String name;
   final ProjectFormat format;
-  final int durationMs;
-  final int fps;
   final bool sample;
 }
 
@@ -344,8 +338,6 @@ class _NewProjectDialog extends StatefulWidget {
 class _NewProjectDialogState extends State<_NewProjectDialog> {
   final TextEditingController _name = TextEditingController();
   ProjectFormat _format = ProjectFormat.portrait;
-  double _duration = 4;
-  int _fps = 30;
 
   @override
   void dispose() {
@@ -393,22 +385,11 @@ class _NewProjectDialogState extends State<_NewProjectDialog> {
               onSelectionChanged: (selection) =>
                   setState(() => _format = selection.first),
             ),
-            const SizedBox(height: 8),
-            Text('Durée : ${_duration.toStringAsFixed(1)} s'),
-            Slider(
-              min: 1,
-              max: 30,
-              divisions: 58,
-              value: _duration,
-              onChanged: (value) => setState(() => _duration = value),
-            ),
-            Text('Images par seconde : $_fps'),
-            Slider(
-              min: 12,
-              max: 60,
-              divisions: 4,
-              value: _fps.toDouble(),
-              onChanged: (value) => setState(() => _fps = value.round()),
+            const SizedBox(height: 4),
+            Text(
+              'Durée du projet = celle des éléments posés sur la timeline ; '
+              'les fps se règlent à l’export.',
+              style: const TextStyle(fontSize: 11, color: Colors.white38),
             ),
           ],
         ),
@@ -423,8 +404,6 @@ class _NewProjectDialogState extends State<_NewProjectDialog> {
             _NewProjectResult(
               name: _name.text,
               format: _format,
-              durationMs: (_duration * 1000).round(),
-              fps: _fps,
               sample: true,
             ),
           ),
@@ -435,8 +414,6 @@ class _NewProjectDialogState extends State<_NewProjectDialog> {
             _NewProjectResult(
               name: _name.text,
               format: _format,
-              durationMs: (_duration * 1000).round(),
-              fps: _fps,
             ),
           ),
           child: const Text('Créer'),

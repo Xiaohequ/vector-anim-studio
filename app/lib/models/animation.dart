@@ -608,7 +608,6 @@ class AnimationProject {
     this.name = 'Nouvelle animation',
     this.width = 360,
     this.height = 640,
-    this.durationMs = 4000,
     this.fps = 30,
     this.backgroundValue = 0xFF14161C,
     this.coverPath,
@@ -622,13 +621,27 @@ class AnimationProject {
   String name;
   double width;
   double height;
-  int durationMs;
+
+  /// FPS de l'export le plus récent (choisi dans le dialogue d'export,
+  /// jamais à la création) ; sert de défaut au prochain export.
   int fps;
   int backgroundValue;
   String? coverPath;
   DateTime? createdAt;
   DateTime? updatedAt;
   final List<VectorShape> shapes;
+
+  /// Durée du projet : le maximum des fins de segments des formes — dernier
+  /// instant d'affichage sur la timeline. La durée n'est PAS définie à la
+  /// création : elle grandit quand une forme dépasse la fin courante et
+  /// rétrécit si la dernière forme est supprimée. Projet vide → 0.
+  int get durationMs {
+    var max = 0;
+    for (final shape in shapes) {
+      if (shape.endMs > max) max = shape.endMs;
+    }
+    return max;
+  }
 
   VectorShape? shapeById(String? id) {
     if (id == null) return null;
@@ -669,7 +682,6 @@ class AnimationProject {
         name: json['name'] as String? ?? 'Projet',
         width: (json['width'] as num?)?.toDouble() ?? 360,
         height: (json['height'] as num?)?.toDouble() ?? 640,
-        durationMs: (json['durationMs'] as num?)?.toInt() ?? 4000,
         fps: (json['fps'] as num?)?.toInt() ?? 30,
         backgroundValue:
             (json['backgroundValue'] as num?)?.toInt() ?? 0xFF14161C,
@@ -685,19 +697,16 @@ class AnimationProject {
             .toList(),
       );
 
-  /// Projet vierge prêt à être édité.
+  /// Projet vierge prêt à être édité : pas de durée ni de fps fixés — la
+  /// durée sera celle du contenu posé sur la timeline.
   static AnimationProject blank({
     String name = 'Nouvelle animation',
     ProjectFormat format = ProjectFormat.portrait,
-    int durationMs = 4000,
-    int fps = 30,
   }) =>
       AnimationProject(
         name: name,
         width: format.width,
         height: format.height,
-        durationMs: durationMs,
-        fps: fps,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
@@ -706,7 +715,6 @@ class AnimationProject {
   static AnimationProject demo() {
     final project = AnimationProject(
       name: 'Démo',
-      durationMs: 4000,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
     );

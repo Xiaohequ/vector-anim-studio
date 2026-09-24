@@ -28,6 +28,7 @@ class TimelineView extends StatefulWidget {
     required this.onSeek,
     required this.onDeleteKeyframe,
     required this.onZoomChanged,
+    required this.onGestureStart,
   });
 
   final AnimationProject project;
@@ -49,6 +50,10 @@ class TimelineView extends StatefulWidget {
 
   /// Notifie l'écran d'un zoom/défilement (setState).
   final VoidCallback onZoomChanged;
+
+  /// Début d'un geste modifiant la timeline (appui long ou poignée) : l'écran
+  /// y prend le snapshot d'annulation AVANT modification.
+  final void Function(VectorShape shape) onGestureStart;
 
   static const double rulerHeight = 20;
   static const double laneHeight = 30;
@@ -133,6 +138,8 @@ class _TimelineViewState extends State<TimelineView> {
 
   void _handleMoveStart(VectorShape shape) {
     if (_pinching) return;
+    // Snapshot d'annulation avant la moindre modification.
+    widget.onGestureStart(shape);
     HapticFeedback.mediumImpact();
     setState(() {
       _movingShape = shape;
@@ -250,6 +257,7 @@ class _TimelineViewState extends State<TimelineView> {
                       onMoveEnd: () => _handleMoveEnd(shape),
                       onDeleteKeyframe: (time) =>
                           widget.onDeleteKeyframe(shape, time),
+                      onGestureStart: () => widget.onGestureStart(shape),
                     ),
                 Positioned(
                   left: zoom.xFor(widget.timeMs, width) - 1,
@@ -382,6 +390,7 @@ class _ShapeBar extends StatelessWidget {
     required this.onMoveChanged,
     required this.onMoveEnd,
     required this.onDeleteKeyframe,
+    required this.onGestureStart,
   });
 
   final VectorShape shape;
@@ -407,6 +416,9 @@ class _ShapeBar extends StatelessWidget {
   final ValueChanged<int> onMoveChanged;
   final VoidCallback onMoveEnd;
   final ValueChanged<int> onDeleteKeyframe;
+
+  /// Début d'un geste sur les poignées (redimensionnement) : snapshot undo.
+  final VoidCallback onGestureStart;
 
   @override
   Widget build(BuildContext context) {
@@ -539,6 +551,8 @@ class _ShapeBar extends StatelessWidget {
               alignment: Alignment.centerLeft,
               msPerPixel: zoom.msPerPixel(width),
               tooltip: 'Début d’affichage',
+              onDragStart: () => onGestureStart(),
+              onDragEnd: () {},
               onDrag: (deltaMs) {
                 final next = (shape.startMs + deltaMs)
                     .clamp(0, shape.endMs - TimelineView.minSpanMs);
@@ -549,6 +563,8 @@ class _ShapeBar extends StatelessWidget {
               alignment: Alignment.centerRight,
               msPerPixel: zoom.msPerPixel(width),
               tooltip: 'Fin d’affichage',
+              onDragStart: () => onGestureStart(),
+              onDragEnd: () {},
               onDrag: (deltaMs) {
                 final next = (shape.endMs + deltaMs)
                     .clamp(shape.startMs + TimelineView.minSpanMs, durationMs);
@@ -568,12 +584,16 @@ class _Handle extends StatelessWidget {
     required this.tooltip,
     required this.onDrag,
     required this.msPerPixel,
+    this.onDragStart,
+    this.onDragEnd,
   });
 
   final Alignment alignment;
   final String tooltip;
   final ValueChanged<int> onDrag;
   final double msPerPixel;
+  final VoidCallback? onDragStart;
+  final VoidCallback? onDragEnd;
 
   @override
   Widget build(BuildContext context) {
@@ -583,10 +603,12 @@ class _Handle extends StatelessWidget {
         message: tooltip,
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
+          onHorizontalDragStart: (details) => onDragStart?.call(),
           onHorizontalDragUpdate: (details) {
             if (details.delta.dx == 0) return;
             onDrag((details.delta.dx * msPerPixel).round());
           },
+          onHorizontalDragEnd: (details) => onDragEnd?.call(),
           child: MouseRegion(
             cursor: SystemMouseCursors.resizeLeftRight,
             child: Container(

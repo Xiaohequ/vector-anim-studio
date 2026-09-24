@@ -36,9 +36,8 @@ void main() {
     final project = AnimationProject.blank(
       name: 'Test enregistrement',
       format: ProjectFormat.portrait,
-      durationMs: 3000,
-      fps: 24,
     );
+    project.fps = 24;
     final shape = VectorShape(
       name: 'Étoile',
       x: 120,
@@ -84,7 +83,8 @@ void main() {
 
     final loaded = await repository.load(project.id);
     expect(loaded.name, project.name);
-    expect(loaded.durationMs, 3000);
+    // Durée dérivée : fin du dernier segment (2400 ms).
+    expect(loaded.durationMs, 2400);
     expect(loaded.fps, 24);
     expect(loaded.shapes.length, 1);
 

@@ -15,6 +15,7 @@ import '../engine/scene_painter.dart';
 import '../engine/selection_geometry.dart';
 import '../engine/timeline_controller.dart';
 import '../engine/timeline_zoom.dart';
+import '../engine/undo_stack.dart';
 import '../models/animation.dart';
 import 'shape_editor_screen.dart';
 import 'shape_properties_sheet.dart';
@@ -51,6 +52,18 @@ class _StudioScreenState extends State<StudioScreen>
   /// Projets imbriqués préchargés (instances d'animation), indexés par id.
   final Map<String, AnimationProject> _embedded = <String, AnimationProject>{};
 
+  /// Pile d'annulation : l'état du projet avant chaque action mutante.
+  final UndoStack _undoStack = UndoStack(limit: 20);
+
+  /// Coalescing : une série continue (slider, geste) = une seule entrée.
+  String? _undoTag;
+  DateTime _lastUndoAt = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// Snapshot en attente d'un geste canvas (poussé à la fin si le geste a
+  /// réellement modifié la scène).
+  AnimationProject? _gestureUndo;
+  bool _gestureMutated = false;
+
   // Option : aimanter la rotation aux multiples de 90° (bouton de la barre).
   bool _snapRotation = false;
 
@@ -85,7 +98,7 @@ class _StudioScreenState extends State<StudioScreen>
         _project = project;
         _controller = TimelineController(project);
         _selectedId = project.shapes.isEmpty ? null : project.shapes.last.id;
-        _zoom = TimelineZoomState(durationMs: project.durationMs);
+        _zoom = TimelineZoomState(durationOf: () => _project!.durationMs);
       });
       _syncTicker();
     } catch (error) {
@@ -252,6 +265,53 @@ class _StudioScreenState extends State<StudioScreen>
   void _snack(String message) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
 
+  // ------------------------------------------------------------------ undo
+
+  /// Copie l'état courant pour annulation. [tag] coalesce une série continue
+  /// (sliders, gestes) en une seule entrée ; 900 ms d'inactivité rouvrent
+  /// une nouvelle entrée.
+  void _pushUndo({String? tag}) {
+    final project = _project;
+    if (project == null) return;
+    final now = DateTime.now();
+    if (tag != null && _undoTag == tag &&
+        now.difference(_lastUndoAt).inMilliseconds < 900) {
+      _lastUndoAt = now;
+      return;
+    }
+    _undoTag = tag;
+    _lastUndoAt = now;
+    _undoStack.push(project);
+    setState(() {}); // le bouton undo devient actif
+  }
+
+  /// Annule la dernière action : l'état restauré remplace le projet courant
+  /// (nouveau TimelineController, temps préservé, zoom réaligné). Non
+  /// annulable en sens inverse : pas de redo.
+  void _undo() {
+    final previous = _undoStack.pop();
+    if (previous == null) return;
+    _undoTag = null;
+    _gestureUndo = null;
+    final controller = _controller;
+    final timeMs = math.min(controller?.timeMs ?? 0, previous.durationMs);
+    final selectedId = _selectedId;
+    final old = _controller;
+    setState(() {
+      _project = previous;
+      _controller = TimelineController(previous)..setTime(timeMs);
+      _selectedId = previous.shapeById(selectedId) != null
+          ? selectedId
+          : (previous.shapes.isEmpty ? null : previous.shapes.last.id);
+      _zoom = TimelineZoomState(durationOf: () => _project!.durationMs);
+    });
+    // L'ancien controller est désabonné par le rebuild : on le dispose après.
+    SchedulerBinding.instance
+        .addPostFrameCallback((_) => old?.dispose());
+    _syncTicker();
+    widget.repository.save(previous);
+  }
+
   // ---------------------------------------------------------------- formes
 
   Future<void> _addShape() async {
@@ -280,6 +340,7 @@ class _StudioScreenState extends State<StudioScreen>
       ),
     );
     if (edited == null || !mounted) return;
+    _pushUndo();
     setState(() {
       final index = project.shapes.indexWhere((s) => s.id == edited.id);
       if (index >= 0) {
@@ -295,6 +356,7 @@ class _StudioScreenState extends State<StudioScreen>
   Future<void> _deleteShape(VectorShape shape) async {
     final project = _project;
     if (project == null) return;
+    _pushUndo();
     setState(() {
       project.shapes.remove(shape);
       _selectedId = project.shapes.isEmpty ? null : project.shapes.last.id;
@@ -310,6 +372,7 @@ class _StudioScreenState extends State<StudioScreen>
     final index = project.shapes.indexOf(shape);
     if (index < 0) return;
     final clone = shape.duplicated();
+    _pushUndo();
     setState(() {
       project.shapes.insert(index + 1, clone);
       _selectedId = clone.id;
@@ -338,11 +401,13 @@ class _StudioScreenState extends State<StudioScreen>
       ),
     );
     if (name == null || name.trim().isEmpty || !mounted) return;
+    _pushUndo();
     setState(() => shape.name = name.trim());
     await _flushSave();
   }
 
   Future<void> _toggleVisibility(VectorShape shape) async {
+    _pushUndo();
     setState(() => shape.visible = !shape.visible);
     await _flushSave();
   }
@@ -352,6 +417,7 @@ class _StudioScreenState extends State<StudioScreen>
     if (project == null) return;
     final index = project.shapes.indexWhere((s) => s.id == shape.id);
     if (index < 0) return;
+    _pushUndo();
     setState(() => project.moveShape(index, index + delta));
     await _flushSave();
   }
@@ -361,6 +427,7 @@ class _StudioScreenState extends State<StudioScreen>
   Future<void> _applyPreset(AnimationPreset preset) async {
     final shape = _selected;
     if (shape == null) return;
+    _pushUndo();
     setState(() => applyPreset(shape, preset));
     await _flushSave();
   }
@@ -368,6 +435,7 @@ class _StudioScreenState extends State<StudioScreen>
   Future<void> _clearAnimations() async {
     final shape = _selected;
     if (shape == null) return;
+    _pushUndo();
     setState(() => clearAnimations(shape));
     await _flushSave();
   }
@@ -377,6 +445,7 @@ class _StudioScreenState extends State<StudioScreen>
     final shape = _selected;
     final controller = _controller;
     if (shape == null || controller == null) return;
+    _pushUndo();
     setState(() => controller.toggleKeyframe(shape));
     await _flushSave();
   }
@@ -387,6 +456,7 @@ class _StudioScreenState extends State<StudioScreen>
     final shape = _selected;
     final controller = _controller;
     if (shape == null || controller == null) return;
+    _pushUndo(tag: 'prop:${property.name}:${shape.id}');
     setState(() {
       shape.applyValue(
         property,
@@ -405,6 +475,7 @@ class _StudioScreenState extends State<StudioScreen>
     if (shape == null || controller == null) return;
     final near = controller.nearestKeyframe(shape);
     if (near == null) return;
+    _pushUndo();
     setState(() => shape.setKeyframeEasing(near.timeMs, easing));
     await _flushSave();
   }
@@ -455,6 +526,7 @@ class _StudioScreenState extends State<StudioScreen>
           autoKey: true,
           toleranceMs: controller.snapToleranceMs,
         ));
+    _gestureMutated = true;
   }
 
   void _onCanvasGestureStart(
@@ -505,6 +577,10 @@ class _StudioScreenState extends State<StudioScreen>
         shape.valueAt(AnimatableProperty.rotation, controller.timeMs);
     _gestureBaseScale =
         shape.valueAt(AnimatableProperty.scale, controller.timeMs);
+    // Snapshot en attente : poussé dans la pile seulement si le geste
+    // modifie réellement la scène (voir _onCanvasGestureEnd).
+    _gestureUndo = AnimationProject.fromJson(project.toJson());
+    _gestureMutated = false;
   }
 
   void _onCanvasGestureUpdate(
@@ -554,7 +630,15 @@ class _StudioScreenState extends State<StudioScreen>
   }
 
   void _onCanvasGestureEnd(ScaleEndDetails details) {
-    if (_gesture != _CanvasGesture.none) _scheduleSave();
+    if (_gesture != _CanvasGesture.none) {
+      if (_gestureMutated && _gestureUndo != null) {
+        _undoStack.push(_gestureUndo!);
+        _undoTag = null;
+        setState(() {});
+      }
+      _scheduleSave();
+    }
+    _gestureUndo = null;
     _gesture = _CanvasGesture.none;
   }
 
@@ -582,11 +666,68 @@ class _StudioScreenState extends State<StudioScreen>
     }
   }
 
+  /// Dialogue de réglage des fps avant un export MP4 ou GIF.
+  Future<int?> _askExportFps(VideoFormat format) async {
+    final choices = format == VideoFormat.mp4
+        ? <int>[15, 24, 25, 30, 60]
+        : <int>[10, 12, 15, 25];
+    final initial = format == VideoFormat.mp4 ? (_project?.fps ?? 30) : 12;
+    var selected = choices.contains(initial) ? initial : choices.last;
+    return showDialog<int>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text('Export ${format.label}'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                'Durée du projet : '
+                '${((_project?.durationMs ?? 0) / 1000).toStringAsFixed(2)} s',
+                style: const TextStyle(fontSize: 12),
+              ),
+              const SizedBox(height: 8),
+              const Text('Images par seconde'),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: <Widget>[
+                  for (final choice in choices)
+                    ChoiceChip(
+                      label: Text('$choice'),
+                      selected: choice == selected,
+                      onSelected: (_) =>
+                          setDialogState(() => selected = choice),
+                    ),
+                ],
+              ),
+            ],
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Annuler'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(selected),
+              child: const Text('Exporter'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // ----------------------------------------------------------------- export
 
   Future<void> _exportVideo(VideoFormat format) async {
     final project = _project;
     if (project == null) return;
+    final fps = await _askExportFps(format);
+    if (fps == null || !mounted) return;
+    project.fps = fps; // défaut du prochain export
     await _flushSave();
     if (!mounted) return;
     final progress = ValueNotifier<double>(0);
@@ -627,6 +768,7 @@ class _StudioScreenState extends State<StudioScreen>
       final service = ExportService(project, embeddedProjects: _embedded);
       final file = await service.exportVideo(
         format: format,
+        fps: fps,
         onProgress: (value) => progress.value = value,
       );
       navigator.pop();
@@ -920,6 +1062,7 @@ class _StudioScreenState extends State<StudioScreen>
                         );
                       },
                       onMoveEnd: (_) => _scheduleSave(),
+                      onGestureStart: (shape) => _pushUndo(),
                       onDeleteKeyframe: (shape, timeMs) {
                         setState(() => shape.removeKeyframeAt(timeMs));
                         _scheduleSave();
@@ -942,6 +1085,11 @@ class _StudioScreenState extends State<StudioScreen>
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: <Widget>[
+          IconButton(
+            tooltip: 'Annuler la dernière action',
+            onPressed: _undoStack.canUndo ? _undo : null,
+            icon: const Icon(Icons.undo),
+          ),
           IconButton(
             tooltip: 'Retour au début',
             onPressed: controller.rewind,

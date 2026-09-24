@@ -4,10 +4,12 @@ import 'dart:math' as math;
 ///
 /// [viewMs] est le temps affiché sur toute la largeur de la timeline
 /// (de 500 ms à 30 minutes) et [offsetMs] le temps affiché au bord gauche.
-/// L'état vit en mémoire de session : rien n'est persisté.
+/// La durée du projet est lue via [durationOf] à chaque usage : elle est
+/// dérivée de la timeline (fin du dernier segment) et peut évoluer pendant
+/// l'édition. L'état de zoom vit en mémoire de session : rien n'est persisté.
 class TimelineZoomState {
-  TimelineZoomState({required this.durationMs})
-      : viewMs = _clampView(durationMs),
+  TimelineZoomState({required this.durationOf})
+      : viewMs = _clampView(durationOf()),
         offsetMs = 0;
 
   /// Pleine largeur au zoom maximal : 500 ms (15 images à 30 fps).
@@ -16,8 +18,8 @@ class TimelineZoomState {
   /// Pleine largeur au zoom minimal : 30 minutes.
   static const int maxViewMs = 30 * 60 * 1000;
 
-  /// Durée du projet (borne du défilement et du seek).
-  final int durationMs;
+  /// Durée du projet, réévaluée à chaque usage.
+  final int Function() durationOf;
 
   /// Temps affiché sur toute la largeur.
   int viewMs;
@@ -30,7 +32,7 @@ class TimelineZoomState {
 
   /// Décalage maximal : si la vue dépasse la durée du projet, celui-ci est
   /// collé au bord gauche (offset nul).
-  int get maxOffset => math.max(0, durationMs - viewMs);
+  int get maxOffset => math.max(0, durationOf() - viewMs);
 
   void _clampOffset() => offsetMs = offsetMs.clamp(0, maxOffset);
 
@@ -64,14 +66,14 @@ class TimelineZoomState {
 
   /// Réinitialise : toute la durée du projet sur la largeur.
   void fit() {
-    viewMs = _clampView(durationMs);
+    viewMs = _clampView(durationOf());
     _clampOffset();
   }
 
   /// Garde la tête de lecture visible pendant la lecture. Renvoie true si
   /// l'offset a changé (défilement doux au-delà de 95 % de la vue).
   bool follow(int timeMs) {
-    if (viewMs >= durationMs) return false;
+    if (viewMs >= durationOf()) return false;
     final int? next;
     if (timeMs < offsetMs) {
       next = timeMs; // boucle ramenée au début ou saut en arrière
@@ -91,7 +93,8 @@ class TimelineZoomState {
   int timeFor(double dx, double width) {
     if (width <= 0) return offsetMs;
     final t = (offsetMs + dx * viewMs / width).round();
-    return t.clamp(offsetMs, math.min(offsetMs + viewMs, durationMs));
+    final limit = math.min(offsetMs + viewMs, durationOf());
+    return t.clamp(offsetMs, math.max(offsetMs, limit));
   }
 
   /// Position en pixels d'un temps (peut sortir de la vue : le Stack clippe).

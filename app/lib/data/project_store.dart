@@ -35,14 +35,10 @@ class ProjectStore extends ChangeNotifier {
   Future<AnimationProject> createProject({
     required String name,
     required ProjectFormat format,
-    required int durationMs,
-    required int fps,
   }) async {
     final project = AnimationProject.blank(
       name: name.trim().isEmpty ? 'Nouvelle animation' : name.trim(),
       format: format,
-      durationMs: durationMs,
-      fps: fps,
     );
     await repository.save(project);
     await refresh();

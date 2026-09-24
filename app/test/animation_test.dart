@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vector_anim_studio/engine/animation_presets.dart';
+import 'package:vector_anim_studio/engine/undo_stack.dart';
 import 'package:vector_anim_studio/models/animation.dart';
 
 void main() {
@@ -161,18 +162,89 @@ void main() {
       expect(project.shapes.last.id, first.id);
     });
 
-    test('blank applique le format choisi', () {
+    test('blank applique le format choisi, durée et fps non fixés', () {
       final project = AnimationProject.blank(
         name: 'Test',
         format: ProjectFormat.landscape,
-        durationMs: 2500,
-        fps: 24,
       );
+      project.fps = 24;
       expect(project.width, 640);
       expect(project.height, 360);
-      expect(project.durationMs, 2500);
+      // Durée dérivée du contenu : projet vide → 0.
+      expect(project.durationMs, 0);
       expect(project.fps, 24);
       expect(project.shapes, isEmpty);
+    });
+
+    test('la durée du projet suit le contenu de la timeline', () {
+      final project = AnimationProject.blank();
+      expect(project.durationMs, 0);
+
+      final a = VectorShape(name: 'A', startMs: 0, endMs: 2000);
+      project.shapes.add(a);
+      expect(project.durationMs, 2000);
+
+      // Une forme posée plus loin étend le projet.
+      final b = VectorShape(name: 'B', startMs: 3000, endMs: 5000);
+      project.shapes.add(b);
+      expect(project.durationMs, 5000);
+
+      // Raccourcir le porteur de la durée raccourcit le projet.
+      b.endMs = 3500;
+      expect(project.durationMs, 3500);
+
+      // Supprimer la dernière forme le raccourcit encore.
+      project.shapes.remove(b);
+      expect(project.durationMs, 2000);
+
+      // Un aller-retour JSON conserve la durée dérivée.
+      final restored = AnimationProject.fromJson(
+        jsonDecode(jsonEncode(project.toJson())) as Map<String, dynamic>,
+      );
+      expect(restored.durationMs, 2000);
+    });
+  });
+
+  group('pile d\'annulation', () {
+    test('push copie profondément, pop rejoue en FIFO', () {
+      final stack = UndoStack();
+      final project = AnimationProject.blank(name: 'P');
+      final shape = VectorShape(name: 'A', startMs: 0, endMs: 1000);
+      shape.layers.add(ShapeLayer(name: 'L', kind: ShapeKind.rect));
+      shape.upsertKeyframe(500, shape.poseAt(500));
+      project.shapes.add(shape);
+
+      stack.push(project);
+
+      // Mutation après le snapshot.
+      shape.endMs = 3000;
+      shape.upsertKeyframe(1000, shape.poseAt(1000));
+      shape.layers.add(ShapeLayer(name: 'B', kind: ShapeKind.circle));
+      expect(project.durationMs, 3000);
+      expect(shape.keyframes.length, 2);
+      expect(shape.layers.length, 2);
+
+      // L'annulation rend l'état d'avant mutation.
+      final previous = stack.pop()!;
+      expect(previous.shapes.single.endMs, 1000);
+      expect(previous.durationMs, 1000);
+      expect(previous.shapes.single.keyframes.length, 1);
+      expect(previous.shapes.single.layers.length, 1);
+      expect(stack.canUndo, isFalse);
+    });
+
+    test('la pile est limitée aux 20 dernières actions', () {
+      final stack = UndoStack();
+      final project = AnimationProject.blank(name: 'P');
+      for (var i = 0; i < 25; i++) {
+        stack.push(project);
+      }
+      expect(stack.length, 20);
+      // Les 5 plus anciens ont été évincés : on pop 20 fois, plus rien après.
+      for (var i = 0; i < 20; i++) {
+        expect(stack.pop(), isNotNull);
+      }
+      expect(stack.pop(), isNull);
     });
   });
 

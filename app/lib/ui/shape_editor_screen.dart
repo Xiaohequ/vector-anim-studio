@@ -64,7 +64,7 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
           x: project.width / 2,
           y: project.height / 2,
           startMs: 0,
-          endMs: project.durationMs,
+          endMs: math.max(project.durationMs, 4000),
           layers: <ShapeLayer>[_defaultLayer(ShapeKind.rect, 0)],
         );
     _name = TextEditingController(text: _draft.name);
@@ -152,12 +152,22 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
   void _snack(String message) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
 
+  /// Bornée de la fenêtre d'affichage éditable : la fin du dernier AUTRE
+  /// segment +10 s (le projet s'étend tout seul) — jamais sous la fin du
+  /// brouillon pour ne pas casser le RangeSlider.
+  int _windowMaxMs() {
+    var other = 0;
+    for (final shape in widget.project.shapes) {
+      if (shape.id != _draft.id && shape.endMs > other) other = shape.endMs;
+    }
+    return math.max(other + 10000, _draft.endMs);
+  }
+
   AnimationProject get _preview {
     final project = AnimationProject(
       name: _draft.name,
       width: widget.project.width,
       height: widget.project.height,
-      durationMs: widget.project.durationMs,
       fps: widget.project.fps,
       backgroundValue: widget.project.backgroundValue,
       shapes: <VectorShape>[
@@ -203,7 +213,7 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
           Expanded(
             child: LayerPanel(
               shape: _draft,
-              durationMs: widget.project.durationMs,
+              durationMs: _windowMaxMs(),
               selectedLayer: layer,
               onSelect: (value) => setState(() => _selectedLayerId = value.id),
               onAdd: _addLayer,
