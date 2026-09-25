@@ -1,12 +1,12 @@
-# Vector Anim Studio 0.9.4
+# Vector Anim Studio 0.9.5
 
-## Corrections
+## Changement de comportement
 
-- **Le déplacement d'os (✥) remis en marche.** Le glisser armé par le bouton « Déplacer l'os » n'avait aucun effet : avec la sélection exclusive, un os sélectionné laisse la forme à `null` et la mise à jour du geste sortait avant la moindre translation (le garde-fou n'exemptait que le geste de rotation). Le déplacement translate maintenant l'ancrage de l'os, la chaîne et les pièces liées suivant le doigt — test widget ajouté (armer, glisser, désarmement automatique).
+- **Le bouton ✥ devient la poignée de déplacement.** Plus de « mode déplacement » : appuyer sur le bouton ✥ et glisser déplace directement l'os — il suit le doigt en direct, la chaîne descendante et les pièces liées sont emportées. Le bouton, ancré à l'os, colle au doigt pendant le glisser. Un tap simple sur ✥ ne fait plus rien ; la poignée de rotation (cercle au bout de l'os sélectionné) reste inchangée.
 
 ## Analyse & tests
 
-- `flutter analyze` : 0 problème ; **107 tests verts**.
+- `flutter analyze` : 0 problème ; **107 tests verts** (nouveau test widget : glisser le bouton ✥ translate l'ancrage, un tap ne fait rien).
 
 <!--
 Ce fichier est utilisé tel quel comme description de chaque release GitHub.

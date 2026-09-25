@@ -6,8 +6,8 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Repo : https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`)
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
-- Dernière version : **0.9.4** (bugfix — déplacement d'os ✥ remis en
-  marche, test widget one-shot ; 107 tests)
+- Dernière version : **0.9.5** (le bouton ✥ devient la poignée de
+  déplacement — glisser le bouton déplace l'os, plus de mode ; 107 tests)
 - Détails techniques : `docs/PLAN.md` · Notes de version : `RELEASE_NOTES.md`
 
 ---
@@ -49,7 +49,7 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 ## ⏳ En attente (bloquant la suite)
 
-- **Validation v0.9.4 sur appareil réel** (APK `vector-anim-studio-0.9.4.apk`),
+- **Validation v0.9.4 sur appareil réel** (APK `vector-anim-studio-0.9.5.apk`),
   scénario ciblé sur les changements de la version :
   1. Projet Squelette → 2-3 pièces → timeline : les rectangles de pièces
      restent affichés AVANT et APRÈS la création d'un os.
@@ -122,7 +122,16 @@ v0.9.0, l'**animation squelette** (rig maître).
   Exemption étendue à boneMove + test widget (armer → glisser → translation
   de l'ancrage → désarmement auto au relâchement).
 
-### v0.9.5 (décidé, pas entamé)
+### v0.9.5 (livrée — choix utilisateur : ✥ = poignée draggable)
+- Le bouton ✥ devient la POIGNÉE de déplacement : appui + glisser sur le
+  bouton → l'os suit le doigt en direct (`_onBonePanStart/Update/End`, delta
+  écran → scène par geo.scale, `_translateBoneFollow` pour chaîne + pièces).
+- Plus de mode armé : `_boneMoveMode`, `_toggleBoneMove`, le geste canvas
+  `boneMove` et le désarmement auto supprimés — un tap sur ✥ ne fait rien.
+- Le bouton reste ancré à l'os (il « colle » au doigt pendant le glisser).
+- Undo : 1 glisser = 1 entrée (snapshot au panStart, poussé au panEnd).
+
+### v0.9.6 (décidé, pas entamé)
 - **Liaison au niveau couche** : lier une couche précise (et plus seulement
   une forme entière) à un os + panneau d'offset d'attache.
 - **Import d'une animation squelette dans un projet vectoriel** : « Formes ▸

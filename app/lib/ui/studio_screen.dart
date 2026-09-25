@@ -25,7 +25,7 @@ import 'shape_properties_sheet.dart';
 import 'timeline_view.dart';
 
 /// Geste en cours sur le canvas.
-enum _CanvasGesture { none, move, scale, rotate, boneRotate, boneMove }
+enum _CanvasGesture { none, move, scale, rotate, boneRotate }
 
 /// Éditeur d'un projet : canvas, timeline, menus Formes/Animations.
 class StudioScreen extends StatefulWidget {
@@ -84,12 +84,8 @@ class _StudioScreenState extends State<StudioScreen>
   /// Parent de l'os en attente (os sélectionné au moment du premier tap).
   String? _pendingParentId;
 
-  /// Mode « déplacer l'os sélectionné » : un glisser sur le canvas translate
-  /// l'ancrage de l'os (offset de repos), la chaîne et les pièces liées
-  /// suivent.
-  bool _boneMoveMode = false;
-
-  /// Os en cours de rotation (glisser de son extrémité).
+  /// Os en cours de rotation (glisser de la poignée) ou de déplacement
+  /// (glisser du bouton ✥).
   String? _dragBoneId;
 
   /// Zoom/défilement de la timeline (mémoire de session, non persisté).
@@ -342,7 +338,6 @@ class _StudioScreenState extends State<StudioScreen>
           : null;
       _addBoneMode = false;
       _pendingJoint = null;
-      _boneMoveMode = false;
       _zoom = TimelineZoomState(durationOf: () => _project!.durationMs);
     });
     // L'ancien controller est désabonné par le rebuild : on le dispose après.
@@ -574,7 +569,6 @@ class _StudioScreenState extends State<StudioScreen>
       _addBoneMode = !_addBoneMode;
       _pendingJoint = null;
       _pendingParentId = null;
-      _boneMoveMode = false;
     });
     if (_addBoneMode) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -587,22 +581,51 @@ class _StudioScreenState extends State<StudioScreen>
     }
   }
 
-  /// Arme un déplacement « one-shot » (plus de mode collant) : appuyer sur
-  /// ✥ puis glisser n'importe où sur l'écran translate l'ancrage de l'os
-  /// sélectionné (chaîne et pièces liées suivent) ; le relâchement termine.
-  void _toggleBoneMove() {
-    if (_selectedBone == null) return;
+  /// Début du glisser du bouton ✥ : snapshot d'annulation en attente.
+  void _onBonePanStart(DragStartDetails details) {
+    final bone = _selectedBone;
+    if (bone == null || _project == null) return;
+    _dragBoneId = bone.id;
+    _gestureUndo = AnimationProject.fromJson(_project!.toJson());
+    _gestureMutated = false;
+  }
+
+  /// Glisser du bouton ✥ : l'ancrage de l'os suit le doigt (delta écran →
+  /// scène), la chaîne et les pièces liées sont emportées. Pas de mode : le
+  /// geste vit sur le bouton lui-même (choix utilisateur v0.9.5).
+  void _onBonePanUpdate(
+    DragUpdateDetails details,
+    AnimationProject project,
+    Size canvasSize,
+  ) {
+    final controller = _controller;
+    final rig = project.skeleton;
+    final bone = rig?.boneById(_dragBoneId);
+    if (controller == null || rig == null || bone == null) return;
+    final geo = SceneGeometry.fitFor(project, canvasSize);
     setState(() {
-      _boneMoveMode = !_boneMoveMode;
-      _addBoneMode = false;
-      _pendingJoint = null;
-      _pendingParentId = null;
-    });
-    if (_boneMoveMode) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Glisse sur l’écran pour déplacer l’os')),
+      _translateBoneFollow(
+        project,
+        rig,
+        bone,
+        controller,
+        details.delta / geo.scale,
       );
+    });
+    _gestureMutated = true;
+  }
+
+  /// Fin du glisser ✥ : 1 geste = 1 entrée d'annulation, save différée.
+  void _onBonePanEnd() {
+    if (_gestureMutated && _gestureUndo != null) {
+      _undoStack.push(_gestureUndo!);
+      _undoTag = null;
+      setState(() {});
     }
+    _gestureUndo = null;
+    _gestureMutated = false;
+    _dragBoneId = null;
+    _scheduleSave();
   }
 
   /// Deuxième tap du mode création : crée l'os entre l'articulation en
@@ -843,7 +866,6 @@ class _StudioScreenState extends State<StudioScreen>
       _selectedBoneId = null;
       _addBoneMode = false;
       _pendingJoint = null;
-      _boneMoveMode = false;
     });
     await _flushSave();
     _snack('Squelette supprimé');
@@ -984,21 +1006,6 @@ class _StudioScreenState extends State<StudioScreen>
       _gesture = _CanvasGesture.none;
       return;
     }
-    // Mode « déplacer l'os » : tout glisser translate l'ancrage de l'os
-    // sélectionné (la chaîne et les pièces liées suivent).
-    if (_boneMoveMode) {
-      final rig = project.skeleton;
-      final bone = rig?.boneById(_selectedBoneId);
-      if (bone == null) {
-        _gesture = _CanvasGesture.none;
-        return;
-      }
-      _gesture = _CanvasGesture.boneMove;
-      _dragBoneId = bone.id;
-      _gestureUndo = AnimationProject.fromJson(project.toJson());
-      _gestureMutated = false;
-      return;
-    }
     // Priorité rig : poignée de rotation de l'os sélectionné uniquement —
     // v0.9.3 : pivoter via l'extrémité de l'os (2e point) est désactivé.
     final rig = project.skeleton;
@@ -1092,13 +1099,8 @@ class _StudioScreenState extends State<StudioScreen>
     final shape = _selected;
     if (_gesture == _CanvasGesture.none) return;
     // Les gestes d'os ne portent pas de forme (sélection exclusive : un os
-    // sélectionné laisse la forme à null) — v0.9.3 n'exemptait que
-    // boneRotate : le déplacement armé (✥) n'avait aucun effet.
-    if (shape == null &&
-        _gesture != _CanvasGesture.boneRotate &&
-        _gesture != _CanvasGesture.boneMove) {
-      return;
-    }
+    // sélectionné laisse la forme à null).
+    if (shape == null && _gesture != _CanvasGesture.boneRotate) return;
     switch (_gesture) {
       case _CanvasGesture.boneRotate:
         final rig = project.skeleton;
@@ -1150,21 +1152,6 @@ class _StudioScreenState extends State<StudioScreen>
               toleranceMs: controller.snapToleranceMs,
             );
           }
-        });
-        _gestureMutated = true;
-      case _CanvasGesture.boneMove:
-        final rig = project.skeleton;
-        final bone = rig?.boneById(_dragBoneId);
-        if (rig == null || bone == null) break;
-        final geo = SceneGeometry.fitFor(project, canvasSize);
-        setState(() {
-          _translateBoneFollow(
-            project,
-            rig,
-            bone,
-            controller,
-            details.focalPointDelta / geo.scale,
-          );
         });
         _gestureMutated = true;
       case _CanvasGesture.move:
@@ -1262,8 +1249,6 @@ class _StudioScreenState extends State<StudioScreen>
     _gestureBoneFrame = null;
     _dragBoneId = null;
     _gesture = _CanvasGesture.none;
-    // Déplacement one-shot : le premier glisser désarme le bouton ✥.
-    if (_boneMoveMode) setState(() => _boneMoveMode = false);
   }
 
   /// Tap sur le canvas : en mode rig (création d'os) tap 1 = articulation,
@@ -1747,18 +1732,28 @@ class _StudioScreenState extends State<StudioScreen>
             top: top,
             width: size,
             height: size,
-            child: IconButton(
-              tooltip: _boneMoveMode
-                  ? 'Terminer le déplacement de l’os'
-                  : 'Déplacer l’os',
-              isSelected: _boneMoveMode,
-              padding: EdgeInsets.zero,
-              style: IconButton.styleFrom(
-                backgroundColor: const Color(0xCC151922),
-                foregroundColor: const Color(0xFF7DD3FC),
+            child: Tooltip(
+              message: 'Glisser pour déplacer l’os',
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onPanStart: _onBonePanStart,
+                onPanUpdate: (details) =>
+                    _onBonePanUpdate(details, project, canvasSize),
+                onPanEnd: (_) => _onBonePanEnd(),
+                onPanCancel: _onBonePanEnd,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xCC151922),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  alignment: Alignment.center,
+                  child: const Icon(
+                    Icons.open_with,
+                    size: 20,
+                    color: Color(0xFF7DD3FC),
+                  ),
+                ),
               ),
-              icon: const Icon(Icons.open_with, size: 20),
-              onPressed: _toggleBoneMove,
             ),
           ),
         ],
