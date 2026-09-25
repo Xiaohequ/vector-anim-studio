@@ -1091,7 +1091,14 @@ class _StudioScreenState extends State<StudioScreen>
   ) {
     final shape = _selected;
     if (_gesture == _CanvasGesture.none) return;
-    if (shape == null && _gesture != _CanvasGesture.boneRotate) return;
+    // Les gestes d'os ne portent pas de forme (sélection exclusive : un os
+    // sélectionné laisse la forme à null) — v0.9.3 n'exemptait que
+    // boneRotate : le déplacement armé (✥) n'avait aucun effet.
+    if (shape == null &&
+        _gesture != _CanvasGesture.boneRotate &&
+        _gesture != _CanvasGesture.boneMove) {
+      return;
+    }
     switch (_gesture) {
       case _CanvasGesture.boneRotate:
         final rig = project.skeleton;

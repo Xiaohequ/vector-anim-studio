@@ -238,6 +238,47 @@ void main() {
     expect(project.skeleton!.hasKeyframes(bone.id), isFalse);
   });
 
+  testWidgets('✥ arme un déplacement one-shot : glisser translate l’os', (
+    tester,
+  ) async {
+    final repository = _MemoryRepository();
+    final project = AnimationProject.blank(
+      name: 'Rat',
+      type: ProjectType.skeleton,
+    );
+    final rig = SkeletonRig();
+    final bone = RigBone(name: 'Queue', offsetX: 180, offsetY: 320, length: 50);
+    rig.addBone(bone);
+    project.skeleton = rig;
+
+    await pumpStudio(tester, repository, project);
+
+    // Sélectionner l'os via le menu Squelettes.
+    await tester.tap(find.byTooltip('Squelettes'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('Queue').last);
+    await tester.pumpAndSettle();
+
+    // Armer le déplacement (bouton ✥).
+    await tester.tap(find.byTooltip('Déplacer l’os'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Terminer le déplacement de l’os'), findsOneWidget);
+
+    // Glisser vers la droite : l'ancrage de l'os suit (bug v0.9.3 : le
+    // geste boneMove sortait avant la moindre translation, « sans effet »).
+    await tester.dragFrom(const Offset(180, 120), const Offset(100, 0));
+    await tester.pumpAndSettle();
+    expect(bone.offsetX, greaterThan(180));
+    expect(bone.offsetY, 320);
+
+    // Le premier glisser désarme ✥ : un second glisser ne bouge plus l'os.
+    final afterFirst = bone.offsetX;
+    await tester.dragFrom(const Offset(180, 120), const Offset(50, 0));
+    await tester.pumpAndSettle();
+    expect(bone.offsetX, afterFirst);
+    expect(find.byTooltip('Déplacer l’os'), findsOneWidget);
+  });
+
   testWidgets('un projet squelette affiche une barre d’os sur la timeline', (
     tester,
   ) async {

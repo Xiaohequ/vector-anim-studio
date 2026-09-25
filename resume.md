@@ -6,9 +6,8 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Repo : https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`)
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
-- Dernière version : **0.9.3** (bugfix/rigging — re-parentage sans saut,
-  confirmation d'attachement, poignée de rotation, déplacement one-shot ;
-  106 tests)
+- Dernière version : **0.9.4** (bugfix — déplacement d'os ✥ remis en
+  marche, test widget one-shot ; 107 tests)
 - Détails techniques : `docs/PLAN.md` · Notes de version : `RELEASE_NOTES.md`
 
 ---
@@ -50,7 +49,7 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 ## ⏳ En attente (bloquant la suite)
 
-- **Validation v0.9.3 sur appareil réel** (APK `vector-anim-studio-0.9.3.apk`),
+- **Validation v0.9.4 sur appareil réel** (APK `vector-anim-studio-0.9.4.apk`),
   scénario ciblé sur les changements de la version :
   1. Projet Squelette → 2-3 pièces → timeline : les rectangles de pièces
      restent affichés AVANT et APRÈS la création d'un os.
@@ -116,7 +115,14 @@ v0.9.0, l'**animation squelette** (rig maître).
 - **Déplacement one-shot** : ✥ arme le prochain glisser (aucun état collant)
   — `_onCanvasGestureEnd` désarme ; terminateur ✓ retiré pour ce mode.
 
-### v0.9.4 (décidé, pas entamé)
+### v0.9.4 (livrée — bugfix retours v0.9.3)
+- **✥ sans effet corrigé** : le garde-fou de `_onCanvasGestureUpdate`
+  (`shape == null && geste != boneRotate → return`) bloquait aussi boneMove
+  — avec la sélection exclusive, un os sélectionné laisse la forme à null.
+  Exemption étendue à boneMove + test widget (armer → glisser → translation
+  de l'ancrage → désarmement auto au relâchement).
+
+### v0.9.5 (décidé, pas entamé)
 - **Liaison au niveau couche** : lier une couche précise (et plus seulement
   une forme entière) à un os + panneau d'offset d'attache.
 - **Import d'une animation squelette dans un projet vectoriel** : « Formes ▸
