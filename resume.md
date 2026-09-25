@@ -6,8 +6,9 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Repo : https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`)
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
-- Dernière version : **0.10.0** (z d'os, opacité/étirement/écrasement par keyframe
-  d'os, IK 2 os ; 120 tests)
+- Dernière version : **0.10.1** (correctif : le glisser IK marche depuis toute
+  sélection — enfant, parent ou aucune — et les boutons ⚙/✥ ne recouvrent plus
+  l'effecteur ; 123 tests)
 - Détails techniques : `docs/PLAN.md` · Notes de version : `RELEASE_NOTES.md`
 
 ---
@@ -153,6 +154,20 @@ v0.9.0, l'**animation squelette** (rig maître).
   l'extrémité de l'ENFANT (avant la poignée de rotation), marqueur losange
   vert sur l'effecteur ; auto-key si l'os a des keyframes, sinon pose du rig
   (`restAngle` + `carryBoundPieces`) ; « Inverser le coude » dans la sheet.
+
+### v0.10.1 (livrée — le glisser IK était mort selon la sélection)
+- Deux causes du « rien ne se passe » en v0.10.0 :
+  - le geste IK n'était armé QUE si l'os PARENT était sélectionné — taper le
+    poignet sélectionne l'ENFANT → glisser mort ; v0.10.1 : le losange vert
+    est une vraie poignée (parent OU enfant OU aucune sélection).
+  - le bouton ✥ (ancré près de l'enfant sélectionné) recouvait l'effecteur et
+    avalait le press → v0.10.1 : boutons ⚙/✥ rangés au joint du PARENT
+    (le coude) quand l'enfant IK est sélectionné.
+- 3 tests widget pilotant de vrais glissers (ScaleStart/Update) : piège harnais
+  — `onScaleStart` ne démarle qu'APRÈS un déplacement > 18 px écran, avec le
+  foyer DÉJÀ déplacé : premier move de 22 px écran (< slop IK 26) puis move de
+  correction ; rig initial JAMAIS tendu à fond (L1+L2 > distance joint→effecteur)
+  sinon toute cible est hors de portée (le solveur clampe, tip ≠ cible).
 
 ### v0.11+ (proposé)
 - Reciblage de binding à la keyframe (reprise de préhension).

@@ -1,7 +1,11 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:vector_anim_studio/data/project_repository.dart';
+import 'package:vector_anim_studio/engine/scene_painter.dart';
+import 'package:vector_anim_studio/engine/selection_geometry.dart';
 import 'package:vector_anim_studio/main.dart';
 import 'package:vector_anim_studio/models/animation.dart';
 import 'package:vector_anim_studio/models/skeleton.dart';
@@ -275,6 +279,148 @@ void main() {
     await tester.tap(find.byTooltip('Glisser pour déplacer l’os'));
     await tester.pumpAndSettle();
     expect(bone.offsetX, afterFirst);
+  });
+
+  /// Rig IK : épaule (180,320)→(280,320), avant-bras (280,320)→(280,420)
+  /// (plié à 90°) ; IK activé sur l'ÉPAULE (os parent), effecteur =
+  /// extrémité de l'enfant. Pose initiale JAMAIS tendue à fond (L1+L2 =
+  /// 200 > distance joint→effecteur 141) : les cibles de test restent
+  /// atteignables.
+  AnimationProject ikProject() {
+    final project = AnimationProject.blank(
+      name: 'Rat',
+      type: ProjectType.skeleton,
+    );
+    final rig = SkeletonRig();
+    final parent = RigBone(
+      name: 'Bras',
+      offsetX: 180,
+      offsetY: 320,
+      length: 100,
+      ikEnabled: true,
+    );
+    final child = RigBone(
+      name: 'Avant-bras',
+      parentId: parent.id,
+      offsetX: 100,
+      offsetY: 0,
+      restAngle: math.pi / 2,
+      length: 100,
+    );
+    rig.addBone(parent);
+    rig.addBone(child);
+    project.skeleton = rig;
+    return project;
+  }
+
+  /// Point GLOBAL du canvas + géométrie scène↔canvas réelle de l'app.
+  (Offset topLeft, SceneGeometry geo) canvasHarness(
+    WidgetTester tester,
+    AnimationProject project,
+  ) {
+    final paint = tester.widget<CustomPaint>(
+      find.byWidgetPredicate(
+        (w) => w is CustomPaint && w.painter is ScenePainter,
+      ),
+    );
+    final box = tester.renderObject<RenderBox>(find.byWidget(paint));
+    return (
+      box.localToGlobal(Offset.zero),
+      SceneGeometry.fitFor(project, box.size),
+    );
+  }
+
+  /// Glisser depuis [from] (global) de [sceneDelta] px scène : un premier
+  /// déplacement ÉCRAN de 22 px vainc la slop du recognizer (18 px) tout en
+  /// gardant le foyer de onScaleStart DANS la zone de saisie IK (26 px) —
+  /// le recognizer ne démarle qu'après un déplacement, avec le foyer déjà
+  /// déplacé. Un second déplacement recale ensuite le foyer SUR la cible.
+  Future<void> dragSceneDelta(
+    WidgetTester tester,
+    Offset from,
+    Offset sceneDelta,
+    double scale,
+  ) async {
+    const big = Offset(22.0, 0.0);
+    final grip = await tester.startGesture(from);
+    await tester.pump();
+    await grip.moveBy(big);
+    await tester.pump();
+    await grip.moveBy(-big + sceneDelta * scale);
+    await tester.pump();
+    await grip.up();
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets(
+    'IK : glisser l’effecteur résout la chaîne (enfant sélectionné)',
+    (tester) async {
+      final repository = _MemoryRepository();
+      final project = ikProject();
+      await pumpStudio(tester, repository, project);
+      final (topLeft, geo) = canvasHarness(tester, project);
+      final rig = project.skeleton!;
+      final child = rig.bones.last;
+
+      // Tap sur l'effecteur : l'ENFANT se sélectionne (le comportement
+      // naturel — v0.10.0 exigeait le parent sélectionné, le glisser était
+      // mort depuis cette sélection).
+      final effecteur = topLeft + geo.sceneToCanvas(const Offset(280, 420));
+      await tester.tapAt(effecteur);
+      await tester.pumpAndSettle();
+
+      // Glisser l'effecteur de 60 px scène vers le haut.
+      await dragSceneDelta(tester, effecteur, const Offset(0, -60), geo.scale);
+
+      final pose = SkeletonPose.evaluate(rig, 0);
+      final tip = pose.frameOf(child.id)!.tip;
+      expect(tip.dx, moreOrLessEquals(280, epsilon: 1e-3));
+      expect(tip.dy, moreOrLessEquals(360, epsilon: 1e-3));
+      // Le coude a bougé : la chaîne a plié (et pas juste glissé).
+      expect(pose.frameOf(rig.bones.first.id)!.tip.dy, isNot(320.0));
+    },
+  );
+
+  testWidgets('IK : le losange vert est une poignée même SANS sélection', (
+    tester,
+  ) async {
+    final repository = _MemoryRepository();
+    final project = ikProject();
+    await pumpStudio(tester, repository, project);
+    final (topLeft, geo) = canvasHarness(tester, project);
+    final rig = project.skeleton!;
+    final child = rig.bones.last;
+
+    final effecteur = topLeft + geo.sceneToCanvas(const Offset(280, 420));
+    await dragSceneDelta(tester, effecteur, const Offset(60, 0), geo.scale);
+
+    // Cible (340, 420) : d = 188,7 < 200 — le bout de l'enfant atterrit
+    // SUR la cible.
+    final pose = SkeletonPose.evaluate(rig, 0);
+    final tip = pose.frameOf(child.id)!.tip;
+    expect(tip.dx, moreOrLessEquals(340, epsilon: 1e-3));
+    expect(tip.dy, moreOrLessEquals(420, epsilon: 1e-3));
+  });
+
+  testWidgets('IK : marche aussi avec l’os parent sélectionné', (tester) async {
+    final repository = _MemoryRepository();
+    final project = ikProject();
+    await pumpStudio(tester, repository, project);
+    final (topLeft, geo) = canvasHarness(tester, project);
+    final rig = project.skeleton!;
+    final child = rig.bones.last;
+
+    // Tap au MILIEU de l'épaule → parent sélectionné.
+    await tester.tapAt(topLeft + geo.sceneToCanvas(const Offset(230, 320)));
+    await tester.pumpAndSettle();
+
+    final effecteur = topLeft + geo.sceneToCanvas(const Offset(280, 420));
+    await dragSceneDelta(tester, effecteur, const Offset(-30, 40), geo.scale);
+
+    final pose = SkeletonPose.evaluate(rig, 0);
+    final tip = pose.frameOf(child.id)!.tip;
+    expect(tip.dx, moreOrLessEquals(250, epsilon: 1e-3));
+    expect(tip.dy, moreOrLessEquals(460, epsilon: 1e-3));
   });
 
   testWidgets('un projet squelette affiche une barre d’os sur la timeline', (

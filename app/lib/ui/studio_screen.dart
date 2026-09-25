@@ -1125,31 +1125,55 @@ class _StudioScreenState extends State<StudioScreen>
     final rig = project.skeleton;
     if (project.isSkeleton && rig != null && rig.bones.isNotEmpty) {
       final selectedBone = rig.boneById(_selectedBoneId);
+      final pose = SkeletonPose.evaluate(rig, controller.timeMs);
+      final geo = SceneGeometry.fitFor(project, canvasSize);
+      // IK 2 os (v0.10) : glisser l'EXTRÉMITÉ de l'enfant unique résout la
+      // chaîne — prioritaire sur la poignée de rotation. v0.10.1 : le
+      // losange vert est une vraie poignée — l'IK démarre que l'os PARENT
+      // (ikEnabled) ou l'ENFANT (effecteur) soit sélectionné, voire SANS
+      // sélection du tout (les v0.10.0 exigeaient le parent : glisser le
+      // poignet fraîchement tapé ne faisait rien).
+      RigBone? ikParent;
       if (selectedBone != null) {
-        final pose = SkeletonPose.evaluate(rig, controller.timeMs);
-        final geo = SceneGeometry.fitFor(project, canvasSize);
-        // IK 2 os (v0.10) : l'os sélectionné est ikEnabled — glisser
-        // l'EXTRÉMITÉ de son enfant unique résout la chaîne. Prioritaire
-        // sur la poignée de rotation.
-        if (selectedBone.ikEnabled &&
-            RigOverlayPainter.hitIkEndEffector(
-              pose,
-              rig,
-              geo,
-              selectedBone.id,
-              details.localFocalPoint,
-            )) {
-          _gesture = _CanvasGesture.boneIk;
-          _dragBoneId = selectedBone.id;
-          _gestureBoneFrame = null;
-          _gestureUndo = AnimationProject.fromJson(project.toJson());
-          _gestureMutated = false;
-          setState(() {
-            _selectedBoneId = selectedBone.id;
-            _selectedId = null; // sélection exclusive : os OU forme
-          });
-          return;
+        if (selectedBone.ikEnabled) {
+          ikParent = selectedBone;
+        } else {
+          final parent = rig.boneById(selectedBone.parentId);
+          if (parent != null &&
+              parent.ikEnabled &&
+              rig.onlyChildOf(parent.id)?.id == selectedBone.id) {
+            ikParent = parent;
+          }
         }
+      }
+      if (ikParent != null &&
+          RigOverlayPainter.hitIkEndEffector(
+            pose,
+            rig,
+            geo,
+            ikParent.id,
+            details.localFocalPoint,
+          )) {
+        _startBoneIk(ikParent, project);
+        return;
+      }
+      if (selectedBone == null) {
+        // Aucune sélection : le losange vert sous le doigt démarre l'IK.
+        for (final candidate in rig.bones.reversed) {
+          if (!candidate.ikEnabled) continue;
+          if (RigOverlayPainter.hitIkEndEffector(
+            pose,
+            rig,
+            geo,
+            candidate.id,
+            details.localFocalPoint,
+          )) {
+            _startBoneIk(candidate, project);
+            return;
+          }
+        }
+      }
+      if (selectedBone != null) {
         if (RigOverlayPainter.hitRotationHandle(
           pose,
           rig,
@@ -1421,6 +1445,21 @@ class _StudioScreenState extends State<StudioScreen>
     _gestureBoneFrame = null;
     _dragBoneId = null;
     _gesture = _CanvasGesture.none;
+  }
+
+  /// Démarre le geste IK sur la chaîne dont [ikParent] est l'os parent :
+  /// snapshot d'annulation en attente, sélection exclusive sur le parent
+  /// (la sheet IK y reste accessible).
+  void _startBoneIk(RigBone ikParent, AnimationProject project) {
+    _gesture = _CanvasGesture.boneIk;
+    _dragBoneId = ikParent.id;
+    _gestureBoneFrame = null;
+    _gestureUndo = AnimationProject.fromJson(project.toJson());
+    _gestureMutated = false;
+    setState(() {
+      _selectedBoneId = ikParent.id;
+      _selectedId = null; // sélection exclusive : os OU forme
+    });
   }
 
   /// IK 2 os (v0.10) : pose les angles MONDE résolus du parent et de
@@ -1907,33 +1946,51 @@ class _StudioScreenState extends State<StudioScreen>
 
   /// Boutons flottants de l'os sélectionné : ⚙ propriétés (ancré au bout du
   /// segment, comme le bouton des formes) + ✥ mode déplacement à côté.
+  /// v0.10.1 : si l'os sélectionné est l'ENFANT d'une chaîne IK, les boutons
+  /// s'ancrent au JOINT DU PARENT (le coude) — posés près de l'enfant, le
+  /// bouton ✥ recouvrait l'effecteur (losange vert) et avalait le glisser
+  /// IK (« rien ne se passe » en v0.10.0).
   Widget _buildBoneButtons(
     AnimationProject project,
     TimelineController controller,
     Size canvasSize,
   ) {
     final bone = _selectedBone;
+    final rig = project.skeleton!;
     final frame = bone == null
         ? null
-        : SkeletonPose.evaluate(
-            project.skeleton!,
-            controller.timeMs,
-          ).frameOf(bone.id);
+        : SkeletonPose.evaluate(rig, controller.timeMs).frameOf(bone.id);
     if (bone == null || frame == null || canvasSize.isEmpty) {
       return const SizedBox.shrink();
     }
     final geo = SceneGeometry.fitFor(project, canvasSize);
+    // Ancrage : l'os sélectionné, SAUF quand il est l'enfant unique d'un os
+    // IK — dans ce cas les boutons se rangent au joint du parent (le coude),
+    // loin de l'effecteur que le doigt doit saisir.
+    var anchorFrame = frame;
+    final parent = rig.boneById(bone.parentId);
+    if (parent != null &&
+        parent.ikEnabled &&
+        rig.onlyChildOf(parent.id)?.id == bone.id) {
+      final parentFrame = SkeletonPose.evaluate(
+        rig,
+        controller.timeMs,
+      ).frameOf(parent.id);
+      if (parentFrame != null) {
+        anchorFrame = parentFrame;
+      }
+    }
     // Pose synthétique de l'os : segment = rect local de longueur
     // frame.length et hauteur nulle, orienté worldAngle — réutilise le
     // placement « coin bas-gauche » des boutons de forme.
     final bonePose = Pose2D(
-      origin: (frame.joint + frame.tip) / 2,
-      rotation: frame.worldAngle,
+      origin: (anchorFrame.joint + anchorFrame.tip) / 2,
+      rotation: anchorFrame.worldAngle,
       scale: 1,
     );
     final boneBounds = Rect.fromCenter(
       center: Offset.zero,
-      width: frame.length,
+      width: anchorFrame.length,
       height: 0,
     );
     final center = SelectionGeometry.propertiesButton(
