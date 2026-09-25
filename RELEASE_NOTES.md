@@ -1,7 +1,5 @@
 # Vector Anim Studio 0.9.2
 
-Studio d'animation vectorielle pour Android : projets multiples, formes composées de couches, keyframes « pose », timeline zoomable, undo, export MP4 et GIF, animation squelette. Cette version affine le rigging suite aux retours de la v0.9.1 : os 2 attaché automatiquement à l'os 1, liaison os↔pièce uniquement manuelle, sélection exclusive et boutons dédiés pour l'os.
-
 ## Nouveautés
 
 - **Os 2 attaché automatiquement à l'os 1.** Au premier tap du mode rig, le parent du nouvel os est détecté par priorité : extrémité d'os touchée (l'articulation s'y accroche exactement — le poignet), sinon segment d'os touché, sinon pièce touchée → l'os qui la porte, sinon l'os sélectionné. L'ancrage posé suit ensuite tout mouvement de l'os parent (rotation, déplacement) — plus jamais de décalage entre l'endroit cliqué et l'articulation (bug v0.9.1 : elle était placée au deuxième tap).
@@ -20,19 +18,6 @@ Studio d'animation vectorielle pour Android : projets multiples, formes composé
 ## Analyse & tests
 
 - `flutter analyze` : 0 problème ; **104 tests verts** (FK, round-trip, persistance v4, durée squelette, translation d'ancrage, emport de pièces, création d'os attaché au poignet y compris sur os animé).
-
-## Installation
-
-1. Télécharge le fichier `.apk` ci-dessous.
-2. Transfère-le sur ton téléphone Android.
-3. Ouvre-le et autorise « Installer des applications inconnues » si Android le demande.
-
-## À savoir
-
-- Build **signé avec la clé debug** de Flutter : destiné aux tests, refusé par le Play Store.
-- La CI ne produit que l'APK (pas d'App Bundle `.aab`).
-- L'export MP4 utilise l'encodeur natif du téléphone : le rendu peut varier selon l'appareil.
-- L'annulation vit en mémoire de session : elle n'est pas restaurée après fermeture de l'application.
 
 <!--
 Ce fichier est utilisé tel quel comme description de chaque release GitHub.
