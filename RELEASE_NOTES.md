@@ -1,15 +1,14 @@
-# Vector Anim Studio 0.9.6
+# Vector Anim Studio 0.10.0
 
 ## Nouveautés
 
-- **Liaison au niveau couche.** Une couche précise d'une pièce peut maintenant être liée à son propre os (au lieu d'une pièce entière par os). Dans ⚙ Propriétés de la forme (projet squelette), une section « Couches liées au rig » liste chaque couche avec son os porteur et une action Lier…/Délier. La couche liée suit SON os, indépendamment des couches voisines ; la liaison de couche prend le pas sur la liaison de la forme entière (qui reste disponible). Rigguer un personnage dessiné en une seule forme devient possible : une couche par membre, un os par couche.
-- **Le déplacement d'ancrage emporte les couches liées** : tourner ou déplacer un os transporte les couches liées (et les pièces entières) comme avant — le rendu applique la transformée de l'os porteur par couche.
-- **Duplication fidèle** : dupliquer une pièce emporte ses liaisons (forme entière et couches, ids remappés).
-- **Import squelette → projet vectoriel, avec badge de type** : « Formes ▸ Insérer une animation… » liste les projets vectoriels ET squelettes ; le sous-titre affiche le type (vectorielle / squelette), la durée et le nombre de pièces. Le personnage riggé devient une instance animable (position/échelle/keyframes de forme) dans une scène — le rig du sous-projet est échantillonné à son temps de boucle, 1 niveau d'imbrication maximum.
+- **Ordre de dessin par os (z).** Chaque os porte un réglage « Ordre (z) » dans ⚙ Propriétés de l'os (slider −10…+10). Les pièces du projet squelette sont dessinées triées par le z de leur os porteur — une pièce à z négatif passe DERRIÈRE les autres, indispensable pour un bras derrière le torse. z égal → ordre de la timeline ; les couches liées individuellement suivent le z de LEUR os.
+- **Opacité / étirement / écrasement par keyframe d'os.** ⚙ Propriétés de l'os expose trois sliders animables : Opacité (0–1), Étirement le long de l'os (0,2–3), Écrasement perpendiculaire (0,2–3). Ils s'échantillonnent à la timeline comme l'angle : tenus hors plage, interpolés selon l'easing de la keyframe, neutres (1) sans piste. L'opacité multiplie la pose des pièces portées ; l'étirement/écrasement déforme l'os ET déplace l'articulation des os enfants (les offsets relatifs suivent le stretch du parent).
+- **IK 2 os.** Dans ⚙ Propriétés de l'os, un interrupteur « IK 2 os » s'active sur un os portant EXACTEMENT un enfant (sinon il reste grisé). Le glisser de l'extrémité de l'enfant (effecteur, marqueur vert en losange) résout la chaîne : le bout suit le doigt, le coude plie. Os animé → keyframe au curseur (auto-key) ; os non animé → pose du rig avec emport des pièces liées. « Inverser le coude » bascule le côté du pli. Cible hors de portée : la chaîne se tend au maximum vers elle.
 
 ## Analyse & tests
 
-- `flutter analyze` : 0 problème ; **112 tests verts** (liaison de couche : remplacement/purge, round-trip JSON avec compat ascendante, emport de couche lors de la pose du rig, duplication remappée, instance de squelette dans un vectoriel).
+- `flutter analyze` : 0 problème ; solveur IK vérifié numériquement (L1=L2=50, cible (60,0) → angles ±0,9273 rad, bout de chaîne sur la cible, miroir bend −1), samplers/hold/interp, stretch FK, z de forme et de couche, fusion upsertKeyframe (l'angle n'écrase pas l'opacité), round-trip JSON.
 
 <!--
 Ce fichier est utilisé tel quel comme description de chaque release GitHub.

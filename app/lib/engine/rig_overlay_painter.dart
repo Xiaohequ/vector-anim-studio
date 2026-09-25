@@ -59,6 +59,23 @@ class RigOverlayPainter extends CustomPainter {
     return (canvasPoint - handle).distance <= rotationHandleTouchSlop;
   }
 
+  /// Le point canvas touche-t-il l'effecteur IK (extrémité de l'enfant
+  /// unique) de l'os [boneId] ? (v0.10)
+  static bool hitIkEndEffector(
+    SkeletonPose pose,
+    SkeletonRig rig,
+    SceneGeometry geo,
+    String boneId,
+    Offset canvasPoint,
+  ) {
+    final child = rig.onlyChildOf(boneId);
+    if (child == null) return false;
+    final frame = pose.frameOf(child.id);
+    if (frame == null) return false;
+    final tip = geo.sceneToCanvas(frame.tip);
+    return (canvasPoint - tip).distance <= tipTouchSlop;
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
     for (final bone in rig.bones) {
@@ -131,6 +148,29 @@ class RigOverlayPainter extends CustomPainter {
           textDirection: TextDirection.ltr,
         )..layout();
         painter.paint(canvas, tip + const Offset(10, -16));
+      }
+      // Marqueur IK (v0.10) : losange vert sur l'effecteur — glisser cette
+      // extrémité résout la chaîne 2 os (au lieu de sélectionner/pivoter).
+      if (bone.ikEnabled) {
+        final child = rig.onlyChildOf(bone.id);
+        final childFrame = child == null ? null : pose.frameOf(child.id);
+        if (childFrame != null) {
+          final effector = geo.sceneToCanvas(childFrame.tip);
+          final path = Path()
+            ..moveTo(effector.dx, effector.dy - 9)
+            ..lineTo(effector.dx + 9, effector.dy)
+            ..lineTo(effector.dx, effector.dy + 9)
+            ..lineTo(effector.dx - 9, effector.dy)
+            ..close();
+          canvas.drawPath(path, Paint()..color = const Color(0x663ECF8E));
+          canvas.drawPath(
+            path,
+            Paint()
+              ..color = const Color(0xFF3ECF8E)
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 1.5,
+          );
+        }
       }
     }
   }

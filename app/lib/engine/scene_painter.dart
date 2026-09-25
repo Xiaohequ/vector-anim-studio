@@ -136,13 +136,14 @@ class ScenePainter extends CustomPainter {
         project.isSkeleton && rig != null && rig.bones.isNotEmpty
         ? SkeletonPose.evaluate(rig, timeMs)
         : null;
-    for (final shape in project.shapes) {
+
+    void paintShape(VectorShape shape) {
       // Projet squelette : les pièces sont visibles en permanence (le rig
       // porte toute l'animation) — pas de fenêtre d'affichage.
       final show = project.isSkeleton
           ? shape.visible
           : shape.isVisibleAt(timeMs);
-      if (!show) continue;
+      if (!show) return;
       BoneFrame? frame;
       if (rigPose != null) {
         frame = rigPose.frameOf(rig!.boneIdForShape(shape.id));
@@ -156,6 +157,24 @@ class ScenePainter extends CustomPainter {
         rigPose: rigPose,
         sampleMs: timeMs,
       );
+    }
+
+    // Ordre de dessin par os (v0.10) : en projet squelette, les pièces sont
+    // triées par le z de leur os porteur — z égal → ordre de la timeline.
+    if (rigPose != null) {
+      final indexes = List<int>.generate(project.shapes.length, (i) => i);
+      indexes.sort((a, b) {
+        final za = rig!.zForShape(project.shapes[a].id);
+        final zb = rig.zForShape(project.shapes[b].id);
+        return za != zb ? za.compareTo(zb) : a.compareTo(b);
+      });
+      for (final index in indexes) {
+        paintShape(project.shapes[index]);
+      }
+    } else {
+      for (final shape in project.shapes) {
+        paintShape(shape);
+      }
     }
   }
 
@@ -195,31 +214,46 @@ class ScenePainter extends CustomPainter {
     // exprimée en coordonnées PROJET — elle enveloppe la chaîne complète
     // (pose de la forme puis couche), donc elle s'applique AVANT la pose de
     // la forme. Une couche liée à un os suit SON os (la liaison de couche
-    // prend le pas sur la liaison de la forme entière).
-    for (final layer in shape.layers) {
+    // prend le pas sur la liaison de la forme entière). Ordre de dessin par
+    // os (v0.10) : les couches sont triées par le z de leur os porteur.
+    final layerOrder = List<int>.generate(shape.layers.length, (i) => i);
+    if (rigPose != null) {
+      layerOrder.sort((a, b) {
+        final za = rig?.zOfLayer(shape.id, shape.layers[a].id) ?? 0;
+        final zb = rig?.zOfLayer(shape.id, shape.layers[b].id) ?? 0;
+        return za != zb ? za.compareTo(zb) : a.compareTo(b);
+      });
+    }
+    for (final layerIndex in layerOrder) {
+      final layer = shape.layers[layerIndex];
       if (!layer.visible) continue;
       BoneFrame? layerFrame;
       final layerBinding = rig?.bindingForLayer(shape.id, layer.id);
       if (layerBinding != null && rigPose != null) {
         layerFrame = rigPose.frameOf(layerBinding.boneId);
       }
+      // Opacité (v0.10) : celle de l'os porteur multiplie la pose.
+      final carried = layerFrame ?? boneFrame;
+      final boneOpacity = carried?.opacity ?? 1;
+      final effectiveOpacity = (opacity * boneOpacity).clamp(0.0, 1.0);
       canvas.save();
-      final carrier = layerFrame ?? boneFrame;
-      if (carrier != null) _applyBoneDelta(canvas, carrier);
+      if (carried != null) _applyBoneDelta(canvas, carried);
       canvas.translate(x, y);
       canvas.rotate(rotation);
       canvas.scale(scale <= 0 ? 0.0001 : scale);
-      _paintLayer(canvas, layer, opacity, strokeFactor);
+      _paintLayer(canvas, layer, effectiveOpacity, strokeFactor);
       canvas.restore();
     }
   }
 
   /// Mouvement rigide de l'os entre son repos et l'instant courant :
-  /// `translate(joint_t) · rotate(worldAngle_t) · rotate(−angleRest) ·
-  /// translate(−jointRest)` — identité au repos.
+  /// `translate(joint_t) · rotate(worldAngle_t) · scale(S) · rotate(−angleRest)
+  /// · translate(−jointRest)` — identité au repos. S = étirement/écrasement
+  /// de l'os (v0.10), neutre (1) sans keyframe.
   void _applyBoneDelta(Canvas canvas, BoneFrame frame) {
     canvas.translate(frame.joint.dx, frame.joint.dy);
     canvas.rotate(frame.worldAngle);
+    canvas.scale(frame.stretchX, frame.stretchY);
     canvas.rotate(-frame.worldAngleRest);
     canvas.translate(-frame.jointRest.dx, -frame.jointRest.dy);
   }

@@ -20,6 +20,9 @@ class RigBone {
     this.offsetY = 0,
     this.restAngle = 0,
     this.length = 80,
+    this.z = 0,
+    this.ikEnabled = false,
+    this.bendSign = 1,
   }) : id = id ?? generateId('bone');
 
   final String id;
@@ -36,6 +39,19 @@ class RigBone {
   /// Longueur de l'os (unités projet).
   double length;
 
+  /// Ordre de dessin (v0.10) : les pièces portées sont triées par z croissant
+  /// (les z négatifs passent derrière). Les pièces à z égal gardent l'ordre
+  /// de la timeline.
+  int z;
+
+  /// IK 2 os (v0.10) : quand activé sur un os portant exactement UN enfant,
+  /// le glisser de l'EXTRÉMITÉ de l'enfant résout la chaîne (l'extrémité de
+  /// l'enfant suit le doigt, le coude plie) au lieu de pivoter l'enfant.
+  bool ikEnabled;
+
+  /// Sens du coude de la chaîne IK : +1 ou -1 (côté du pli).
+  double bendSign;
+
   RigBone copy({String? id, String? parentId}) => RigBone(
     id: id ?? this.id,
     name: name,
@@ -44,6 +60,9 @@ class RigBone {
     offsetY: offsetY,
     restAngle: restAngle,
     length: length,
+    z: z,
+    ikEnabled: ikEnabled,
+    bendSign: bendSign,
   );
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -54,6 +73,9 @@ class RigBone {
     'offsetY': offsetY,
     'restAngle': restAngle,
     'length': length,
+    if (z != 0) 'z': z,
+    if (ikEnabled) 'ikEnabled': true,
+    if (bendSign != 1) 'bendSign': bendSign,
   };
 
   factory RigBone.fromJson(Map<String, Object?> json) => RigBone(
@@ -64,6 +86,9 @@ class RigBone {
     offsetY: (json['offsetY'] as num?)?.toDouble() ?? 0,
     restAngle: (json['restAngle'] as num?)?.toDouble() ?? 0,
     length: (json['length'] as num?)?.toDouble() ?? 80,
+    z: (json['z'] as num?)?.toInt() ?? 0,
+    ikEnabled: json['ikEnabled'] as bool? ?? false,
+    bendSign: (json['bendSign'] as num?)?.toDouble() ?? 1,
   );
 }
 
@@ -76,19 +101,40 @@ class BoneKeyframe {
     required this.timeMs,
     this.easing = EasingKind.easeInOut,
     this.angleDelta = 0,
+    this.opacity = 1,
+    this.stretch = 1,
+    this.squash = 1,
   });
 
   int timeMs;
   EasingKind easing;
   double angleDelta;
 
-  BoneKeyframe copy() =>
-      BoneKeyframe(timeMs: timeMs, easing: easing, angleDelta: angleDelta);
+  /// Opacité des pièces portées (v0.10) : 1 = opaque.
+  double opacity;
+
+  /// Étirement le long de l'os (v0.10) : 1 = neutre, > 1 allonge.
+  double stretch;
+
+  /// Écrasement perpendiculaire à l'os (v0.10) : 1 = neutre.
+  double squash;
+
+  BoneKeyframe copy() => BoneKeyframe(
+    timeMs: timeMs,
+    easing: easing,
+    angleDelta: angleDelta,
+    opacity: opacity,
+    stretch: stretch,
+    squash: squash,
+  );
 
   Map<String, Object?> toJson() => <String, Object?>{
     'timeMs': timeMs,
     'easing': easing.name,
     'angleDelta': angleDelta,
+    'opacity': opacity,
+    'stretch': stretch,
+    'squash': squash,
   };
 
   factory BoneKeyframe.fromJson(Map<String, Object?> json) => BoneKeyframe(
@@ -98,6 +144,9 @@ class BoneKeyframe {
       orElse: () => EasingKind.easeInOut,
     ),
     angleDelta: (json['angleDelta'] as num?)?.toDouble() ?? 0,
+    opacity: (json['opacity'] as num?)?.toDouble() ?? 1,
+    stretch: (json['stretch'] as num?)?.toDouble() ?? 1,
+    squash: (json['squash'] as num?)?.toDouble() ?? 1,
   );
 }
 
@@ -281,6 +330,72 @@ class SkeletonRig {
     return track.last.angleDelta;
   }
 
+  /// Échantillonnage générique d'une propriété de keyframe d'os
+  /// (opacité, étirement, écrasement) : tenue hors plage, easing entre
+  /// deux keyframes, valeur 1 (neutre) sans piste.
+  double _numAt(String boneId, int timeMs, double Function(BoneKeyframe) pick) {
+    final track = tracks[boneId];
+    if (track == null || track.isEmpty) return 1;
+    if (timeMs <= track.first.timeMs) return pick(track.first);
+    if (timeMs >= track.last.timeMs) return pick(track.last);
+    for (var i = 0; i < track.length - 1; i++) {
+      final a = track[i];
+      final b = track[i + 1];
+      if (timeMs >= a.timeMs && timeMs <= b.timeMs) {
+        final span = math.max(1, b.timeMs - a.timeMs);
+        final progress = applyEasing(b.easing, (timeMs - a.timeMs) / span);
+        return pick(a) + (pick(b) - pick(a)) * progress;
+      }
+    }
+    return pick(track.last);
+  }
+
+  /// Opacité des pièces portées par l'os à [timeMs] (1 sans piste).
+  double opacityAt(String boneId, int timeMs) =>
+      _numAt(boneId, timeMs, (k) => k.opacity);
+
+  /// Étirement le long de l'os à [timeMs] (1 sans piste).
+  double stretchAt(String boneId, int timeMs) =>
+      _numAt(boneId, timeMs, (k) => k.stretch);
+
+  /// Écrasement perpendiculaire à l'os à [timeMs] (1 sans piste).
+  double squashAt(String boneId, int timeMs) =>
+      _numAt(boneId, timeMs, (k) => k.squash);
+
+  /// z de dessin des pièces d'une forme : os porteur (liaison forme
+  /// entière), sinon le plus petit z des os portant ses couches, sinon 0.
+  int zForShape(String? shapeId) {
+    final shapeBinding = bindingForShape(shapeId);
+    final bone = boneById(shapeBinding?.boneId);
+    if (bone != null) return bone.z;
+    var min = 0;
+    var found = false;
+    for (final binding in bindings) {
+      if (binding.shapeId != shapeId || binding.layerId == null) continue;
+      final carrier = boneById(binding.boneId);
+      if (carrier == null) continue;
+      min = found ? math.min(min, carrier.z) : carrier.z;
+      found = true;
+    }
+    return found ? min : 0;
+  }
+
+  /// z de dessin d'une couche précise (os qui la porte), ou null.
+  int? zOfLayer(String? shapeId, String? layerId) =>
+      boneById(bindingForLayer(shapeId, layerId)?.boneId)?.z;
+
+  /// Enfant unique d'un os (chaîne IK 2 os), ou null.
+  RigBone? onlyChildOf(String boneId) {
+    RigBone? child;
+    for (final bone in bones) {
+      if (bone.parentId == boneId) {
+        if (child != null) return null; // plusieurs enfants : pas d'IK
+        child = bone;
+      }
+    }
+    return child;
+  }
+
   /// Keyframe la plus proche du curseur dans la tolérance, ou null.
   BoneKeyframe? keyframeNear(String boneId, int timeMs, int toleranceMs) {
     BoneKeyframe? best;
@@ -295,20 +410,36 @@ class SkeletonRig {
     return best;
   }
 
-  /// Ajoute ou remplace la keyframe d'angle à [timeMs], triées à chaque fois.
+  /// Ajoute ou remplace la keyframe d'os à [timeMs], triées à chaque fois.
+  /// Si une keyframe existe déjà à ce temps, elle est FUSIONNÉE : son easing
+  /// et ses propriétés (opacité, étirement, écrasement) sont conservés sauf
+  /// valeurs explicitement fournies — écrire un angle n'écrase pas l'opacité.
   void upsertKeyframe(
     String boneId,
     int timeMs,
     double angleDelta, {
     EasingKind? easing,
+    double? opacity,
+    double? stretch,
+    double? squash,
   }) {
     final track = tracks.putIfAbsent(boneId, () => <BoneKeyframe>[]);
+    BoneKeyframe? existing;
+    for (final key in track) {
+      if (key.timeMs == timeMs) {
+        existing = key;
+        break;
+      }
+    }
     track.removeWhere((k) => k.timeMs == timeMs);
     track.add(
       BoneKeyframe(
         timeMs: timeMs,
-        easing: easing ?? EasingKind.easeInOut,
+        easing: easing ?? existing?.easing ?? EasingKind.easeInOut,
         angleDelta: angleDelta,
+        opacity: opacity ?? existing?.opacity ?? 1,
+        stretch: stretch ?? existing?.stretch ?? 1,
+        squash: squash ?? existing?.squash ?? 1,
       ),
     );
     track.sort((a, b) => a.timeMs.compareTo(b.timeMs));
@@ -473,6 +604,9 @@ class BoneFrame {
     required this.joint,
     required this.worldAngle,
     required this.length,
+    this.stretchX = 1,
+    this.stretchY = 1,
+    this.opacity = 1,
   });
 
   /// Articulation au repos (coordonnées projet) et angle monde au repos.
@@ -484,21 +618,35 @@ class BoneFrame {
   final double worldAngle;
   final double length;
 
+  /// Étirement/écrasement PROPRES à l'os à l'instant courant (le long de
+  /// l'os et perpendiculaire, dans son repère à lui). Les os ENFANTS suivent
+  /// le stretch du parent via leur articulation (voir FK).
+  final double stretchX;
+  final double stretchY;
+
+  /// Opacité des pièces portées par cet os à l'instant courant.
+  final double opacity;
+
   /// Delta d'angle accumulé (parents + propre) par rapport au repos.
   double get worldDelta => worldAngle - worldAngleRest;
 
-  /// Extrémité de l'os à l'instant courant.
-  Offset get tip => joint + Offset.fromDirection(worldAngle, length);
+  /// Extrémité de l'os à l'instant courant (l'étirement l'allonge).
+  Offset get tip =>
+      joint + rotateVector(Offset(length * stretchX, 0), worldAngle);
 
-  /// Extrémité au repos.
+  /// Extrémité au repos (neutre).
   Offset get tipRest =>
       jointRest + Offset.fromDirection(worldAngleRest, length);
 
   /// Applique le mouvement de l'os (repos → instant courant) à un point du
-  /// repère projet de repos : `joint + R(worldDelta)·(p − jointRest)`.
+  /// repère projet de repos : `joint + R(θt)·S·R(−θrest)·(p − jointRest)`.
   /// Identité au repos — c'est exactement la transformée que le painter
   /// applique au canvas avant la pose de la pièce.
-  Offset mapPoint(Offset p) => joint + rotateVector(p - jointRest, worldDelta);
+  Offset mapPoint(Offset p) {
+    final local = rotateVector(p - jointRest, -worldAngleRest);
+    final scaled = Offset(local.dx * stretchX, local.dy * stretchY);
+    return joint + rotateVector(scaled, worldAngle);
+  }
 }
 
 /// Évaluation FK du rig à un instant donné : transformée monde de chaque os.
@@ -550,7 +698,10 @@ class SkeletonPose {
           : parentFrame.jointRest +
                 parentDeltaPos +
                 rotateVector(
-                  Offset(bone.offsetX, bone.offsetY),
+                  Offset(
+                    bone.offsetX * (parentFrame.stretchX),
+                    bone.offsetY * (parentFrame.stretchY),
+                  ),
                   parentFrame.worldAngleRest + parentDelta,
                 );
       final worldAngle =
@@ -562,10 +713,42 @@ class SkeletonPose {
         joint: joint,
         worldAngle: worldAngle,
         length: bone.length,
+        stretchX: rig.stretchAt(bone.id, timeMs),
+        stretchY: rig.squashAt(bone.id, timeMs),
+        opacity: rig.opacityAt(bone.id, timeMs),
       );
     }
     return SkeletonPose(frames);
   }
+}
+
+/// Résout l'IK 2 os : angles MONDE du parent et de l'enfant pour que
+/// l'extrémité de l'enfant (longueur [length2]) atteigne [target] depuis
+/// l'articulation [joint] (le coude est au bout du parent, longueur
+/// [length1]). [bend] = +1 ou -1 : côté du pli du coude. Cible hors de
+/// portée : la chaîne s'allonge au maximum vers la cible.
+(double parentAngle, double childAngle) solveTwoBoneIk({
+  required Offset joint,
+  required double length1,
+  required double length2,
+  required Offset target,
+  required double bend,
+}) {
+  final delta = target - joint;
+  var d = delta.distance;
+  final minD = math.max(0.001, (length1 - length2).abs() + 0.001);
+  final maxD = math.max(minD + 0.002, length1 + length2 - 0.001);
+  d = d.clamp(minD, maxD);
+  final beta = math.atan2(delta.dy, delta.dx);
+  final cosA =
+      (length1 * length1 + d * d - length2 * length2) / (2 * length1 * d);
+  final alpha = math.acos(cosA.clamp(-1.0, 1.0));
+  final parentAngle = beta + bend * alpha;
+  final cosG =
+      (length1 * length1 + length2 * length2 - d * d) / (2 * length1 * length2);
+  final gamma = math.acos(cosG.clamp(-1.0, 1.0));
+  final childAngle = parentAngle - bend * (math.pi - gamma);
+  return (parentAngle, childAngle);
 }
 
 /// Tourne un vecteur de [angle] radians (repère écran : y vers le bas).

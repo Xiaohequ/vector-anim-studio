@@ -4,6 +4,15 @@ import '../engine/timeline_controller.dart';
 import '../models/animation.dart';
 import '../models/skeleton.dart';
 
+/// Propriété d'animation d'un os (keyframe d'os, v0.10).
+enum BoneAnimatable { opacity, stretch, squash }
+
+String boneAnimatableLabel(BoneAnimatable property) => switch (property) {
+  BoneAnimatable.opacity => 'Opacité',
+  BoneAnimatable.stretch => 'Étirement',
+  BoneAnimatable.squash => 'Écrasement',
+};
+
 /// Bottom sheet « Propriétés de l'os » : parent, longueur, angle de repos,
 /// keyframe d'angle au curseur et interpolation. Les mutations passent par
 /// les callbacks de l'écran (undo + sauvegarde y sont gérés).
@@ -19,6 +28,10 @@ class BonePropertiesSheet extends StatefulWidget {
     required this.onDeleteBone,
     required this.onToggleKeyframe,
     required this.onKeyframeEasing,
+    this.onZChanged,
+    this.onAnimatableChanged,
+    this.onToggleIk,
+    this.onFlipBend,
   });
 
   final SkeletonRig rig;
@@ -32,6 +45,18 @@ class BonePropertiesSheet extends StatefulWidget {
   final Future<void> Function() onDeleteBone;
   final Future<void> Function() onToggleKeyframe;
   final Future<void> Function(EasingKind easing) onKeyframeEasing;
+
+  /// Ordre de dessin (z, v0.10) : slider entier.
+  final ValueChanged<int>? onZChanged;
+
+  /// Propriété d'animation d'os (opacité/étirement/écrasement, v0.10) :
+  /// écrit une keyframe d'os au curseur.
+  final void Function(BoneAnimatable property, double value)?
+  onAnimatableChanged;
+
+  /// IK 2 os (v0.10) : bascule + inversion du coude.
+  final VoidCallback? onToggleIk;
+  final VoidCallback? onFlipBend;
 
   @override
   State<BonePropertiesSheet> createState() => _BonePropertiesSheetState();
@@ -84,6 +109,10 @@ class _BonePropertiesSheetState extends State<BonePropertiesSheet> {
             rig.angleDeltaAt(bone.id, controller.timeMs) *
             180 /
             3.141592653589793;
+        final sampledOpacity = rig.opacityAt(bone.id, controller.timeMs);
+        final sampledStretch = rig.stretchAt(bone.id, controller.timeMs);
+        final sampledSquash = rig.squashAt(bone.id, controller.timeMs);
+        final ikChild = rig.onlyChildOf(bone.id);
         final boundShapes = <String>[
           for (final binding in rig.bindings)
             if (binding.boneId == bone.id) binding.shapeId,
@@ -172,6 +201,145 @@ class _BonePropertiesSheetState extends State<BonePropertiesSheet> {
                     ),
                   ],
                 ),
+                Row(
+                  children: <Widget>[
+                    const SizedBox(
+                      width: 92,
+                      child: Text('Ordre (z)', style: TextStyle(fontSize: 12)),
+                    ),
+                    Expanded(
+                      child: Slider(
+                        min: -10,
+                        max: 10,
+                        divisions: 20,
+                        value: bone.z.clamp(-10, 10).toDouble(),
+                        onChanged: (value) {
+                          widget.onZChanged?.call(value.round());
+                          _refresh();
+                        },
+                      ),
+                    ),
+                    SizedBox(
+                      width: 40,
+                      child: Text(
+                        '${bone.z}',
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                    ),
+                  ],
+                ),
+                Row(
+                  children: <Widget>[
+                    const SizedBox(
+                      width: 92,
+                      child: Text('Opacité', style: TextStyle(fontSize: 12)),
+                    ),
+                    Expanded(
+                      child: Slider(
+                        min: 0,
+                        max: 1,
+                        divisions: 100,
+                        value: sampledOpacity.clamp(0.0, 1.0),
+                        onChanged: (value) {
+                          widget.onAnimatableChanged?.call(
+                            BoneAnimatable.opacity,
+                            value,
+                          );
+                          _refresh();
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                Row(
+                  children: <Widget>[
+                    const SizedBox(
+                      width: 92,
+                      child: Text('Étirement', style: TextStyle(fontSize: 12)),
+                    ),
+                    Expanded(
+                      child: Slider(
+                        min: 0.2,
+                        max: 3,
+                        divisions: 28,
+                        value: sampledStretch.clamp(0.2, 3),
+                        onChanged: (value) {
+                          widget.onAnimatableChanged?.call(
+                            BoneAnimatable.stretch,
+                            value,
+                          );
+                          _refresh();
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                Row(
+                  children: <Widget>[
+                    const SizedBox(
+                      width: 92,
+                      child: Text('Écrasement', style: TextStyle(fontSize: 12)),
+                    ),
+                    Expanded(
+                      child: Slider(
+                        min: 0.2,
+                        max: 3,
+                        divisions: 28,
+                        value: sampledSquash.clamp(0.2, 3),
+                        onChanged: (value) {
+                          widget.onAnimatableChanged?.call(
+                            BoneAnimatable.squash,
+                            value,
+                          );
+                          _refresh();
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                Row(
+                  children: <Widget>[
+                    const SizedBox(
+                      width: 92,
+                      child: Text('IK 2 os', style: TextStyle(fontSize: 12)),
+                    ),
+                    Expanded(
+                      child: Text(
+                        ikChild == null
+                            ? 'Sans enfant unique — indisponible'
+                            : 'Glisser l’extrémité de « ${ikChild.name} » résout la chaîne',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Colors.white54,
+                        ),
+                      ),
+                    ),
+                    Switch(
+                      value: bone.ikEnabled,
+                      onChanged: ikChild == null
+                          ? null
+                          : (_) {
+                              widget.onToggleIk?.call();
+                              _refresh();
+                            },
+                    ),
+                  ],
+                ),
+                if (bone.ikEnabled && ikChild != null)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: () {
+                        widget.onFlipBend?.call();
+                        _refresh();
+                      },
+                      icon: const Icon(Icons.swap_horiz, size: 18),
+                      label: Text(
+                        'Inverser le coude (${bone.bendSign > 0 ? '+' : '−'})',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ),
                 Row(
                   children: <Widget>[
                     const SizedBox(

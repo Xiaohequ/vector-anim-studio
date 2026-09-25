@@ -616,6 +616,199 @@ void main() {
       expect(shape.y, 100);
     });
   });
+
+  group('IK 2 os (v0.10)', () {
+    test('solveTwoBoneIk : chaîne symétrique atteint la cible', () {
+      // L1 = L2 = 50, cible (60,0) : alpha = acos(0,6) ≈ 0,9273, coude
+      // symétrique de part et d'autre de la direction cible.
+      final (pa, ca) = solveTwoBoneIk(
+        joint: Offset.zero,
+        length1: 50,
+        length2: 50,
+        target: const Offset(60, 0),
+        bend: 1,
+      );
+      expect(pa, closeTo(0.9273, 1e-3));
+      expect(ca, closeTo(-0.9273, 1e-3));
+      // Le bout de la chaîne tombe sur la cible.
+      final elbow = Offset(50 * math.cos(pa), 50 * math.sin(pa));
+      final tip = elbow + Offset(50 * math.cos(ca), 50 * math.sin(ca));
+      expect(tip, closeToOffset(const Offset(60, 0), 1e-3));
+      // bend −1 : miroir (angles opposés).
+      final (pa2, ca2) = solveTwoBoneIk(
+        joint: Offset.zero,
+        length1: 50,
+        length2: 50,
+        target: const Offset(60, 0),
+        bend: -1,
+      );
+      expect(pa2, closeTo(-pa, 1e-9));
+      expect(ca2, closeTo(-ca, 1e-9));
+    });
+
+    test('solveTwoBoneIk : cible hors de portée = chaîne tendue', () {
+      final (pa, ca) = solveTwoBoneIk(
+        joint: Offset.zero,
+        length1: 50,
+        length2: 50,
+        target: const Offset(1000, 0),
+        bend: 1,
+      );
+      // d est borné à L1+L2−ε : la chaîne est QUASI tendue (résidu d'arrondi
+      // d'acos ≈ 0,014 rad), pas parfaitement droite.
+      expect(pa, closeTo(0, 0.05));
+      expect(ca, closeTo(0, 0.05));
+    });
+
+    test('onlyChildOf : enfant unique, multiple, aucun', () {
+      final rig = SkeletonRig();
+      final parent = RigBone(name: 'P');
+      final a = RigBone(name: 'A', parentId: parent.id);
+      final b = RigBone(name: 'B', parentId: parent.id);
+      rig.addBone(parent);
+      rig.addBone(a);
+      expect(rig.onlyChildOf(parent.id)?.id, a.id);
+      rig.addBone(b);
+      expect(rig.onlyChildOf(parent.id), isNull); // deux enfants : pas d'IK
+      rig.removeBone(b.id);
+      expect(rig.onlyChildOf(parent.id)?.id, a.id);
+      expect(rig.onlyChildOf(a.id), isNull);
+    });
+  });
+
+  group('keyframes d\'os étendues (v0.10)', () {
+    test('samplers opacité/étirement/écrasement : interp + tenue + neutre', () {
+      final rig = SkeletonRig();
+      final bone = RigBone(name: 'B', length: 10);
+      rig.addBone(bone);
+      // Sans piste : valeurs neutres.
+      expect(rig.opacityAt(bone.id, 500), 1);
+      expect(rig.stretchAt(bone.id, 500), 1);
+      expect(rig.squashAt(bone.id, 500), 1);
+      rig.upsertKeyframe(bone.id, 1000, 0, opacity: 0.0, stretch: 0.5);
+      rig.upsertKeyframe(bone.id, 2000, 0, opacity: 1.0, stretch: 2.0);
+      expect(rig.opacityAt(bone.id, 500), 0.0); // tenue avant
+      expect(rig.opacityAt(bone.id, 2500), 1.0); // tenue après
+      expect(rig.opacityAt(bone.id, 1500), closeTo(0.5, 1e-9));
+      expect(rig.stretchAt(bone.id, 1500), closeTo(1.25, 1e-9));
+      expect(rig.squashAt(bone.id, 1500), 1); // jamais écrite
+    });
+
+    test('upsertKeyframe fusionne : l\'angle n\'écrase pas l\'opacité', () {
+      final rig = SkeletonRig();
+      rig.upsertKeyframe('b', 1000, 0.5, opacity: 0.4, stretch: 1.5);
+      // Écriture d'angle à la même keyframe : opacité conservée.
+      rig.upsertKeyframe('b', 1000, 1.0);
+      var key = rig.trackOf('b')!.first;
+      expect(key.angleDelta, 1.0);
+      expect(key.opacity, 0.4);
+      expect(key.stretch, 1.5);
+      // Écriture d'opacité : angle conservé, easing conservé.
+      rig.setKeyframeEasing('b', 1000, EasingKind.linear);
+      rig.upsertKeyframe('b', 1000, 1.0, opacity: 0.7);
+      key = rig.trackOf('b')!.first;
+      expect(key.angleDelta, 1.0);
+      expect(key.opacity, 0.7);
+      expect(key.easing, EasingKind.linear);
+    });
+
+    test(
+      'FK : le stretch/écrasement de l\'os déforme et entraîne la chaîne',
+      () {
+        final rig = SkeletonRig();
+        final root = RigBone(
+          name: 'R',
+          offsetX: 100,
+          offsetY: 100,
+          length: 100,
+        );
+        final child = RigBone(
+          name: 'C',
+          parentId: root.id,
+          offsetX: 100,
+          offsetY: 0,
+          restAngle: 0,
+          length: 50,
+        );
+        rig.addBone(root);
+        rig.addBone(child);
+        // Stretch le long de la racine (2×), écrasement perpendiculaire 0,5.
+        rig.upsertKeyframe(root.id, 1000, 0, stretch: 2, squash: 0.5);
+
+        final pose = SkeletonPose.evaluate(rig, 1000);
+        final rootFrame = pose.frameOf(root.id)!;
+        final childFrame = pose.frameOf(child.id)!;
+        // L'os s'étire : tip = (100,100) + 200·(+X).
+        expect(rootFrame.tip, closeToOffset(const Offset(300, 100)));
+        // L'articulation de l'enfant suit le stretch du parent : offset
+        // (100,0) → (200,0) dans le repère du parent.
+        expect(childFrame.joint, closeToOffset(const Offset(300, 100)));
+        // L'enfant garde SA géométrie : 50 vers +X.
+        expect(childFrame.tip, closeToOffset(const Offset(350, 100)));
+        // mapPoint : le point de repos (200,100) (bout au repos) suit
+        // l'étirement → (300,100).
+        expect(
+          rootFrame.mapPoint(const Offset(200, 100)),
+          closeToOffset(const Offset(300, 100)),
+        );
+      },
+    );
+
+    test('z : pièce portée (forme entière), couche, min des couches', () {
+      final rig = SkeletonRig();
+      final a = RigBone(name: 'A', z: 3);
+      final b = RigBone(name: 'B', z: -2);
+      rig.addBone(a);
+      rig.addBone(b);
+      expect(rig.zForShape('s1'), 0); // non liée
+      // Liaison de FORME ENTIERE : z de l'os porteur.
+      rig.bindShape('s2', a.id);
+      expect(rig.zForShape('s2'), 3);
+      // Liaison de COUCHES seulement : MIN du z des os porteurs.
+      rig.bindLayer('s1', 'L1', b.id);
+      rig.bindLayer('s1', 'L2', a.id);
+      expect(rig.zOfLayer('s1', 'L1'), -2);
+      expect(rig.zOfLayer('s1', 'L2'), 3);
+      expect(rig.zForShape('s1'), -2);
+    });
+
+    test(
+      'roundtrip JSON : z/ik/bend d\'os, opacity/stretch/squash de keyframe',
+      () {
+        final rig = SkeletonRig();
+        final bone = RigBone(
+          name: 'Bras',
+          z: -4,
+          ikEnabled: true,
+          bendSign: -1,
+        );
+        rig.addBone(bone);
+        rig.upsertKeyframe(
+          bone.id,
+          800,
+          0.3,
+          opacity: 0.25,
+          stretch: 1.75,
+          squash: 0.6,
+        );
+        final restored = SkeletonRig.fromJson(rig.toJson());
+        final restoredBone = restored.bones.first;
+        expect(restoredBone.z, -4);
+        expect(restoredBone.ikEnabled, isTrue);
+        expect(restoredBone.bendSign, -1);
+        final key = restored.trackOf(restoredBone.id)!.first;
+        expect(key.timeMs, 800);
+        expect(key.angleDelta, 0.3);
+        expect(key.opacity, 0.25);
+        expect(key.stretch, 1.75);
+        expect(key.squash, 0.6);
+        // Os par défaut : rien n'est écrit (JSON compact).
+        final plain = RigBone(name: 'P').toJson();
+        expect(plain.containsKey('z'), isFalse);
+        expect(plain.containsKey('ikEnabled'), isFalse);
+      },
+    );
+  });
 }
 
 Matcher closeToOffset(Offset expected, [double epsilon = 1e-6]) =>

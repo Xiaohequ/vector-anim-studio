@@ -6,8 +6,8 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Repo : https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`)
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
-- Dernière version : **0.9.6** (liaison au niveau couche + import
-  squelette→vectoriel avec badge de type ; 112 tests)
+- Dernière version : **0.10.0** (z d'os, opacité/étirement/écrasement par keyframe
+  d'os, IK 2 os ; 120 tests)
 - Détails techniques : `docs/PLAN.md` · Notes de version : `RELEASE_NOTES.md`
 
 ---
@@ -47,14 +47,12 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 ---
 
-## ⏳ En attente (bloquant la suite)
+## ⏳ En attente
 
-- **Validé sur appareil réel (25/09)** : toute la chaîne rigging v0.9.1 →
-  v0.9.5 — barres de pièces + d'os sur la timeline, ancrage os sur pièce,
-  attachement auto os→os avec confirmation, liaison pièce manuelle,
-  re-parentage racine sans saut, poignée de rotation, ✥ poignée draggable,
-  playback avec keyframes d'os, export MP4.
-- **Retours utilisateur** → le cas échéant patch v0.9.x.
+- **Validation sur appareil réel** : v0.10.0 (z d'os, opacité/étirement/écrasement
+  par os, IK 2 os — glisser l'effecteur, inverser le coude). Les versions v0.9.1 →
+  v0.9.5 (chaîne rigging complète) sont déjà validées sur appareil.
+- Retours utilisateur → le cas échéant patch v0.10.x.
 
 ---
 
@@ -137,22 +135,29 @@ v0.9.0, l'**animation squelette** (rig maître).
   squelette animé dans un vectoriel, lecture sans plantage) + badge de type
   dans le sélecteur (label type · durée · pièces).
 
-### v0.9.7 (décidé, pas entamé)
-- **Liaison au niveau couche** : lier une couche précise (et plus seulement
-  une forme entière) à un os + panneau d'offset d'attache.
-- **Import d'une animation squelette dans un projet vectoriel** : « Formes ▸
-  Insérer une animation… » liste les deux types ; le personnage riggé
-  devient une instance animable (position/échelle/keyframes de forme) dans
-  une scène. Le painter sait déjà rendre un sous-projet squelette
-  (`_paintProjectShapes`) — il reste la sélection/insertion + garde-fou
-  « 1 niveau d'imbrication ».
-- Option proposée : test de rendu permanent en CI (capture PNG + comparaison).
+### v0.10.0 (livrée — pose avancée du rig)
+- **Ordre de dessin par os (z)** : `RigBone.z` (slider −10…+10 dans ⚙ os) —
+  les pièces du projet squelette sont triées par `zForShape` (os porteur,
+  sinon MIN du z des os de couches), z égal → ordre timeline ; couches triées
+  par `zOfLayer`.
+- **Keyframes d'os étendues** : `BoneKeyframe.opacity/stretch/squash` +
+  samplers `opacityAt/stretchAt/squashAt` (tenue hors plage, interp easing,
+  neutre 1 sans piste) ; `upsertKeyframe` FUSIONNE (écrire l'angle n'écrase
+  pas l'opacité déjà posée à la même keyframe).
+- **FK stretch** : `BoneFrame.stretchX/stretchY` (le long/perpendiculaire),
+  `tip` et `mapPoint` étirés, l'articulation des os enfants suit le stretch
+  du parent ; painter : `_applyBoneDelta` = translate·rotate·scale·rotate·translate,
+  opacité portée × pose des pièces.
+- **IK 2 os** : `RigBone.ikEnabled/bendSign` ; `onlyChildOf` (enfant unique
+  requis) ; `solveTwoBoneIk` vérifié numériquement ; geste `boneIk` — hit sur
+  l'extrémité de l'ENFANT (avant la poignée de rotation), marqueur losange
+  vert sur l'effecteur ; auto-key si l'os a des keyframes, sinon pose du rig
+  (`restAngle` + `carryBoundPieces`) ; « Inverser le coude » dans la sheet.
 
-### v0.10+ (proposé, non planifié)
-- IK 2 os (bras/jambes) avec choix du sens du coude — leçon Chaperon : sur les rigs
-  cartoon, les angles directs restent souvent plus lisibles.
-- Ordre de dessin par os (z dans le rig), squash/stretch par os, opacité animable
-  par os, reprise de préhension (recibler un binding à la keyframe).
+### v0.11+ (proposé)
+- Reciblage de binding à la keyframe (reprise de préhension).
+- IK à plus de 2 os ou IK de translation (membres isolées).
+- Test de rendu permanent en CI (capture PNG + comparaison).
 
 ### Backlog de long terme
 - Signature release (keystore + secrets GitHub) et/ou App Bundle `.aab`.

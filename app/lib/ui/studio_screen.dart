@@ -25,7 +25,7 @@ import 'shape_properties_sheet.dart';
 import 'timeline_view.dart';
 
 /// Geste en cours sur le canvas.
-enum _CanvasGesture { none, move, scale, rotate, boneRotate }
+enum _CanvasGesture { none, move, scale, rotate, boneRotate, boneIk }
 
 /// Éditeur d'un projet : canvas, timeline, menus Formes/Animations.
 class StudioScreen extends StatefulWidget {
@@ -834,6 +834,71 @@ class _StudioScreenState extends State<StudioScreen>
     _flushSave();
   }
 
+  /// Ordre de dessin (z, v0.10) : slider coalescé en une entrée d'annulation.
+  void _setBoneZ(int value) {
+    final bone = _selectedBone;
+    if (bone == null) return;
+    _pushUndo(tag: 'boneZ:${bone.id}');
+    bone.z = value;
+    _scheduleSave();
+  }
+
+  /// Propriété d'animation d'os (opacité/étirement/écrasement, v0.10) :
+  /// keyframe au curseur — `upsertKeyframe` fusionne (l'angle et l'easing
+  /// de la keyframe existante sont conservés). Slider coalescé.
+  void _setBoneAnimatable(BoneAnimatable property, double value) {
+    final rig = _rig;
+    final bone = _selectedBone;
+    final controller = _controller;
+    if (rig == null || bone == null || controller == null) return;
+    _pushUndo(tag: 'boneAnim:${bone.id}:${property.name}');
+    setState(() {
+      switch (property) {
+        case BoneAnimatable.opacity:
+          rig.upsertKeyframe(
+            bone.id,
+            controller.timeMs,
+            rig.angleDeltaAt(bone.id, controller.timeMs),
+            opacity: value,
+          );
+        case BoneAnimatable.stretch:
+          rig.upsertKeyframe(
+            bone.id,
+            controller.timeMs,
+            rig.angleDeltaAt(bone.id, controller.timeMs),
+            stretch: value,
+          );
+        case BoneAnimatable.squash:
+          rig.upsertKeyframe(
+            bone.id,
+            controller.timeMs,
+            rig.angleDeltaAt(bone.id, controller.timeMs),
+            squash: value,
+          );
+      }
+    });
+    _scheduleSave();
+  }
+
+  /// IK 2 os (v0.10) : bascule — la sheet n'active le switch que pour un os
+  /// à enfant unique.
+  void _toggleIk() {
+    final bone = _selectedBone;
+    if (bone == null) return;
+    _pushUndo();
+    setState(() => bone.ikEnabled = !bone.ikEnabled);
+    _scheduleSave();
+  }
+
+  /// IK 2 os (v0.10) : inverse le côté du coude.
+  void _flipBend() {
+    final bone = _selectedBone;
+    if (bone == null) return;
+    _pushUndo();
+    setState(() => bone.bendSign = -bone.bendSign);
+    _scheduleSave();
+  }
+
   Future<void> _renameBone() async {
     final bone = _selectedBone;
     if (bone == null) return;
@@ -938,6 +1003,10 @@ class _StudioScreenState extends State<StudioScreen>
         onDeleteBone: _deleteBone,
         onToggleKeyframe: _toggleBoneKeyframe,
         onKeyframeEasing: _setBoneEasing,
+        onZChanged: _setBoneZ,
+        onAnimatableChanged: _setBoneAnimatable,
+        onToggleIk: _toggleIk,
+        onFlipBend: _flipBend,
       ),
     );
     if (mounted) setState(() {});
@@ -1059,6 +1128,28 @@ class _StudioScreenState extends State<StudioScreen>
       if (selectedBone != null) {
         final pose = SkeletonPose.evaluate(rig, controller.timeMs);
         final geo = SceneGeometry.fitFor(project, canvasSize);
+        // IK 2 os (v0.10) : l'os sélectionné est ikEnabled — glisser
+        // l'EXTRÉMITÉ de son enfant unique résout la chaîne. Prioritaire
+        // sur la poignée de rotation.
+        if (selectedBone.ikEnabled &&
+            RigOverlayPainter.hitIkEndEffector(
+              pose,
+              rig,
+              geo,
+              selectedBone.id,
+              details.localFocalPoint,
+            )) {
+          _gesture = _CanvasGesture.boneIk;
+          _dragBoneId = selectedBone.id;
+          _gestureBoneFrame = null;
+          _gestureUndo = AnimationProject.fromJson(project.toJson());
+          _gestureMutated = false;
+          setState(() {
+            _selectedBoneId = selectedBone.id;
+            _selectedId = null; // sélection exclusive : os OU forme
+          });
+          return;
+        }
         if (RigOverlayPainter.hitRotationHandle(
           pose,
           rig,
@@ -1145,8 +1236,44 @@ class _StudioScreenState extends State<StudioScreen>
     if (_gesture == _CanvasGesture.none) return;
     // Les gestes d'os ne portent pas de forme (sélection exclusive : un os
     // sélectionné laisse la forme à null).
-    if (shape == null && _gesture != _CanvasGesture.boneRotate) return;
+    if (shape == null &&
+        _gesture != _CanvasGesture.boneRotate &&
+        _gesture != _CanvasGesture.boneIk) {
+      return;
+    }
     switch (_gesture) {
+      case _CanvasGesture.boneIk:
+        final rig = project.skeleton;
+        final bone = rig?.boneById(_dragBoneId);
+        if (rig == null || bone == null) break;
+        final child = rig.onlyChildOf(bone.id);
+        if (child == null) break;
+        final pose = SkeletonPose.evaluate(rig, controller.timeMs);
+        final parentFrame = pose.frameOf(bone.id);
+        final childFrame = pose.frameOf(child.id);
+        if (parentFrame == null || childFrame == null) break;
+        final geo = SceneGeometry.fitFor(project, canvasSize);
+        final target = geo.canvasToScene(details.localFocalPoint);
+        final (parentAngle, childAngle) = solveTwoBoneIk(
+          joint: parentFrame.joint,
+          length1: math.max(1.0, parentFrame.length * parentFrame.stretchX),
+          length2: math.max(1.0, childFrame.length * childFrame.stretchX),
+          target: target,
+          bend: bone.bendSign,
+        );
+        // setState à chaque update : repeint canvas + timeline en direct.
+        setState(() {
+          _poseChainTo(
+            project,
+            rig,
+            bone,
+            parentAngle,
+            childAngle,
+            pose,
+            controller,
+          );
+        });
+        _gestureMutated = true;
       case _CanvasGesture.boneRotate:
         final rig = project.skeleton;
         final bone = rig?.boneById(_dragBoneId);
@@ -1294,6 +1421,78 @@ class _StudioScreenState extends State<StudioScreen>
     _gestureBoneFrame = null;
     _dragBoneId = null;
     _gesture = _CanvasGesture.none;
+  }
+
+  /// IK 2 os (v0.10) : pose les angles MONDE résolus du parent et de
+  /// l'enfant — keyframe au curseur pour un os animé (auto-key), angle de
+  /// repos sinon (l'enfant est relatif à l'angle monde du parent APRÈS sa
+  /// propre mutation, d'où la ré-évaluation `mid`). Os posé : les pièces
+  /// liées sont emportées par la nouvelle pose de repos.
+  void _poseChainTo(
+    AnimationProject project,
+    SkeletonRig rig,
+    RigBone ikParent,
+    double parentAngle,
+    double childAngle,
+    SkeletonPose before,
+    TimelineController controller,
+  ) {
+    final child = rig.onlyChildOf(ikParent.id);
+    if (child == null) return;
+    final grandFrame = before.frameOf(ikParent.parentId);
+    final parentFrameBefore = before.frameOf(ikParent.id);
+    if (parentFrameBefore == null) return;
+    if (rig.hasKeyframes(ikParent.id)) {
+      final target =
+          rig
+              .keyframeNear(
+                ikParent.id,
+                controller.timeMs,
+                controller.snapToleranceMs,
+              )
+              ?.timeMs ??
+          controller.timeMs;
+      rig.upsertKeyframe(
+        ikParent.id,
+        target,
+        parentAngle -
+            parentFrameBefore.worldAngleRest -
+            (grandFrame?.worldDelta ?? 0),
+      );
+    } else {
+      ikParent.restAngle = parentAngle - (grandFrame?.worldAngle ?? 0);
+    }
+    // L'enfant est posé dans l'état APRÈS la mutation du parent.
+    final mid = SkeletonPose.evaluate(rig, controller.timeMs);
+    final midParent = mid.frameOf(child.parentId);
+    final midChild = mid.frameOf(child.id);
+    if (midParent == null || midChild == null) return;
+    if (rig.hasKeyframes(child.id)) {
+      final target =
+          rig
+              .keyframeNear(
+                child.id,
+                controller.timeMs,
+                controller.snapToleranceMs,
+              )
+              ?.timeMs ??
+          controller.timeMs;
+      rig.upsertKeyframe(
+        child.id,
+        target,
+        childAngle - midChild.worldAngleRest - midParent.worldDelta,
+      );
+    } else {
+      child.restAngle = childAngle - midParent.worldAngle;
+    }
+    carryBoundPieces(
+      project,
+      rig,
+      before,
+      SkeletonPose.evaluate(rig, controller.timeMs),
+      controller.timeMs,
+      toleranceMs: controller.snapToleranceMs,
+    );
   }
 
   /// Tap sur le canvas : en mode rig (création d'os) tap 1 = articulation,
