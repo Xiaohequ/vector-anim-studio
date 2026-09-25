@@ -26,6 +26,39 @@ class RigOverlayPainter extends CustomPainter {
   static const double tipTouchSlop = 26;
   static const double segmentTouchSlop = 13;
 
+  /// Poignée de rotation (v0.9.3) : distance écran entre l'extrémité de
+  /// l'os et la poignée (dans le prolongement de l'os), et tolérance de
+  /// toucher. La poignée n'existe que pour l'os sélectionné — pivoter via
+  /// l'extrémité (2e point) de l'os est désactivé.
+  static const double rotationHandleDistance = 26;
+  static const double rotationHandleTouchSlop = 24;
+
+  /// Canvas point de la poignée de rotation d'un os, ou null.
+  static Offset? rotationHandle(
+    SkeletonPose pose,
+    SkeletonRig rig,
+    SceneGeometry geo,
+    String boneId,
+  ) {
+    final frame = pose.frameOf(boneId);
+    if (frame == null) return null;
+    final tip = geo.sceneToCanvas(frame.tip);
+    return tip + Offset.fromDirection(frame.worldAngle, rotationHandleDistance);
+  }
+
+  /// Le point canvas touche-t-il la poignée de rotation de [boneId] ?
+  static bool hitRotationHandle(
+    SkeletonPose pose,
+    SkeletonRig rig,
+    SceneGeometry geo,
+    String boneId,
+    Offset canvasPoint,
+  ) {
+    final handle = rotationHandle(pose, rig, geo, boneId);
+    if (handle == null) return false;
+    return (canvasPoint - handle).distance <= rotationHandleTouchSlop;
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
     for (final bone in rig.bones) {
@@ -65,6 +98,31 @@ class RigOverlayPainter extends CustomPainter {
           ..strokeWidth = 2,
       );
       if (selected) {
+        // Poignée de rotation : dans le prolongement de l'os (v0.9.3).
+        final handle =
+            tip +
+            Offset.fromDirection(frame.worldAngle, rotationHandleDistance);
+        canvas.drawLine(
+          tip,
+          handle,
+          Paint()
+            ..color = color
+            ..strokeWidth = 1.5
+            ..isAntiAlias = true,
+        );
+        canvas.drawCircle(
+          handle,
+          7.5,
+          Paint()..color = const Color(0xFF0B0D12),
+        );
+        canvas.drawCircle(
+          handle,
+          7.5,
+          Paint()
+            ..color = color
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2,
+        );
         final painter = TextPainter(
           text: TextSpan(
             text: bone.name,
@@ -77,9 +135,11 @@ class RigOverlayPainter extends CustomPainter {
     }
   }
 
-  /// Os touché par un point canvas : les extrémités d'abord (rotation),
-  /// puis les segments (sélection). Itère du dernier os vers le premier
-  /// (dessiné au-dessus = touché en premier).
+  /// Os touché par un point canvas : les extrémités d'abord (attachement
+  /// d'un nouvel os et sélection), puis les segments (sélection). Itère du
+  /// dernier os vers le premier (dessiné au-dessus = touché en premier).
+  /// NB : depuis la v0.9.3, la rotation d'os passe par la poignée dédiée —
+  /// toucher l'extrémité sélectionne, ne pivote plus.
   static String? hitBone(
     SkeletonPose pose,
     SkeletonRig rig,

@@ -310,6 +310,35 @@ class SkeletonRig {
   void unbindShape(String shapeId) =>
       bindings.removeWhere((b) => b.shapeId == shapeId);
 
+  /// Re-parente un os SANS saut visuel : l'offset et l'angle de repos sont
+  /// recalculés dans le repère du nouveau parent (coordonnées projet + angle
+  /// monde quand l'os devient racine). L'os « reste ancré sur place » au
+  /// preview, sa descendance (offsets relatifs) suit automatiquement, et
+  /// l'ancien parent n'a plus d'effet sur lui — v0.9.2 changeait juste le
+  /// parentId : l'offset restait dans le repère de l'ANCIEN parent → les os
+  /// sautaient hors du preview. [pose] = évaluation du rig AVANT la mutation
+  /// (les frames de repos ne dépendent pas du temps).
+  void reparentBone(RigBone bone, String? newParentId, SkeletonPose pose) {
+    final frame = pose.frameOf(bone.id);
+    bone.parentId = newParentId;
+    if (frame == null) return;
+    final parent = boneById(newParentId);
+    final parentFrame = parent == null ? null : pose.frameOf(parent.id);
+    if (parentFrame == null) {
+      bone.offsetX = frame.jointRest.dx;
+      bone.offsetY = frame.jointRest.dy;
+      bone.restAngle = frame.worldAngleRest;
+    } else {
+      final local = rotateVector(
+        frame.jointRest - parentFrame.jointRest,
+        -parentFrame.worldAngleRest,
+      );
+      bone.offsetX = local.dx;
+      bone.offsetY = local.dy;
+      bone.restAngle = frame.worldAngleRest - parentFrame.worldAngleRest;
+    }
+  }
+
   /// Déplace l'articulation de repos d'un os de [worldDelta] (coordonnées
   /// monde/projet). Racine : le delta s'applique tel quel à l'offset. Enfant :
   /// le delta est ramené dans le repère de repos du parent (angle monde

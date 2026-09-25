@@ -6,8 +6,9 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Repo : https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`)
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
-- Dernière version : **0.9.2** (rigging affiné — os 2 attaché auto à l'os 1,
-  liaison pièce manuelle, sélection exclusive, boutons ⚙/✥ d'os ; 104 tests)
+- Dernière version : **0.9.3** (bugfix/rigging — re-parentage sans saut,
+  confirmation d'attachement, poignée de rotation, déplacement one-shot ;
+  106 tests)
 - Détails techniques : `docs/PLAN.md` · Notes de version : `RELEASE_NOTES.md`
 
 ---
@@ -49,7 +50,7 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 ## ⏳ En attente (bloquant la suite)
 
-- **Validation v0.9.2 sur appareil réel** (APK `vector-anim-studio-0.9.2.apk`),
+- **Validation v0.9.3 sur appareil réel** (APK `vector-anim-studio-0.9.3.apk`),
   scénario ciblé sur les changements de la version :
   1. Projet Squelette → 2-3 pièces → timeline : les rectangles de pièces
      restent affichés AVANT et APRÈS la création d'un os.
@@ -62,9 +63,12 @@ v0.9.0, l'**animation squelette** (rig maître).
      porteur (son ancrage suit).
   5. Sélectionner un os → la forme se désélectionne (et inversement) ;
      boutons ⚙ et ✥ visibles près du segment.
-  6. ✥ Déplacer l'os : glisser → l'os, sa chaîne et les pièces liées suivent.
-  7. Keyframes d'os (◆) : rotation auto-key, la pièce suit à la lecture.
-  8. Export MP4 sur un projet avec keyframes d'os → l'animation est rendue.
+  6. ✥ puis glisser → l'os, sa chaîne et les pièces liées suivent ; le
+     relâchement désarme ✥ (plus de mode collant).
+  7. Poignée de rotation (cercle au bout de l'os sélectionné) : glisser →
+     pivoter ; toucher le 2e point de l'os sélectionne seulement.
+  8. Keyframes d'os (◆) : rotation auto-key, la pièce suit à la lecture.
+  9. Export MP4 sur un projet avec keyframes d'os → l'animation est rendue.
 - **Retours utilisateur** → le cas échéant patch v0.9.x.
 
 ---
@@ -97,7 +101,22 @@ v0.9.0, l'**animation squelette** (rig maître).
 - Déplacer une pièce au repos : l'os suit ET la pièce suit le doigt
   (`_translateBoneFollow` = translation + emport des pièces collées).
 
-### v0.9.3 (décidé, pas entamé)
+### v0.9.3 (livrée — retours v0.9.2)
+- **Re-parentage sans saut** : « racine » ne fait plus disparaître l'os et
+  ses fils — `SkeletonRig.reparentBone(bone, newParentId, pose)` recalcule
+  offset + restAngle dans le repère du NOUVEAU parent (l'os reste ancré sur
+  place, la descendance suit, l'ancien parent ne l'entraîne plus).
+- **Confirmation d'attachement** : si le nouvel os se rattache à un os
+  (poignet/segment/pièce portée/os sélectionné) → dialogue
+  « Attacher ? » ; non → os racine sur place ; dialogue fermé → rien créé.
+- **Poignée de rotation dédiée** : sort de l'extrémité de l'os sélectionné
+  (`rotationHandle`/`hitRotationHandle` dans rig_overlay_painter.dart,
+  distance 26 px écran, slop 24 px) ; rotation via le 2e point désactivée
+  (le geste boneRotate ne démarre que sur la poignée).
+- **Déplacement one-shot** : ✥ arme le prochain glisser (aucun état collant)
+  — `_onCanvasGestureEnd` désarme ; terminateur ✓ retiré pour ce mode.
+
+### v0.9.4 (décidé, pas entamé)
 - **Liaison au niveau couche** : lier une couche précise (et plus seulement
   une forme entière) à un os + panneau d'offset d'attache.
 - **Import d'une animation squelette dans un projet vectoriel** : « Formes ▸

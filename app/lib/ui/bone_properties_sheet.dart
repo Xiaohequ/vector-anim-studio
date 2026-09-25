@@ -252,8 +252,8 @@ class _BonePropertiesSheetState extends State<BonePropertiesSheet> {
                   padding: const EdgeInsets.only(top: 2),
                   child: Text(
                     hasKeyframes
-                        ? 'Os animé : glisser son extrémité écrit une keyframe au curseur.'
-                        : 'Glisser son extrémité pose le rig ; ◆ fige une keyframe d’angle.',
+                        ? 'Os animé : glisser la poignée de rotation écrit une keyframe au curseur.'
+                        : 'Glisser la poignée de rotation pose le rig ; ◆ fige une keyframe d’angle.',
                     style: const TextStyle(fontSize: 11, color: Colors.white54),
                   ),
                 ),

@@ -587,9 +587,11 @@ class _StudioScreenState extends State<StudioScreen>
     }
   }
 
-  /// Mode « déplacer l'os » : le prochain glisser translate l'ancrage de
-  /// l'os sélectionné (offset de repos) ; chaîne et pièces liées suivent.
+  /// Arme un déplacement « one-shot » (plus de mode collant) : appuyer sur
+  /// ✥ puis glisser n'importe où sur l'écran translate l'ancrage de l'os
+  /// sélectionné (chaîne et pièces liées suivent) ; le relâchement termine.
   void _toggleBoneMove() {
+    if (_selectedBone == null) return;
     setState(() {
       _boneMoveMode = !_boneMoveMode;
       _addBoneMode = false;
@@ -598,26 +600,28 @@ class _StudioScreenState extends State<StudioScreen>
     });
     if (_boneMoveMode) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Mode déplacement : glisse pour déplacer l’os'),
-        ),
+        const SnackBar(content: Text('Glisse sur l’écran pour déplacer l’os')),
       );
     }
   }
 
   /// Deuxième tap du mode création : crée l'os entre l'articulation en
-  /// attente et le point touché. Parent : l'os touché au premier tap
-  /// (extrémité ou segment), sinon l'os qui porte la pièce touchée, sinon
-  /// l'os sélectionné, sinon racine — l'os 2 naît ATTACHÉ à l'os 1 et son
-  /// ancrage suit le parent.
-  void _finishAddBone(Offset scenePoint, SceneGeometry geo) {
+  /// attente et le point touché. Si un attachement est détecté (os touché,
+  /// pièce liée → os porteur, os sélectionné), une confirmation propose
+  /// d'attacher — refus = os racine ancré sur place.
+  Future<void> _finishAddBone(Offset scenePoint, SceneGeometry geo) async {
     final project = _project;
     final joint = _pendingJoint;
     if (project == null || joint == null) return;
+    var parent = project.skeleton?.boneById(_pendingParentId);
+    if (parent != null) {
+      final attach = await _askAttachBone(parent);
+      if (attach == null || !mounted) return; // dialogue fermé : rien créé
+      if (!attach) parent = null; // refus → os racine, ancré sur place
+    }
     _pushUndo(); // couvre aussi la création du rig au premier os
     _createRigIfNeeded();
     final rig = project.skeleton!;
-    final parent = rig.boneById(_pendingParentId);
     final parentFrame = SkeletonPose.evaluate(
       rig,
       _controller?.timeMs ?? 0,
@@ -641,6 +645,31 @@ class _StudioScreenState extends State<StudioScreen>
       parent == null
           ? 'Os « ${bone.name} » créé (racine)'
           : 'Os « ${bone.name} » attaché à « ${parent.name} »',
+    );
+  }
+
+  /// Confirmation d'attachement : oui → l'ancrage du nouvel os suit le
+  /// parent ; non → os racine ancré sur place. Null = dialogue fermé.
+  Future<bool?> _askAttachBone(RigBone parent) {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Attacher le nouvel os ?'),
+        content: Text(
+          'L’os serait attaché à « ${parent.name} » : son ancrage suivra '
+          'cet os dans tous ses mouvements.',
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Non, sans parent'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Attacher'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -720,9 +749,20 @@ class _StudioScreenState extends State<StudioScreen>
   void _setBoneParent(String? parentId) {
     final rig = _rig;
     final bone = _selectedBone;
-    if (rig == null || bone == null) return;
+    final controller = _controller;
+    if (rig == null || bone == null || controller == null) return;
     _pushUndo();
-    setState(() => bone.parentId = parentId);
+    setState(() {
+      // Re-parentage SANS saut visuel : l'offset et l'angle de repos sont
+      // recalculés dans le repère du nouveau parent. « Racine » détache
+      // l'os (et sa descendance, offsets relatifs) : les os restent ancrés
+      // sur place au preview et l'ancien parent ne les entraîne plus.
+      rig.reparentBone(
+        bone,
+        parentId,
+        SkeletonPose.evaluate(rig, controller.timeMs),
+      );
+    });
     _flushSave();
   }
 
@@ -959,28 +999,32 @@ class _StudioScreenState extends State<StudioScreen>
       _gestureMutated = false;
       return;
     }
-    // Priorité rig : extrémité (ou segment) d'os proche → rotation de l'os.
+    // Priorité rig : poignée de rotation de l'os sélectionné uniquement —
+    // v0.9.3 : pivoter via l'extrémité de l'os (2e point) est désactivé.
     final rig = project.skeleton;
     if (project.isSkeleton && rig != null && rig.bones.isNotEmpty) {
-      final pose = SkeletonPose.evaluate(rig, controller.timeMs);
-      final geo = SceneGeometry.fitFor(project, canvasSize);
-      final boneId = RigOverlayPainter.hitBone(
-        pose,
-        rig,
-        geo,
-        details.localFocalPoint,
-      );
-      if (boneId != null) {
-        _gesture = _CanvasGesture.boneRotate;
-        _dragBoneId = boneId;
-        _gestureBoneFrame = null;
-        _gestureUndo = AnimationProject.fromJson(project.toJson());
-        _gestureMutated = false;
-        setState(() {
-          _selectedBoneId = boneId;
-          _selectedId = null; // sélection exclusive : os OU forme
-        });
-        return;
+      final selectedBone = rig.boneById(_selectedBoneId);
+      if (selectedBone != null) {
+        final pose = SkeletonPose.evaluate(rig, controller.timeMs);
+        final geo = SceneGeometry.fitFor(project, canvasSize);
+        if (RigOverlayPainter.hitRotationHandle(
+          pose,
+          rig,
+          geo,
+          selectedBone.id,
+          details.localFocalPoint,
+        )) {
+          _gesture = _CanvasGesture.boneRotate;
+          _dragBoneId = selectedBone.id;
+          _gestureBoneFrame = null;
+          _gestureUndo = AnimationProject.fromJson(project.toJson());
+          _gestureMutated = false;
+          setState(() {
+            _selectedBoneId = selectedBone.id;
+            _selectedId = null; // sélection exclusive : os OU forme
+          });
+          return;
+        }
       }
     }
     final shape = _selected;
@@ -1211,6 +1255,8 @@ class _StudioScreenState extends State<StudioScreen>
     _gestureBoneFrame = null;
     _dragBoneId = null;
     _gesture = _CanvasGesture.none;
+    // Déplacement one-shot : le premier glisser désarme le bouton ✥.
+    if (_boneMoveMode) setState(() => _boneMoveMode = false);
   }
 
   /// Tap sur le canvas : en mode rig (création d'os) tap 1 = articulation,
@@ -1904,12 +1950,10 @@ class _StudioScreenState extends State<StudioScreen>
             onPressed: _undoStack.canUndo ? _undo : null,
             icon: const Icon(Icons.undo),
           ),
-          if (_addBoneMode || _boneMoveMode)
+          if (_addBoneMode)
             IconButton(
-              tooltip: _addBoneMode
-                  ? 'Terminer le mode rig'
-                  : 'Terminer le déplacement',
-              onPressed: _addBoneMode ? _startAddBone : _toggleBoneMove,
+              tooltip: 'Terminer le mode rig',
+              onPressed: _startAddBone,
               icon: const Icon(Icons.check_circle, color: Color(0xFF3ECF8E)),
             )
           else ...<Widget>[

@@ -456,6 +456,87 @@ void main() {
       );
     });
   });
+
+  group('reparentage sans saut (v0.9.3)', () {
+    test('reparentBone → racine : l\'os reste ancré sur place', () {
+      final rig = SkeletonRig();
+      final parent = RigBone(
+        name: 'Os 1',
+        offsetX: 100,
+        offsetY: 100,
+        length: 100,
+      );
+      final child = RigBone(
+        name: 'Os 2',
+        parentId: parent.id,
+        offsetX: 100,
+        offsetY: 0,
+        restAngle: 0,
+        length: 50,
+      );
+      rig.addBone(parent);
+      rig.addBone(child);
+      final pose = SkeletonPose.evaluate(rig, 0);
+
+      rig.reparentBone(child, null, pose);
+      expect(child.parentId, isNull);
+      // Repos monde préservé : joint (200,100), angle 0 — os visible,
+      // ancré sur place (v0.9.2 le faisait sauter → invisible).
+      final after = SkeletonPose.evaluate(rig, 0);
+      final frame = after.frameOf(child.id)!;
+      expect(frame.jointRest, closeToOffset(const Offset(200, 100)));
+      expect(frame.worldAngleRest, 0);
+
+      // Bouger l'os 1 n'impacte plus l'os 2.
+      rig.translateBoneRest(parent, after, const Offset(30, 0));
+      final after2 = SkeletonPose.evaluate(rig, 0);
+      expect(
+        after2.frameOf(child.id)!.jointRest,
+        closeToOffset(const Offset(200, 100)),
+      );
+    });
+
+    test('reparentBone vers un autre os : géométrie de repos préservée', () {
+      final rig = SkeletonRig();
+      final a = RigBone(name: 'A', offsetX: 0, offsetY: 0, length: 100);
+      final b = RigBone(
+        name: 'B',
+        offsetX: 0,
+        offsetY: 300,
+        restAngle: math.pi,
+        length: 100,
+      );
+      final child = RigBone(
+        name: 'C',
+        parentId: a.id,
+        offsetX: 100,
+        offsetY: 0,
+        restAngle: 0,
+        length: 40,
+      );
+      rig.addBone(a);
+      rig.addBone(b);
+      rig.addBone(child);
+      final pose = SkeletonPose.evaluate(rig, 0);
+      expect(
+        pose.frameOf(child.id)!.jointRest,
+        closeToOffset(const Offset(100, 0)),
+      );
+
+      rig.reparentBone(child, b.id, pose);
+      final after = SkeletonPose.evaluate(rig, 0);
+      final frame = after.frameOf(child.id)!;
+      expect(frame.jointRest, closeToOffset(const Offset(100, 0)));
+      expect(frame.worldAngleRest, 0);
+      // Désormais l'os suit B, plus A.
+      rig.translateBoneRest(b, after, const Offset(0, 50));
+      final after2 = SkeletonPose.evaluate(rig, 0);
+      expect(
+        after2.frameOf(child.id)!.jointRest,
+        closeToOffset(const Offset(100, 50)),
+      );
+    });
+  });
 }
 
 Matcher closeToOffset(Offset expected, [double epsilon = 1e-6]) =>

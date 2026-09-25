@@ -1,23 +1,18 @@
-# Vector Anim Studio 0.9.2
-
-## Nouveautés
-
-- **Os 2 attaché automatiquement à l'os 1.** Au premier tap du mode rig, le parent du nouvel os est détecté par priorité : extrémité d'os touchée (l'articulation s'y accroche exactement — le poignet), sinon segment d'os touché, sinon pièce touchée → l'os qui la porte, sinon l'os sélectionné. L'ancrage posé suit ensuite tout mouvement de l'os parent (rotation, déplacement) — plus jamais de décalage entre l'endroit cliqué et l'articulation (bug v0.9.1 : elle était placée au deuxième tap).
-- **Bouton ⚙ propriétés de l'os sur le preview** : quand un os est sélectionné, un bouton apparaît ancré à son segment (comme le bouton des formes) et ouvre la sheet os (longueur, parent, renommer, supprimer, keyframe, easing). À côté, un bouton ✥ **Déplacer l'os** : mode où tout glisser translate l'ancrage de l'os — la chaîne descendante ET les pièces liées suivent le doigt.
-- **Sélection exclusive os / forme** : sélectionner un os désélectionne la forme (et inversement). L'utilisateur manipule soit une forme, soit un os — jamais les deux.
-- **Le bouton ⚙ des formes suit le rig** : ancré à la pièce transformée par son os (plus de bouton flottant à l'écart quand l'os a tourné).
-
-## Changement de comportement
-
-- **La création d'os ne lie plus la pièce touchée.** À partir des retours : le nouvel os naît attaché à un os (parent), mais la liaison pièce → os reste un geste volontaire (Squelettes ▸ Lier la pièce à un os…). Délier : Squelettes ▸ Délier la pièce.
+# Vector Anim Studio 0.9.3
 
 ## Corrections
 
-- Déplacer une pièce liée au repos fait suivre l'os **et la pièce suit le doigt** (emport des pièces collées à l'os : la pièce traînée ne reste plus en arrière pendant que l'os glisse).
+- **Re-parentage « racine » sans disparition.** Dans Propriétés de l'os, choisir « Racine (aucun) » faisait sauter l'os et ses fils hors du preview (l'offset restait dans le repère de l'ancien parent, réinterprété en coordonnées projet). Le re-parentage préserve maintenant la géométrie de repos : l'os reste **ancré sur place** et visible, sa descendance aussi, et l'ancien parent n'a plus aucun effet dessus.
+
+## Nouveautés
+
+- **Confirmation d'attachement.** À la création d'un os 2 qui se rattacherait à un os 1 (tap sur son poignet, son segment, ou sur une pièce qu'il porte), une fenêtre demande confirmation. « Attacher » → l'ancrage suivra l'os 1 ; « Non, sans parent » → l'os 2 est créé racine, ancré sur place.
+- **Poignée de rotation dédiée.** Quand un os est sélectionné, une poignée sort de son extrémité (dans le prolongement) : la glisser pivote l'os. La rotation via le deuxième point de l'os est désactivée — toucher l'extrémité sélectionne, ne pivote plus.
+- **Déplacement sans mode.** Plus de « mode déplacement » collant : appuyer sur ✥ puis glisser n'importe où sur l'écran translate l'ancrage de l'os sélectionné (chaîne et pièces liées suivent) ; le relâchement désarme le bouton.
 
 ## Analyse & tests
 
-- `flutter analyze` : 0 problème ; **104 tests verts** (FK, round-trip, persistance v4, durée squelette, translation d'ancrage, emport de pièces, création d'os attaché au poignet y compris sur os animé).
+- `flutter analyze` : 0 problème ; **106 tests verts** (FK, round-trip, persistance v4, durée squelette, translation d'ancrage, emport de pièces, création d'os attaché, re-parentage sans saut racine/autre os).
 
 <!--
 Ce fichier est utilisé tel quel comme description de chaque release GitHub.
