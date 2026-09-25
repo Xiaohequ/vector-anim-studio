@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../engine/timeline_controller.dart';
 import '../models/animation.dart';
+import '../models/skeleton.dart';
 
 /// Bottom sheet « Propriétés de la forme » : tous les réglages de la forme
 /// sélectionnée (sliders, keyframe au curseur, interpolation), en suivant la
@@ -20,6 +21,9 @@ class ShapePropertiesSheet extends StatefulWidget {
     this.onOpenSource,
     this.skeletonPiece = false,
     this.skeletonNote,
+    this.skeletonRig,
+    this.onBindLayer,
+    this.onUnbindLayer,
   });
 
   final AnimationProject project;
@@ -42,6 +46,16 @@ class ShapePropertiesSheet extends StatefulWidget {
 
   /// État de liaison au rig (projet squelette), affiché sous le titre.
   final String? skeletonNote;
+
+  /// Rig du projet (projet squelette) : active la section « Couches liées
+  /// au rig » (liaison au niveau couche, v0.9.6).
+  final SkeletonRig? skeletonRig;
+
+  /// Lie une couche à un os (dialogue de sélection côté écran).
+  final Future<void> Function(ShapeLayer layer)? onBindLayer;
+
+  /// Délie une couche de son os.
+  final Future<void> Function(ShapeLayer layer)? onUnbindLayer;
 
   @override
   State<ShapePropertiesSheet> createState() => _ShapePropertiesSheetState();
@@ -132,6 +146,10 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                   if (property != AnimatableProperty.strokeWidth ||
                       !shape.isInstance)
                     _buildPropertyRow(shape, property, controller),
+                if (widget.skeletonPiece &&
+                    widget.skeletonRig != null &&
+                    shape.layers.isNotEmpty)
+                  ..._buildRigLayerRows(),
                 if (!widget.skeletonPiece)
                   Row(
                     children: <Widget>[
@@ -186,6 +204,64 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
         );
       },
     );
+  }
+
+  /// Section « Couches liées au rig » (projet squelette) : une ligne par
+  /// couche avec son os porteur et une action Lier…/Délier. La liaison de
+  /// couche prend le pas sur la liaison de forme entière.
+  List<Widget> _buildRigLayerRows() {
+    final rig = widget.skeletonRig!;
+    final shape = widget.shape;
+    final rows = <Widget>[
+      Padding(
+        padding: const EdgeInsets.only(top: 6, bottom: 2),
+        child: Text(
+          'Couches liées au rig',
+          style: TextStyle(fontSize: 11, color: Colors.white70),
+        ),
+      ),
+    ];
+    for (final layer in shape.layers) {
+      final bone = rig.boneById(
+        rig.bindingForLayer(shape.id, layer.id)?.boneId,
+      );
+      rows.add(
+        Row(
+          children: <Widget>[
+            Expanded(
+              child: Text(
+                layer.name,
+                style: const TextStyle(fontSize: 12),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Text(
+              bone?.name ?? (rig.bones.isEmpty ? 'aucun os' : '—'),
+              style: TextStyle(
+                fontSize: 11,
+                color: bone == null ? Colors.white24 : const Color(0xFFC084FC),
+              ),
+            ),
+            TextButton(
+              onPressed: bone == null
+                  ? (rig.bones.isEmpty
+                        ? null
+                        : () async {
+                            await widget.onBindLayer?.call(layer);
+                            _refresh();
+                          })
+                  : () async {
+                      await widget.onUnbindLayer?.call(layer);
+                      _refresh();
+                    },
+              child: Text(bone == null ? 'Lier…' : 'Délier'),
+            ),
+          ],
+        ),
+      );
+    }
+    return rows;
   }
 
   Widget _buildPropertyRow(

@@ -537,6 +537,85 @@ void main() {
       );
     });
   });
+
+  group('liaison au niveau couche (v0.9.6)', () {
+    test('bindLayer remplace, unbindLayer purge, forme entière séparée', () {
+      final rig = SkeletonRig();
+      final a = RigBone(name: 'A');
+      final b = RigBone(name: 'B');
+      rig.addBone(a);
+      rig.addBone(b);
+
+      rig.bindLayer('s1', 'l1', a.id);
+      expect(rig.bindingForLayer('s1', 'l1')?.boneId, a.id);
+      expect(rig.bindingForLayer('s1', 'l2'), isNull);
+      expect(rig.bindingForShape('s1'), isNull); // liaisons indépendantes
+
+      // Re-lier la même couche : remplacement, pas de doublon.
+      rig.bindLayer('s1', 'l1', b.id);
+      expect(rig.bindings.length, 1);
+      expect(rig.bindingForLayer('s1', 'l1')?.boneId, b.id);
+
+      rig.unbindLayer('s1', 'l1');
+      expect(rig.bindings, isEmpty);
+    });
+
+    test(
+      'round-trip JSON de la liaison de couche (back-compat sans layerId)',
+      () {
+        final rig = SkeletonRig();
+        rig.bindShape('s1', 'b1');
+        rig.bindLayer('s2', 'l2', 'b2');
+        final restored = SkeletonRig.fromJson(
+          (rig.toJson() as Map).cast<String, Object?>(),
+        );
+        expect(restored.bindingForShape('s1')?.layerId, isNull);
+        expect(restored.bindingForLayer('s2', 'l2')?.boneId, 'b2');
+      },
+    );
+
+    test('duplicateBindings emporte forme et couches (ids remappés)', () {
+      final rig = SkeletonRig();
+      final a = RigBone(name: 'A');
+      rig.addBone(a);
+      rig.bindShape('s1', a.id);
+      rig.bindLayer('s1', 'old-l1', a.id);
+      rig.duplicateBindings('s1', 's1-clone', {'old-l1': 'new-l1'});
+      expect(rig.bindingForShape('s1-clone')?.boneId, a.id);
+      expect(rig.bindingForLayer('s1-clone', 'new-l1')?.boneId, a.id);
+      expect(rig.bindingForLayer('s1-clone', 'old-l1'), isNull);
+    });
+
+    test('carryBoundPieces emporte la couche liée (repère forme conservé)', () {
+      final project = AnimationProject.blank(type: ProjectType.skeleton);
+      final rig = SkeletonRig();
+      project.skeleton = rig;
+      final bone = RigBone(name: 'B', offsetX: 0, offsetY: 0, length: 80);
+      rig.addBone(bone);
+      // Forme à (100,100) sans rotation ; couche ancrée à (50,0) → ancrage
+      // monde de repos (150,100).
+      final shape = VectorShape(name: 'P', x: 100, y: 100);
+      shape.layers.add(
+        ShapeLayer(name: 'L', kind: ShapeKind.rect, x: 50, y: 0),
+      );
+      project.shapes.add(shape);
+      rig.bindLayer(shape.id, shape.layers.first.id, bone.id);
+
+      final before = SkeletonPose.evaluate(rig, 0);
+      bone.restAngle = math.pi / 2; // pose : l'os tourne de 90°
+      final after = SkeletonPose.evaluate(rig, 0);
+      carryBoundPieces(project, rig, before, after, 0);
+
+      // L'ancrage monde (150,100) tourne de 90° autour du joint (0,0) →
+      // (−100,150) ; en repère forme (origine (100,100), rotation nulle) :
+      // (−200,50). Rotation de la couche +90°, pose de la forme intacte.
+      expect(shape.layers.first.x, closeTo(-200, 1e-6));
+      expect(shape.layers.first.y, closeTo(50, 1e-6));
+      expect(shape.layers.first.rotation, closeTo(math.pi / 2, 1e-6));
+      expect(shape.x, 100);
+      expect(shape.y, 100);
+    });
+  });
 }
 
 Matcher closeToOffset(Offset expected, [double epsilon = 1e-6]) =>

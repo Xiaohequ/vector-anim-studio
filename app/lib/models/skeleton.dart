@@ -101,25 +101,33 @@ class BoneKeyframe {
   );
 }
 
-/// Liaison rig maître : une pièce (forme entière) suit un os.
+/// Liaison rig maître : une pièce (ou une couche précise, v0.9.6) suit un os.
 ///
 /// L'offset de repos n'est PAS figé à la liaison : la pose de base de la forme
 /// (x, y, rotation, échelle — ses sliders) sert d'offset de repos. À l'instant
 /// t la pièce est rendue sous la transformée `os(t) ∘ os(repos)⁻¹ ∘ forme`.
 class BoneBinding {
-  BoneBinding({required this.shapeId, required this.boneId});
+  BoneBinding({required this.shapeId, required this.boneId, this.layerId});
 
   final String shapeId;
   final String boneId;
 
+  /// Couche liée à l'intérieur de la forme (v0.9.6) ; null = la forme
+  /// ENTIÈRE suit l'os (liaison historique). Une liaison de couche prend le
+  /// pas sur la liaison de forme pour cette couche — la couche liée suit
+  /// SON os uniquement.
+  final String? layerId;
+
   Map<String, Object?> toJson() => <String, Object?>{
     'shapeId': shapeId,
     'boneId': boneId,
+    if (layerId != null) 'layerId': layerId,
   };
 
   factory BoneBinding.fromJson(Map<String, Object?> json) => BoneBinding(
     shapeId: json['shapeId'] as String,
     boneId: json['boneId'] as String,
+    layerId: json['layerId'] as String?,
   );
 }
 
@@ -152,9 +160,56 @@ class SkeletonRig {
   BoneBinding? bindingForShape(String? shapeId) {
     if (shapeId == null) return null;
     for (final binding in bindings) {
-      if (binding.shapeId == shapeId) return binding;
+      if (binding.shapeId == shapeId && binding.layerId == null) {
+        return binding;
+      }
     }
     return null;
+  }
+
+  /// Liaison d'une couche précise de la forme (v0.9.6), ou null.
+  BoneBinding? bindingForLayer(String? shapeId, String? layerId) {
+    if (shapeId == null || layerId == null) return null;
+    for (final binding in bindings) {
+      if (binding.shapeId == shapeId && binding.layerId == layerId) {
+        return binding;
+      }
+    }
+    return null;
+  }
+
+  /// Lie (ou re-lie) une couche précise à un os — remplace la liaison
+  /// précédente de cette couche.
+  void bindLayer(String shapeId, String layerId, String boneId) {
+    bindings.removeWhere((b) => b.shapeId == shapeId && b.layerId == layerId);
+    bindings.add(
+      BoneBinding(shapeId: shapeId, boneId: boneId, layerId: layerId),
+    );
+  }
+
+  void unbindLayer(String shapeId, String layerId) =>
+      bindings.removeWhere((b) => b.shapeId == shapeId && b.layerId == layerId);
+
+  /// Emporte les liaisons d'une forme clonée (forme entière et couches) —
+  /// les ids de couches sont régénérés dans le clone : [layerIdMap] =
+  /// ancien id → id du clone (même ordre).
+  void duplicateBindings(
+    String shapeId,
+    String cloneShapeId,
+    Map<String, String> layerIdMap,
+  ) {
+    for (final binding
+        in bindings.where((b) => b.shapeId == shapeId).toList()) {
+      bindings.add(
+        BoneBinding(
+          shapeId: cloneShapeId,
+          boneId: binding.boneId,
+          layerId: binding.layerId == null
+              ? null
+              : layerIdMap[binding.layerId!],
+        ),
+      );
+    }
   }
 
   String? boneIdForShape(String? shapeId) => bindingForShape(shapeId)?.boneId;
@@ -568,8 +623,10 @@ RigBone boneBetween(
 /// mutation). La transformée rigide repos→repos de l'os porteur — pivot à
 /// son articulation, rotation deltaAngle — s'applique au centre et à la
 /// rotation de chaque pièce dont la frame de repos a changé (l'os porteur
-/// comme les os descendants). Écriture auto-key : pose au curseur si la
-/// pièce est animée, valeur de base sinon.
+/// comme les os descendants). Liaison de couche : c'est l'ancrage MONDE de
+/// la couche qui est transporté, puis réécrit dans le repère de la forme
+/// (les couches ne sont pas animables). Écriture auto-key pour les formes :
+/// pose au curseur si la pièce est animée, valeur de base sinon.
 void carryBoundPieces(
   AnimationProject project,
   SkeletonRig rig,
@@ -588,6 +645,39 @@ void carryBoundPieces(
         (newFrame.jointRest - oldFrame.jointRest).distance > 1e-9 ||
         deltaAngle.abs() > 1e-9;
     if (!moved) continue;
+
+    // Liaison de couche (v0.9.6) : transporter l'ancrage monde de la couche.
+    if (binding.layerId != null) {
+      ShapeLayer? layer;
+      for (final candidate in shape.layers) {
+        if (candidate.id == binding.layerId) {
+          layer = candidate;
+          break;
+        }
+      }
+      if (layer == null) continue; // couche supprimée : liaison inerte
+      final sX = shape.valueAt(AnimatableProperty.x, timeMs);
+      final sY = shape.valueAt(AnimatableProperty.y, timeMs);
+      final sRot = shape.valueAt(AnimatableProperty.rotation, timeMs);
+      final sScale = shape.valueAt(AnimatableProperty.scale, timeMs);
+      // Ancrage monde de repos de la couche (pose de la forme ∘ couche).
+      final world =
+          Offset(sX, sY) +
+          rotateVector(Offset(layer.x, layer.y), sRot) *
+              math.max(0.0001, sScale.abs());
+      final mappedWorld =
+          newFrame.jointRest +
+          rotateVector(world - oldFrame.jointRest, deltaAngle);
+      // Retour au repère local de la forme (inverse de la pose de la forme).
+      final local =
+          rotateVector(mappedWorld - Offset(sX, sY), -sRot) /
+          math.max(0.0001, sScale.abs());
+      layer.x = local.dx;
+      layer.y = local.dy;
+      layer.rotation += deltaAngle;
+      continue;
+    }
+
     final x = shape.valueAt(AnimatableProperty.x, timeMs);
     final y = shape.valueAt(AnimatableProperty.y, timeMs);
     final rotation = shape.valueAt(AnimatableProperty.rotation, timeMs);

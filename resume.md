@@ -6,8 +6,8 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Repo : https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`)
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
-- Dernière version : **0.9.5** (le bouton ✥ devient la poignée de
-  déplacement — glisser le bouton déplace l'os, plus de mode ; 107 tests)
+- Dernière version : **0.9.6** (liaison au niveau couche + import
+  squelette→vectoriel avec badge de type ; 112 tests)
 - Détails techniques : `docs/PLAN.md` · Notes de version : `RELEASE_NOTES.md`
 
 ---
@@ -49,32 +49,19 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 ## ⏳ En attente (bloquant la suite)
 
-- **Validation v0.9.4 sur appareil réel** (APK `vector-anim-studio-0.9.5.apk`),
-  scénario ciblé sur les changements de la version :
-  1. Projet Squelette → 2-3 pièces → timeline : les rectangles de pièces
-     restent affichés AVANT et APRÈS la création d'un os.
-  2. Mode rig : premier tap SUR une pièce, second tap ailleurs → l'os est
-     posé exactement à l'endroit cliqué (articulation = tap 1), PAS lié à
-     la pièce (liaison manuelle via le menu).
-  3. Tap 1 sur le poignet (extrémité) d'un os → l'os 2 s'y accroche et suit
-     l'os 1 (tourner l'os 1 : le poignet emporte l'os 2).
-  4. Tap 1 sur une pièce déjà liée à un os → l'os 2 s'attache à l'os
-     porteur (son ancrage suit).
-  5. Sélectionner un os → la forme se désélectionne (et inversement) ;
-     boutons ⚙ et ✥ visibles près du segment.
-  6. ✥ puis glisser → l'os, sa chaîne et les pièces liées suivent ; le
-     relâchement désarme ✥ (plus de mode collant).
-  7. Poignée de rotation (cercle au bout de l'os sélectionné) : glisser →
-     pivoter ; toucher le 2e point de l'os sélectionne seulement.
-  8. Keyframes d'os (◆) : rotation auto-key, la pièce suit à la lecture.
-  9. Export MP4 sur un projet avec keyframes d'os → l'animation est rendue.
+- **Validé sur appareil réel (25/09)** : toute la chaîne rigging v0.9.1 →
+  v0.9.5 — barres de pièces + d'os sur la timeline, ancrage os sur pièce,
+  attachement auto os→os avec confirmation, liaison pièce manuelle,
+  re-parentage racine sans saut, poignée de rotation, ✥ poignée draggable,
+  playback avec keyframes d'os, export MP4.
 - **Retours utilisateur** → le cas échéant patch v0.9.x.
 
 ---
 
 ## 🔜 Ce qui doit être fait (roadmap)
 
-### v0.9.1 (livrée — bugfix des retours v0.9.0)- Timeline : barres de pièces + barres d'os animés affichées ensemble.
+### v0.9.1 (livrée — bugfix des retours v0.9.0)
+- Timeline : barres de pièces + barres d'os animés affichées ensemble.
 - Ancrage automatique os↔pièce au premier tap du mode rig sur une pièce.
 - Déplacer une pièce au repos → l'os suit (`translateBoneRest`) ; poser le
   rig (glisser d'os sans keyframes) → les pièces liées suivent
@@ -131,7 +118,26 @@ v0.9.0, l'**animation squelette** (rig maître).
 - Le bouton reste ancré à l'os (il « colle » au doigt pendant le glisser).
 - Undo : 1 glisser = 1 entrée (snapshot au panStart, poussé au panEnd).
 
-### v0.9.6 (décidé, pas entamé)
+### v0.9.6 (livrée — liaison par couche + import squelette)
+- **Liaison au niveau couche** : `BoneBinding.layerId` (null = forme
+  entière, back-compat JSON) ; `bindingForLayer/bindLayer/unbindLayer` +
+  `bindingForShape` NE capture plus les liaisons de couche (sinon double-transport).
+- **Painter par couche** : la transformée os (coordonnées projet) enveloppe
+  la chaîne pose forme ∘ couche — appliquée AVANT la pose de la forme, par
+  couche (couche liée → son os ; sinon liaison de forme).
+- **carryBoundPieces** : couche liée → transport de son ancrage MONDE puis
+  réécriture dans le repère de la forme (couches non animables, base).
+- **Sheet forme** : section « Couches liées au rig » (une ligne par couche,
+  os porteur + Lier…/Délier) ; dialogue `_pickBone` partagé avec la liaison
+  de pièce.
+- **Duplication** : `duplicateBindings(shape, clone, layerIdMap)` remappe
+  les ids de couches régénérés.
+- **Import squelette→vectoriel** : le mécanisme existait (menu + painter
+  récursif + garde-fou depth>=1) — vérifié par test widget (instance de
+  squelette animé dans un vectoriel, lecture sans plantage) + badge de type
+  dans le sélecteur (label type · durée · pièces).
+
+### v0.9.7 (décidé, pas entamé)
 - **Liaison au niveau couche** : lier une couche précise (et plus seulement
   une forme entière) à un os + panneau d'offset d'attache.
 - **Import d'une animation squelette dans un projet vectoriel** : « Formes ▸

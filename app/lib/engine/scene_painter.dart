@@ -152,6 +152,8 @@ class ScenePainter extends CustomPainter {
         shape,
         depth: depth,
         boneFrame: frame,
+        rig: rig,
+        rigPose: rigPose,
         sampleMs: timeMs,
       );
     }
@@ -162,6 +164,8 @@ class ScenePainter extends CustomPainter {
     VectorShape shape, {
     required int depth,
     BoneFrame? boneFrame,
+    required SkeletonRig? rig,
+    required SkeletonPose? rigPose,
     required int sampleMs,
   }) {
     final x = shape.valueAt(AnimatableProperty.x, sampleMs);
@@ -174,24 +178,40 @@ class ScenePainter extends CustomPainter {
       sampleMs,
     );
 
-    canvas.save();
-    // Rig maître : l'os emporte la pièce (transformée os(t) ∘ os(repos)⁻¹),
-    // la pose de la forme sert ensuite d'offset de repos.
-    if (boneFrame != null) _applyBoneDelta(canvas, boneFrame);
-    canvas.translate(x, y);
-    canvas.rotate(rotation);
-    canvas.scale(scale <= 0 ? 0.0001 : scale);
-
     if (shape.isInstance) {
+      canvas.save();
+      // Rig maître : l'os emporte l'instance (transformée os(t) ∘ os(repos)⁻¹),
+      // la pose de la forme sert ensuite d'offset de repos.
+      if (boneFrame != null) _applyBoneDelta(canvas, boneFrame);
+      canvas.translate(x, y);
+      canvas.rotate(rotation);
+      canvas.scale(scale <= 0 ? 0.0001 : scale);
       _paintInstance(canvas, shape, opacity, depth, sampleMs);
-    } else {
-      for (final layer in shape.layers) {
-        if (!layer.visible) continue;
-        _paintLayer(canvas, layer, opacity, strokeFactor);
-      }
+      canvas.restore();
+      return;
     }
 
-    canvas.restore();
+    // Liaison au niveau couche (v0.9.6) : la transformée de l'os porteur est
+    // exprimée en coordonnées PROJET — elle enveloppe la chaîne complète
+    // (pose de la forme puis couche), donc elle s'applique AVANT la pose de
+    // la forme. Une couche liée à un os suit SON os (la liaison de couche
+    // prend le pas sur la liaison de la forme entière).
+    for (final layer in shape.layers) {
+      if (!layer.visible) continue;
+      BoneFrame? layerFrame;
+      final layerBinding = rig?.bindingForLayer(shape.id, layer.id);
+      if (layerBinding != null && rigPose != null) {
+        layerFrame = rigPose.frameOf(layerBinding.boneId);
+      }
+      canvas.save();
+      final carrier = layerFrame ?? boneFrame;
+      if (carrier != null) _applyBoneDelta(canvas, carrier);
+      canvas.translate(x, y);
+      canvas.rotate(rotation);
+      canvas.scale(scale <= 0 ? 0.0001 : scale);
+      _paintLayer(canvas, layer, opacity, strokeFactor);
+      canvas.restore();
+    }
   }
 
   /// Mouvement rigide de l'os entre son repos et l'instant courant :

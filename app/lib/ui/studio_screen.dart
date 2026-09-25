@@ -181,8 +181,10 @@ class _StudioScreenState extends State<StudioScreen>
                 leading: const Icon(Icons.movie_outlined),
                 title: Text(summary.name),
                 subtitle: Text(
+                  '${summary.type.label} · '
                   '${(summary.durationMs / 1000).toStringAsFixed(1)} s · '
-                  '${summary.shapeCount} forme(s)',
+                  '${summary.shapeCount} '
+                  '${summary.type == ProjectType.skeleton ? 'pièce(s)' : 'forme(s)'}',
                 ),
                 onTap: () => Navigator.of(context).pop(summary),
               ),
@@ -412,6 +414,12 @@ class _StudioScreenState extends State<StudioScreen>
     setState(() {
       project.shapes.insert(index + 1, clone);
       _selectedId = clone.id;
+      // Liaisons emportées (forme entière et couches) : les ids de couches
+      // sont régénérés dans le clone — correspondance par ordre.
+      project.skeleton?.duplicateBindings(shape.id, clone.id, <String, String>{
+        for (var i = 0; i < shape.layers.length; i++)
+          shape.layers[i].id: clone.layers[i].id,
+      });
     });
     _scheduleSave();
     _snack('Forme dupliquée (keyframes incluses)');
@@ -539,6 +547,9 @@ class _StudioScreenState extends State<StudioScreen>
         onOpenSource: () => _openSourceProject(shape),
         skeletonPiece: project.isSkeleton,
         skeletonNote: _bindingNote(shape),
+        skeletonRig: project.isSkeleton ? project.skeleton : null,
+        onBindLayer: (layer) => _bindLayer(shape, layer),
+        onUnbindLayer: (layer) => _unbindLayer(shape, layer),
       ),
     );
     if (mounted) setState(() {});
@@ -696,8 +707,25 @@ class _StudioScreenState extends State<StudioScreen>
     );
   }
 
+  /// Sélecteur d’os (dialogue réutilisé : liaison de pièce ou de couche).
+  Future<String?> _pickBone(SkeletonRig rig, String title) {
+    return showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: Text(title),
+        children: <Widget>[
+          for (final bone in rig.bones)
+            SimpleDialogOption(
+              onPressed: () => Navigator.of(context).pop(bone.id),
+              child: Text('${'\u2500' * rig.depthOf(bone.id)} ${bone.name}'),
+            ),
+        ],
+      ),
+    );
+  }
+
   /// Lie la pièce sélectionnée à un os (rig maître : ses sliders deviennent
-  /// l'offset de repos dans le repère de l'os).
+  /// l’offset de repos dans le repère de l’os).
   Future<void> _bindSelectedShape() async {
     final project = _project;
     final rig = _rig;
@@ -707,25 +735,42 @@ class _StudioScreenState extends State<StudioScreen>
       _snack('Crée d’abord un os (Squelettes ▸ Ajouter un os…)');
       return;
     }
-    final picked = await showDialog<String>(
-      context: context,
-      builder: (context) => SimpleDialog(
-        title: Text('Lier « ${shape.name} » à quel os ?'),
-        children: <Widget>[
-          for (final bone in rig.bones)
-            SimpleDialogOption(
-              onPressed: () => Navigator.of(context).pop(bone.id),
-              child: Text('${'—' * rig.depthOf(bone.id)} ${bone.name}'),
-            ),
-        ],
-      ),
-    );
+    final picked = await _pickBone(rig, 'Lier « ${shape.name} » à quel os ?');
     if (picked == null || !mounted) return;
     _pushUndo();
     setState(() => rig.bindShape(shape.id, picked));
     await _flushSave();
     final bone = rig.boneById(picked);
     _snack('Pièce liée à l’os « ${bone?.name ?? '?'} »');
+  }
+
+  /// Lie une couche précise de la pièce à un os (v0.9.6) — la couche suit
+  /// SON os, indépendamment des couches voisines.
+  Future<void> _bindLayer(VectorShape shape, ShapeLayer layer) async {
+    final rig = _rig;
+    if (rig == null) return;
+    if (rig.bones.isEmpty) {
+      _snack('Crée d’abord un os (Squelettes ▸ Ajouter un os…)');
+      return;
+    }
+    final picked = await _pickBone(
+      rig,
+      'Lier la couche « ${layer.name} » à quel os ?',
+    );
+    if (picked == null || !mounted) return;
+    _pushUndo();
+    setState(() => rig.bindLayer(shape.id, layer.id, picked));
+    await _flushSave();
+    final bone = rig.boneById(picked);
+    _snack('Couche « ${layer.name} » liée à « ${bone?.name ?? '?'} »');
+  }
+
+  Future<void> _unbindLayer(VectorShape shape, ShapeLayer layer) async {
+    final rig = _rig;
+    if (rig == null) return;
+    _pushUndo();
+    setState(() => rig.unbindLayer(shape.id, layer.id));
+    await _flushSave();
   }
 
   Future<void> _unbindSelectedShape() async {

@@ -297,4 +297,46 @@ void main() {
     // Les barres de formes n'existent pas en mode squelette.
     expect(find.textContaining('\u{1F3AC}'), findsNothing);
   });
+
+  testWidgets('une instance de projet squelette s’anime dans un vectoriel', (
+    tester,
+  ) async {
+    final repository = _MemoryRepository();
+    // Sous-projet squelette animé : keyframes d'os 0 → 1 s.
+    final skeleton = AnimationProject.blank(
+      name: 'Rat',
+      type: ProjectType.skeleton,
+    );
+    final rig = SkeletonRig();
+    final bone = RigBone(name: 'Queue', offsetX: 180, offsetY: 320, length: 60);
+    rig.addBone(bone);
+    rig.upsertKeyframe(bone.id, 0, 0, easing: EasingKind.linear);
+    rig.upsertKeyframe(bone.id, 1000, 0.8, easing: EasingKind.linear);
+    skeleton.skeleton = rig;
+    await repository.save(skeleton);
+
+    // Projet hôte vectoriel : le personnage riggé devient une instance.
+    final host = AnimationProject.blank(name: 'Scène');
+    host.shapes.add(
+      VectorShape(
+        name: 'Rat',
+        embeddedProjectId: skeleton.id,
+        embeddedWidth: skeleton.width,
+        embeddedHeight: skeleton.height,
+        startMs: 0,
+        endMs: 2000,
+      ),
+    );
+
+    await pumpStudio(tester, repository, host);
+    expect(find.textContaining('\u{1F3AC} Rat'), findsOneWidget);
+
+    // Lecture : le rig du sous-projet est échantillonné à son temps de
+    // boucle, sans planter (rendu à chaque frame).
+    await tester.tap(find.byIcon(Icons.play_arrow));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.byIcon(Icons.pause));
+    await tester.pumpAndSettle();
+  });
 }
