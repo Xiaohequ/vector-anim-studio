@@ -494,6 +494,46 @@ Offset rotateVector(Offset vector, double angle) {
   );
 }
 
+/// Crée un os entre [joint] (premier tap = articulation) et [tip]
+/// (deuxième tap = extrémité), exprimés en coordonnées monde au temps
+/// courant. Avec [parentFrame] (frame de repos de l'os parent), l'angle de
+/// repos est relatif et l'offset est ramené dans le repère de repos du
+/// parent : l'ARTICULATION posée suit ensuite tout mouvement du parent —
+/// v0.9.1 la plaçait au deuxième tap (ancrage décalé du point touché).
+RigBone boneBetween(
+  Offset joint,
+  Offset tip, {
+  required String name,
+  String? parentId,
+  BoneFrame? parentFrame,
+}) {
+  final bone = RigBone(
+    name: name,
+    parentId: parentId,
+    length: math.max(4.0, (tip - joint).distance),
+  );
+  bone.restAngle =
+      math.atan2(tip.dy - joint.dy, tip.dx - joint.dx) -
+      (parentFrame?.worldAngleRest ?? 0);
+  if (parentFrame == null) {
+    // Racine : articulation en coordonnées projet, angle monde.
+    bone.offsetX = joint.dx;
+    bone.offsetY = joint.dy;
+  } else {
+    // Enfant : l'articulation est ramenée dans le repère de repos du parent.
+    final restPoint =
+        parentFrame.jointRest +
+        rotateVector(joint - parentFrame.joint, -parentFrame.worldDelta);
+    final local = rotateVector(
+      restPoint - parentFrame.jointRest,
+      -parentFrame.worldAngleRest,
+    );
+    bone.offsetX = local.dx;
+    bone.offsetY = local.dy;
+  }
+  return bone;
+}
+
 /// Emporte les pièces liées lors d'une modification de la pose de repos du
 /// rig (entre [before] et [after], deux évaluations du MÊME rig autour de la
 /// mutation). La transformée rigide repos→repos de l'os porteur — pivot à

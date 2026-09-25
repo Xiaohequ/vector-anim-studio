@@ -371,6 +371,91 @@ void main() {
       expect(piece.keyframes.length, 3);
     });
   });
+
+  group('création d\'os attaché (v0.9.2)', () {
+    test('boneBetween : ancrage au poignet, l\'os 2 suit l\'os 1', () {
+      final rig = SkeletonRig();
+      final parent = RigBone(
+        name: 'P',
+        offsetX: 100,
+        offsetY: 100,
+        length: 100,
+      );
+      rig.addBone(parent);
+      final frame = SkeletonPose.evaluate(rig, 0).frameOf(parent.id)!;
+
+      // os 2 : ancrage à l'extrémité (poignet) du parent, extrémité vers le bas.
+      final child = boneBetween(
+        frame.tip,
+        frame.tip + const Offset(0, 50),
+        name: 'Os 2',
+        parentId: parent.id,
+        parentFrame: frame,
+      );
+      rig.addBone(child);
+      final rest = SkeletonPose.evaluate(rig, 0);
+      expect(
+        rest.frameOf(child.id)!.joint,
+        closeToOffset(const Offset(200, 100)),
+      );
+
+      // Pose du parent (rotation de repos) : l'ancrage de l'os 2 suit le
+      // poignet — (200,100) → (100,200), le rig tourne rigidement.
+      parent.restAngle = math.pi / 2;
+      final posed = SkeletonPose.evaluate(rig, 0);
+      final childFrame = posed.frameOf(child.id)!;
+      expect(childFrame.jointRest, closeToOffset(const Offset(100, 200)));
+    });
+
+    test('boneBetween sans parent : os racine posé au point touché', () {
+      final bone = boneBetween(
+        const Offset(40, 60),
+        const Offset(140, 60),
+        name: 'Os libre',
+      );
+      expect(bone.parentId, isNull);
+      expect(bone.offsetX, 40);
+      expect(bone.offsetY, 60);
+      expect(bone.restAngle, 0);
+      expect(bone.length, 100);
+    });
+
+    test('boneBetween sur un parent animé : ancrage au repos exact', () {
+      final rig = SkeletonRig();
+      final parent = RigBone(name: 'P', offsetX: 0, offsetY: 0, length: 100);
+      rig.addBone(parent);
+      rig.upsertKeyframe(parent.id, 0, 0, easing: EasingKind.linear);
+      rig.upsertKeyframe(
+        parent.id,
+        1000,
+        math.pi / 2,
+        easing: EasingKind.linear,
+      );
+      // À t = 500 : parent à 45° — ancrage de l'os 2 au poignet courant.
+      final t = 500;
+      final frame = SkeletonPose.evaluate(rig, t).frameOf(parent.id)!;
+      final child = boneBetween(
+        frame.tip,
+        frame.tip + const Offset(50, 0),
+        name: 'Os 2',
+        parentId: parent.id,
+        parentFrame: frame,
+      );
+      rig.addBone(child);
+      final pose = SkeletonPose.evaluate(rig, t);
+      // Le poignet courant (à 45°) : (70.7, 70.7).
+      expect(
+        pose.frameOf(child.id)!.joint,
+        closeToOffset(Offset(100 * math.sqrt2 / 2, 100 * math.sqrt2 / 2)),
+      );
+      // Au repos (t = 0), l'ancrage reste au poignet de repos (100, 0).
+      final rest = SkeletonPose.evaluate(rig, 0);
+      expect(
+        rest.frameOf(child.id)!.joint,
+        closeToOffset(const Offset(100, 0)),
+      );
+    });
+  });
 }
 
 Matcher closeToOffset(Offset expected, [double epsilon = 1e-6]) =>

@@ -6,8 +6,8 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Repo : https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`)
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
-- Dernière version : **0.9.1** (bugfix des 5 bugs v0.9.0 remontés en test
-  appareil ; 101 tests verts, `flutter analyze` 0 problème)
+- Dernière version : **0.9.2** (rigging affiné — os 2 attaché auto à l'os 1,
+  liaison pièce manuelle, sélection exclusive, boutons ⚙/✥ d'os ; 104 tests)
 - Détails techniques : `docs/PLAN.md` · Notes de version : `RELEASE_NOTES.md`
 
 ---
@@ -49,25 +49,29 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 ## ⏳ En attente (bloquant la suite)
 
-- **Validation v0.9.1 sur appareil réel** (APK `vector-anim-studio-0.9.1.apk`),
-  scénario ciblé sur les 5 bugs corrigés :
+- **Validation v0.9.2 sur appareil réel** (APK `vector-anim-studio-0.9.2.apk`),
+  scénario ciblé sur les changements de la version :
   1. Projet Squelette → 2-3 pièces → timeline : les rectangles de pièces
      restent affichés AVANT et APRÈS la création d'un os.
-  2. Mode rig : premier tap SUR une pièce, second tap ailleurs → message
-     « os créé et lié » ; déplacer la pièce → l'os suit.
-  3. Tourner un os sur le preview → fluide ; la pièce liée suit la rotation.
-  4. Lier via Squelettes ▸ Lier la pièce… puis tourner l'os → la pièce suit.
-  5. Playback → la tête de lecture avance (ex. 0,xx s / 4,00 s), pas 0 s / 0 s.
-  6. Keyframes d'os (◆) : rotation auto-key, la pièce suit à la lecture.
-  7. Export MP4 sur un projet avec keyframes d'os → l'animation est rendue.
+  2. Mode rig : premier tap SUR une pièce, second tap ailleurs → l'os est
+     posé exactement à l'endroit cliqué (articulation = tap 1), PAS lié à
+     la pièce (liaison manuelle via le menu).
+  3. Tap 1 sur le poignet (extrémité) d'un os → l'os 2 s'y accroche et suit
+     l'os 1 (tourner l'os 1 : le poignet emporte l'os 2).
+  4. Tap 1 sur une pièce déjà liée à un os → l'os 2 s'attache à l'os
+     porteur (son ancrage suit).
+  5. Sélectionner un os → la forme se désélectionne (et inversement) ;
+     boutons ⚙ et ✥ visibles près du segment.
+  6. ✥ Déplacer l'os : glisser → l'os, sa chaîne et les pièces liées suivent.
+  7. Keyframes d'os (◆) : rotation auto-key, la pièce suit à la lecture.
+  8. Export MP4 sur un projet avec keyframes d'os → l'animation est rendue.
 - **Retours utilisateur** → le cas échéant patch v0.9.x.
 
 ---
 
 ## 🔜 Ce qui doit être fait (roadmap)
 
-### v0.9.1 (livrée — bugfix des retours v0.9.0)
-- Timeline : barres de pièces + barres d'os animés affichées ensemble.
+### v0.9.1 (livrée — bugfix des retours v0.9.0)- Timeline : barres de pièces + barres d'os animés affichées ensemble.
 - Ancrage automatique os↔pièce au premier tap du mode rig sur une pièce.
 - Déplacer une pièce au repos → l'os suit (`translateBoneRest`) ; poser le
   rig (glisser d'os sans keyframes) → les pièces liées suivent
@@ -76,7 +80,24 @@ v0.9.0, l'**animation squelette** (rig maître).
 - Playback : durée squelette incluant les pièces (plus de « 0 s / 0 s »).
 - Bonus : poses des instances imbriquées échantillonnées au temps de boucle.
 
-### v0.9.2 (décidé, pas entamé)
+### v0.9.2 (livrée — rigging affiné, retours v0.9.1)
+- **Ancrage du 2e os réparé** : v0.9.1 plaçait l'articulation d'un os enfant
+  au DEUXIÈME tap (`scenePoint`) au lieu du premier (`joint`) → décalage.
+- **Attachement auto os→os** : tap 1 priorité ① extrémité d'os (snap au
+  poignet) ② segment d'os ③ pièce liée → l'os qui la porte ④ os sélectionné
+  — l'ancrage posé suit le parent (FK). `boneBetween()` extrait dans
+  models/skeleton.dart (testée, y compris parent animé).
+- **Plus de liaison auto pièce→os à la création** (demande utilisateur) :
+  la liaison reste manuelle (menu Squelettes ▸ Lier…).
+- **Sélection exclusive** : sélectionner un os désélectionne la forme et
+  inversement (tap, menus, geste de rotation d'os).
+- **Boutons d'os sur preview** : ⚙ (sheet os) + ✥ (mode déplacement —
+  glisser = translateBoneRest + carry, chaîne et pièces liées suivent).
+- ⚙ des formes ancré à la pose rig-aware (shapePoseWithRig).
+- Déplacer une pièce au repos : l'os suit ET la pièce suit le doigt
+  (`_translateBoneFollow` = translation + emport des pièces collées).
+
+### v0.9.3 (décidé, pas entamé)
 - **Liaison au niveau couche** : lier une couche précise (et plus seulement
   une forme entière) à un os + panneau d'offset d'attache.
 - **Import d'une animation squelette dans un projet vectoriel** : « Formes ▸

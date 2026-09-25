@@ -1,26 +1,25 @@
-# Vector Anim Studio 0.9.1
+# Vector Anim Studio 0.9.2
 
-Studio d'animation vectorielle pour Android : projets multiples, formes composées de couches, keyframes « pose », timeline zoomable, undo, export MP4 et GIF, animation squelette. Cette version corrige les cinq bugs de la v0.9.0 signalés en test sur appareil réel — aucune nouvelle fonctionnalité, que des corrections.
+Studio d'animation vectorielle pour Android : projets multiples, formes composées de couches, keyframes « pose », timeline zoomable, undo, export MP4 et GIF, animation squelette. Cette version affine le rigging suite aux retours de la v0.9.1 : os 2 attaché automatiquement à l'os 1, liaison os↔pièce uniquement manuelle, sélection exclusive et boutons dédiés pour l'os.
 
-## Corrections (retours v0.9.0)
+## Nouveautés
 
-- **Timeline : les pièces ne disparaissent plus dès qu'un os existe.** En mode squelette, v0.9.0 remplaçait les barres de pièces par les barres d'os animés. Les barres de pièces sont de retour, les barres d'os animés se posent en dessous.
-- **Os ancré à la pièce.** Au premier tap du mode rig, si le tap tombe sur une pièce, le nouvel os naît **lié** à cette pièce (confirmé par un message). Déplacer la pièce au repos déplace désormais l'ancrage de l'os : l'os (et sa chaîne) suit la pièce, qui reste collée à l'os.
-- **Liaison os → pièce qui marche.** Au repos, tourner un os emporte les pièces liées (et celles liées aux os descendants) : la pose de repos du rig entraîne les pièces au lieu de les laisser en place. Avec keyframes d'os, le comportement auto-key est inchangé.
-- **Rotation d'os fluide.** Le glisser d'os déclenchait des repaints erratiques (sauts visuels) : le canvas et la timeline se repeignent maintenant à chaque mise à jour du geste.
-- **Playback remis en marche.** La durée d'un projet squelette valait 0 tant qu'aucune keyframe d'os n'existait (affichage « 0 s / 0 s », lecture impossible) même avec des pièces de 4 s posées. La durée tient compte des pièces ET des keyframes d'os, avec le plancher de 4 s.
+- **Os 2 attaché automatiquement à l'os 1.** Au premier tap du mode rig, le parent du nouvel os est détecté par priorité : extrémité d'os touchée (l'articulation s'y accroche exactement — le poignet), sinon segment d'os touché, sinon pièce touchée → l'os qui la porte, sinon l'os sélectionné. L'ancrage posé suit ensuite tout mouvement de l'os parent (rotation, déplacement) — plus jamais de décalage entre l'endroit cliqué et l'articulation (bug v0.9.1 : elle était placée au deuxième tap).
+- **Bouton ⚙ propriétés de l'os sur le preview** : quand un os est sélectionné, un bouton apparaît ancré à son segment (comme le bouton des formes) et ouvre la sheet os (longueur, parent, renommer, supprimer, keyframe, easing). À côté, un bouton ✥ **Déplacer l'os** : mode où tout glisser translate l'ancrage de l'os — la chaîne descendante ET les pièces liées suivent le doigt.
+- **Sélection exclusive os / forme** : sélectionner un os désélectionne la forme (et inversement). L'utilisateur manipule soit une forme, soit un os — jamais les deux.
+- **Le bouton ⚙ des formes suit le rig** : ancré à la pièce transformée par son os (plus de bouton flottant à l'écart quand l'os a tourné).
 
-## Corrections annexes
+## Changement de comportement
 
-- Instances d'animation imbriquées : les poses du sous-projet sont échantillonnées à son temps de boucle propre (v0.9.0 les figeait au temps de la scène hôte).
+- **La création d'os ne lie plus la pièce touchée.** À partir des retours : le nouvel os naît attaché à un os (parent), mais la liaison pièce → os reste un geste volontaire (Squelettes ▸ Lier la pièce à un os…). Délier : Squelettes ▸ Délier la pièce.
+
+## Corrections
+
+- Déplacer une pièce liée au repos fait suivre l'os **et la pièce suit le doigt** (emport des pièces collées à l'os : la pièce traînée ne reste plus en arrière pendant que l'os glisse).
 
 ## Analyse & tests
 
-- `flutter analyze` : 0 problème ; **101 tests verts** (FK, échantillonnage, round-trip JSON, persistance v4, durée dérivée squelette, translation d'ancrage, emport de pièces lors d'une pose du rig).
-
-## Migration
-
-- Aucune : la base reste en v4, aucune donnée touchée.
+- `flutter analyze` : 0 problème ; **104 tests verts** (FK, round-trip, persistance v4, durée squelette, translation d'ancrage, emport de pièces, création d'os attaché au poignet y compris sur os animé).
 
 ## Installation
 
