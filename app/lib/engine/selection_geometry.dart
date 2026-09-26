@@ -4,19 +4,60 @@ import 'dart:ui' show Offset, Rect, Size;
 import '../models/animation.dart';
 import '../models/skeleton.dart';
 
-/// Pose d'un objet en coordonnées scène : origine (centre de rotation et
-/// d'échelle), rotation (radians), échelle. Sert autant pour une forme que
-/// pour une couche (via composition, cf. `layerPose`).
+/// Pose d'un objet en coordonnées scène : centre non compensé du pivot,
+/// rotation, échelle (uniforme × facteurs d'axe, v0.13) et pivot de rotation
+/// (offset en unités de forme, v0.13). Sert autant pour une forme que pour
+/// une couche (via composition, cf. `layerPose`).
 class Pose2D {
   const Pose2D({
     required this.origin,
     required this.rotation,
     required this.scale,
+    this.scaleX = 1,
+    this.scaleY = 1,
+    this.pivotDx = 0,
+    this.pivotDy = 0,
   });
 
+  /// Centre de la pose, NON compensé du pivot (= shape.x/y interpolés).
   final Offset origin;
   final double rotation;
   final double scale;
+
+  /// Facteurs d'axe (squash & stretch non uniforme) : effective = scale ×
+  /// facteur. Composition couche : exacte quand la rotation de couche est
+  /// nulle ou l'échelle de forme uniforme (sinon rect de sélection approché).
+  final double scaleX;
+  final double scaleY;
+
+  /// Pivot de rotation : offset en unités de forme depuis le centre ; le
+  /// gond est ancré à sa position VISUELLE (S·pivot) — il reste collé au
+  /// bord visuel sous une échelle non uniforme.
+  final double pivotDx;
+  final double pivotDy;
+
+  /// Échelle effective par axe (uniforme × facteur).
+  double get sx => scale * scaleX;
+  double get sy => scale * scaleY;
+
+  /// Origine COMPENSÉE du pivot : world(q) = foldedOrigin + R·S·q
+  /// (chaîne de rendu = centre + S·pivot + R·S·(q − pivot)).
+  Offset get foldedOrigin {
+    if (pivotDx == 0 && pivotDy == 0) return origin;
+    final c = math.cos(rotation);
+    final s = math.sin(rotation);
+    final rpx = sx * pivotDx;
+    final rpy = sy * pivotDy;
+    return origin +
+        Offset(rpx - (rpx * c - rpy * s), rpy - (rpx * s + rpy * c));
+  }
+
+  /// Point fixe de rotation en coordonnées scène : centre + S·pivot (le gond
+  /// ne tourne pas avec la forme). Pivot nul = [origin].
+  Offset rotationCenterScene() {
+    if (pivotDx == 0 && pivotDy == 0) return origin;
+    return origin + Offset(sx * pivotDx, sy * pivotDy);
+  }
 }
 
 /// Mapping entre les coordonnées scène (repère du projet, ex. 360×640) et les
@@ -93,47 +134,68 @@ class SelectionGeometry {
     ),
     rotation: shape.valueAt(AnimatableProperty.rotation, timeMs),
     scale: shape.valueAt(AnimatableProperty.scale, timeMs),
+    scaleX: shape.valueAt(AnimatableProperty.scaleX, timeMs),
+    scaleY: shape.valueAt(AnimatableProperty.scaleY, timeMs),
+    pivotDx: shape.pivotDx,
+    pivotDy: shape.pivotDy,
   );
 
   /// Pose d'une forme liée à un os : composition `os(t) ∘ os(repos)⁻¹ ∘ pose`.
   /// Le mouvement de l'os (rigide) emporte l'origine de la forme (elle orbite
-  /// l'articulation) et s'ajoute à sa rotation ; l'échelle passe inchangée.
-  /// Sans os (ou hors rig), équivalent à [shapePose].
+  /// l'articulation), s'ajoute à sa rotation et emporte le pivot ; l'échelle
+  /// passe inchangée. Sans os (ou hors rig), équivalent à [shapePose].
   static Pose2D shapePoseWithRig(
     VectorShape shape,
     int timeMs,
     BoneFrame? frame,
   ) {
     if (frame == null) return shapePose(shape, timeMs);
-    final origin = Offset(
-      shape.valueAt(AnimatableProperty.x, timeMs),
-      shape.valueAt(AnimatableProperty.y, timeMs),
-    );
+    final pose = shapePose(shape, timeMs);
     return Pose2D(
-      origin: frame.mapPoint(origin),
-      rotation:
-          shape.valueAt(AnimatableProperty.rotation, timeMs) + frame.worldDelta,
-      scale: shape.valueAt(AnimatableProperty.scale, timeMs),
+      origin: frame.mapPoint(pose.origin),
+      rotation: pose.rotation + frame.worldDelta,
+      scale: pose.scale,
+      scaleX: pose.scaleX,
+      scaleY: pose.scaleY,
+      pivotDx: pose.pivotDx,
+      pivotDy: pose.pivotDy,
     );
   }
 
   /// Pose d'une couche : composition de la transforme de la forme ∘ couche.
   /// L'origine de la couche (son centre, positionné par layer.x/y dans le
-  /// repère de la forme) est transformée par la pose de la forme ; rotations
-  /// s'additionnent, échelles se multiplient.
+  /// repère de la forme) est transformée par la chaîne pivot de la forme ;
+  /// rotations s'additionnent, échelles se multiplient (facteurs d'axe de la
+  /// forme transmis, pivot déjà intégré à l'origine).
   static Pose2D layerPose(VectorShape shape, ShapeLayer layer, int timeMs) {
     final sp = shapePose(shape, timeMs);
     final cosR = math.cos(sp.rotation);
     final sinR = math.sin(sp.rotation);
-    final lx = layer.x * sp.scale;
-    final ly = layer.y * sp.scale;
-    return Pose2D(
-      origin: Offset(
+    final Offset origin;
+    if (sp.pivotDx == 0 && sp.pivotDy == 0) {
+      final lx = layer.x * sp.sx;
+      final ly = layer.y * sp.sy;
+      origin = Offset(
         sp.origin.dx + lx * cosR - ly * sinR,
         sp.origin.dy + lx * sinR + ly * cosR,
-      ),
+      );
+    } else {
+      // Chaîne pivot : centre + S·pivot + R·S·(l − pivot).
+      final rpx = sp.sx * sp.pivotDx;
+      final rpy = sp.sy * sp.pivotDy;
+      final lx = (layer.x - sp.pivotDx) * sp.sx;
+      final ly = (layer.y - sp.pivotDy) * sp.sy;
+      origin = Offset(
+        sp.origin.dx + rpx + lx * cosR - ly * sinR,
+        sp.origin.dy + rpy + lx * sinR + ly * cosR,
+      );
+    }
+    return Pose2D(
+      origin: origin,
       rotation: sp.rotation + layer.rotation,
       scale: sp.scale * layer.scale,
+      scaleX: sp.scaleX,
+      scaleY: sp.scaleY,
     );
   }
 
@@ -141,16 +203,15 @@ class SelectionGeometry {
 
   /// Projette un point du repère local de l'objet vers le canvas.
   static Offset localToCanvas(Offset local, Pose2D pose, SceneGeometry geo) {
-    final s = math.max(0.0001, pose.scale.abs());
-    final sx = local.dx * s;
-    final sy = local.dy * s;
+    final sx = math.max(0.0001, pose.sx.abs());
+    final sy = math.max(0.0001, pose.sy.abs());
+    final ox = local.dx * sx;
+    final oy = local.dy * sy;
     final cosR = math.cos(pose.rotation);
     final sinR = math.sin(pose.rotation);
+    final o = pose.foldedOrigin;
     return geo.sceneToCanvas(
-      Offset(
-        pose.origin.dx + sx * cosR - sy * sinR,
-        pose.origin.dy + sx * sinR + sy * cosR,
-      ),
+      Offset(o.dx + ox * cosR - oy * sinR, o.dy + ox * sinR + oy * cosR),
     );
   }
 
@@ -166,9 +227,9 @@ class SelectionGeometry {
     localToCanvas(localBounds.bottomLeft, pose, geo),
   ];
 
-  /// Centre de l'objet (son origine) en canvas.
+  /// Centre de l'objet en canvas : le POINT FIXE de rotation (centre + S·pivot).
   static Offset center(Pose2D pose, SceneGeometry geo) =>
-      geo.sceneToCanvas(pose.origin);
+      geo.sceneToCanvas(pose.rotationCenterScene());
 
   /// Milieu du haut du rectangle de sélection, en canvas.
   static Offset topCenter(Rect localBounds, Pose2D pose, SceneGeometry geo) =>
@@ -220,16 +281,20 @@ class SelectionGeometry {
     SceneGeometry geo,
     Offset canvasPoint,
   ) {
-    final s = math.max(0.0001, pose.scale.abs());
+    final sx = math.max(0.0001, pose.sx.abs());
+    final sy = math.max(0.0001, pose.sy.abs());
     final scene = geo.canvasToScene(canvasPoint);
-    final relX = scene.dx - pose.origin.dx;
-    final relY = scene.dy - pose.origin.dy;
+    final o = pose.foldedOrigin;
+    final relX = scene.dx - o.dx;
+    final relY = scene.dy - o.dy;
     final cosR = math.cos(-pose.rotation);
     final sinR = math.sin(-pose.rotation);
     final local = Offset(
-      (relX * cosR - relY * sinR) / s,
-      (relX * sinR + relY * cosR) / s,
+      (relX * cosR - relY * sinR) / sx,
+      (relX * sinR + relY * cosR) / sy,
     );
-    return localBounds.inflate(shapeTouchMargin / s).contains(local);
+    return localBounds
+        .inflate(shapeTouchMargin / math.min(sx, sy))
+        .contains(local);
   }
 }

@@ -138,7 +138,7 @@ couche ignorées.
 ### vasf-2 — extensions VALIDÉES (26/09), par paquets de coût
 
 **Groupe 1 — format seul, l'importeur développe (moteur inchangé) —
-IMPLÉMENTÉ v0.12.0 (26/09) :**
+IMPLÉMENTÉ + VALIDÉ APPAREIL v0.12.0 (26/09) :**
 - **Couches multiples par forme** : `layers[]` (couleur, remplissage,
   points, tailles + pose locale `x`/`y` par couche) — le moteur gère déjà
   les couches ; un personnage détaillé (yeux, bouche, reliefs) n'a plus
@@ -152,7 +152,7 @@ IMPLÉMENTÉ v0.12.0 (26/09) :**
 - **Définitions réutilisables** : `"defs"` + `"ref"` (géométrie seule,
   surcharge par champ, pas de refs imbriquées ni de ref dans `layers[]`).
 
-**Groupe 2 — petites additions moteur :**
+**Groupe 2 — petites additions moteur (livré en v0.13.0) :**
 - `scaleX`/`scaleY` séparés dans les keyframes de forme (squash non
   uniforme ; `scale` uniforme aujourd'hui).
 - **Pivot de rotation** par forme (`pivot: [x, y]`) — portes, balances

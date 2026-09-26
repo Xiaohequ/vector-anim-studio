@@ -1,0 +1,64 @@
+{
+  "version": 2,
+  "name": "Démo vasf-2 Groupe 2",
+  "canvas": {"width": 720, "height": 1280, "fps": 25, "background": "#14161C"},
+  "shapes": [
+    {
+      "name": "Sol",
+      "type": "rect",
+      "color": "#2A2E38",
+      "width": 720, "height": 160,
+      "x": 360, "y": 1180, "end": 10
+    },
+    {
+      "name": "Balle",
+      "type": "circle",
+      "color": "#FF5C5C",
+      "width": 120, "height": 120,
+      "x": 360, "y": 400, "end": 1.5,
+      "keyframes": [
+        {"t": 0.0, "y": 400, "scaleX": 0.85, "scaleY": 1.25},
+        {"t": 0.55, "y": 1010, "easing": "easeIn"},
+        {"t": 0.68, "y": 1040, "scaleX": 1.45, "scaleY": 0.6, "easing": "easeOut"},
+        {"t": 0.82, "y": 990, "scaleX": 0.8, "scaleY": 1.3,
+         "easing": "cubic-bezier(0.34, 1.56, 0.64, 1.0)"},
+        {"t": 1.45, "y": 380, "scaleX": 0.85, "scaleY": 1.25, "easing": "easeOut"}
+      ]
+    },
+    {
+      "name": "Porte",
+      "type": "rect",
+      "color": "#5B8DEF",
+      "width": 240, "height": 420,
+      "x": 560, "y": 860, "end": 3.0,
+      "pivot": [-120, 0],
+      "keyframes": [
+        {"t": 0.2, "rotation": 0},
+        {"t": 1.7, "rotation": 68, "easing": "cubic-bezier(0.34, 1.56, 0.64, 1.0)"}
+      ]
+    },
+    {
+      "name": "Lampadaire",
+      "x": 200, "y": 860, "end": 9.6,
+      "layers": [
+        {"name": "Poteau", "type": "rect", "color": "#8899AA", "width": 36, "height": 200, "x": 0, "y": 90},
+        {"name": "Lampe", "type": "circle", "color": "#F2C94C", "width": 74, "height": 74, "x": 0, "y": -30}
+      ]
+    }
+  ],
+  "skeleton": {
+    "name": "Squelette",
+    "bones": [
+      {"name": "Tête", "joint": [200, 850], "angle": -90, "length": 40}
+    ],
+    "bind": {"Lampadaire/Lampe": "Tête"},
+    "cycle": {"repeat": 3},
+    "keyframes": [
+      {"bone": "Tête", "t": 0.0, "angle": -90},
+      {"bone": "Tête", "t": 0.6, "angle": -74, "easing": "easeInOut"},
+      {"bone": "Tête", "t": 1.2, "angle": -90, "easing": "easeInOut"},
+      {"bone": "Tête", "t": 1.8, "angle": -106, "easing": "easeInOut"},
+      {"bone": "Tête", "t": 2.4, "angle": -90, "easing": "easeInOut"}
+    ]
+  }
+}

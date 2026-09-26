@@ -78,6 +78,8 @@ convention). Positive degrees = clockwise on screen.
 | x / y | canvas center | base position of the shape center |
 | rotation | 0 | base rotation, degrees |
 | scale | 1 | base scale (0.05–4 recommended) |
+| scaleX / scaleY | 1 | VASF-2: base axis factors — effective scale = `scale` × factor (see below) |
+| pivot | `[0, 0]` | VASF-2: `[dx, dy]` offset from the shape center, in shape units — rotation & scale turn around it (STATIC, see below) |
 | opacity | 1 | 0–1 |
 | layers | optional | VASF-2: array of primitive objects (see below) — overrides `type/color/filled/strokeWidth/width/height/points` |
 | ref | optional | VASF-2: name of a `defs` entry used as geometry defaults (see below) |
@@ -92,9 +94,11 @@ convention). Positive degrees = clockwise on screen.
 
 - `t` (seconds, ≥ 0, sorted automatically) — a keyframe beyond `end` extends it.
 - `easing` = curve of the segment ARRIVING at this keyframe: `linear, easeIn,
-  easeOut, easeInOut, step` (default `easeInOut`).
+  easeOut, easeInOut, step` (default `easeInOut`). VASF-2 also accepts a CSS
+  chain: `"cubic-bezier(x1, y1, x2, y2)"` (x1/x2 within [0, 1], see below).
 - Any of `x, y, rotation, scale, opacity, strokeWidth` may be omitted (carried
-  over). `rotation` is in degrees. `strokeWidth` here animates the stroke
+  over). VASF-2 adds `scaleX` / `scaleY` (animatable axis factors, see below).
+  `rotation` is in degrees. `strokeWidth` here animates the stroke
   **factor** (visible stroke = `strokeWidth` × factor).
 - Keyframes are poses: the app interpolates each property independently.
 
@@ -144,6 +148,8 @@ convention). Positive degrees = clockwise on screen.
   Example: a child whose world rest angle is 90° given `angle: 30` rotates −60°.
 - `opacity` (0–1), `stretch` (along the bone, 1 = neutral), `squash`
   (perpendicular, 1 = neutral) are optional per-keyframe bone properties.
+- VASF-2: `easing` also accepts the CSS chain `"cubic-bezier(x1, y1, x2, y2)"`
+  on bone keyframes.
 
 # Worked example (bouncing ball)
 
@@ -179,7 +185,10 @@ and a VASF-2 example (multi-layer character with theme, defs and cycle).
 
 Everything below is optional; a `version: 1` file stays importable unchanged.
 The importer EXPANDS all of it at import time — the animation engine is
-unchanged, so the app renders exactly what it always rendered.
+unchanged, so the app renders exactly what it always rendered. Ready-to-import
+single-object examples live in `docs/vasf-2-example.json` (multi-couches +
+theme + defs + cycle) and `docs/vasf-2-g2-example.json` (scaleX/scaleY animées
++ pivot + cubic-bezier + liaison de couche).
 
 ## Theme (color palette)
 
@@ -251,12 +260,83 @@ example turns the right eye red). Name / start / end / pose / keyframes always
 come from the shape itself. No nested refs; `ref` works at shape level only
 (not inside `layers[]`).
 
+## Axis scale — `scaleX` / `scaleY`
+
+VASF-2 adds two axis factors usable at BASE level (on the shape) and per
+KEYFRAME (same names — the keyframe carries the factor):
+
+```json
+{
+  "name": "Balle", "scaleX": 1.4, "scaleY": 0.6, "end": 1.5,
+  "keyframes": [
+    {"t": 0, "scaleX": 1.2, "scaleY": 0.8},
+    {"t": 0.5, "scaleX": 0.9, "scaleY": 1.15, "easing": "easeOut"}
+  ]
+}
+```
+
+- The effective scale along an axis = `scale` × `scaleX` (same on Y). The
+  shape-level factor is the base, keyframes carry FACTORS — a keyframe
+  `scaleX: 1` shows the shape × `scale` wide, it does NOT restore the base
+  factor; end the bounce pattern back at the shape-level value for a clean
+  loop.
+- Independent factors = squash & stretch without a rotation trick: impact
+  squash is `scaleX > 1` with `scaleY < 1`.
+- Keep factors within 0.05–4 (the pinch gesture clamps there).
+
+## Pivot — rotation & scale around a point
+
+`"pivot": [dx, dy]` = offset from the shape CENTER, in shape units, where
+rotation and scale turn (a door hinges on its edge, not its middle). The
+pivot is anchored at its VISUAL position `center + S·pivot` — under a
+non-uniform scale it stays glued to the visual edge of the shape. STATIC:
+`pivot` cannot be keyframed. Default `[0, 0]` = center (classic behavior).
+
+```json
+{"name": "Porte", "type": "rect", "width": 240, "height": 420,
+ "pivot": [-120, 0], "keyframes": [{"t": 0, "rotation": 0}, {"t": 1.2, "rotation": 70}]}
+```
+
+## Custom easing — `cubic-bezier(...)`
+
+`easing` accepts the CSS chain form on shape AND bone keyframes:
+
+```json
+{"t": 0.5, "x": 500, "easing": "cubic-bezier(0.34, 1.56, 0.64, 1.0)"}
+```
+
+- 4 numbers `x1, y1, x2, y2` — control points of the timing curve; `x1` and
+  `x2` MUST be within `[0, 1]` (monotone progress). `y1`/`y2` may overshoot
+  past 0–1 for an elastic/bounce feel.
+- Named easings remain available. Exact identity (linear) =
+  `cubic-bezier(0.333, 0.333, 0.667, 0.667)` — NOT `(0, 0, 1, 1)` (that one
+  is a smoothstep).
+- Keyframe-bound: the curve applies to the segment ARRIVING at that keyframe,
+  exactly like named easings.
+
+## Layer bindings — `bind` a single layer
+
+VASF-2 extends `skeleton.bind` keys: `"Forme/Couche"` binds ONE named layer
+of a shape to a bone; a plain key keeps binding the whole shape.
+
+```json
+"bind": {"Corps": "Torse", "Visage/Chapeau": "Tête"}
+```
+
+- The layer must exist on the shape (unknown layer = collected error);
+  a bound layer follows ITS bone and takes precedence over the whole-shape
+  binding.
+- On export, a shape with a layer binding is emitted with `layers[]` even at
+  a single layer (so the layer name survives the round-trip).
+
 # Limitations
 
 - VASF-2 layer pose is static: a layer's x/y/rotation/scale/opacity cannot be
   keyframed — only the group pose animates (layer-level animation is planned).
 - No nested project instances.
-- Layer bindings (single layer bound to a bone) are ignored on export.
-- The export writes `version: 2` only when a shape has several layers;
-  single-layer shapes export flat (v1), and the palette/defs are never
-  exported (colors are expanded).
+- `pivot` is static (not keyframable); `scaleX`/`scaleY` ARE animatable.
+- Layer bindings ARE supported (`"Forme/Couche"` keys, vasf-2).
+- The export writes `version: 2` when a shape has several layers OR uses an
+  axis factor ≠ 1, a pivot ≠ 0, a `cubic-bezier` easing, or a layer binding;
+  single-layer shapes without those export flat (v1), and the palette/defs
+  are never exported (colors are expanded).

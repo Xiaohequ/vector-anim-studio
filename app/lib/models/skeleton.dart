@@ -100,14 +100,22 @@ class BoneKeyframe {
   BoneKeyframe({
     required this.timeMs,
     this.easing = EasingKind.easeInOut,
+    List<double>? bezier,
     this.angleDelta = 0,
     this.opacity = 1,
     this.stretch = 1,
     this.squash = 1,
-  });
+  }) : bezier = (bezier != null && bezier.length == 4)
+           ? List<double>.from(bezier)
+           : null;
 
   int timeMs;
   EasingKind easing;
+
+  /// Paramètres cubic-bezier `[x1, y1, x2, y2]` quand `easing` vaut
+  /// `customBezier` (null → [defaultBezier]).
+  List<double>? bezier;
+
   double angleDelta;
 
   /// Opacité des pièces portées (v0.10) : 1 = opaque.
@@ -122,6 +130,7 @@ class BoneKeyframe {
   BoneKeyframe copy() => BoneKeyframe(
     timeMs: timeMs,
     easing: easing,
+    bezier: bezier,
     angleDelta: angleDelta,
     opacity: opacity,
     stretch: stretch,
@@ -131,6 +140,7 @@ class BoneKeyframe {
   Map<String, Object?> toJson() => <String, Object?>{
     'timeMs': timeMs,
     'easing': easing.name,
+    if (bezier != null) 'bezier': List<double>.from(bezier!),
     'angleDelta': angleDelta,
     'opacity': opacity,
     'stretch': stretch,
@@ -143,6 +153,9 @@ class BoneKeyframe {
       (e) => e.name == json['easing'],
       orElse: () => EasingKind.easeInOut,
     ),
+    bezier: (json['bezier'] as List<Object?>?)
+        ?.map((v) => (v as num).toDouble())
+        .toList(),
     angleDelta: (json['angleDelta'] as num?)?.toDouble() ?? 0,
     opacity: (json['opacity'] as num?)?.toDouble() ?? 1,
     stretch: (json['stretch'] as num?)?.toDouble() ?? 1,
@@ -323,7 +336,11 @@ class SkeletonRig {
       final b = track[i + 1];
       if (timeMs >= a.timeMs && timeMs <= b.timeMs) {
         final span = math.max(1, b.timeMs - a.timeMs);
-        final progress = applyEasing(b.easing, (timeMs - a.timeMs) / span);
+        final progress = easingProgress(
+          b.easing,
+          b.bezier,
+          (timeMs - a.timeMs) / span,
+        );
         return a.angleDelta + (b.angleDelta - a.angleDelta) * progress;
       }
     }
@@ -343,7 +360,11 @@ class SkeletonRig {
       final b = track[i + 1];
       if (timeMs >= a.timeMs && timeMs <= b.timeMs) {
         final span = math.max(1, b.timeMs - a.timeMs);
-        final progress = applyEasing(b.easing, (timeMs - a.timeMs) / span);
+        final progress = easingProgress(
+          b.easing,
+          b.bezier,
+          (timeMs - a.timeMs) / span,
+        );
         return pick(a) + (pick(b) - pick(a)) * progress;
       }
     }
@@ -419,6 +440,7 @@ class SkeletonRig {
     int timeMs,
     double angleDelta, {
     EasingKind? easing,
+    List<double>? bezier,
     double? opacity,
     double? stretch,
     double? squash,
@@ -436,6 +458,7 @@ class SkeletonRig {
       BoneKeyframe(
         timeMs: timeMs,
         easing: easing ?? existing?.easing ?? EasingKind.easeInOut,
+        bezier: bezier ?? existing?.bezier,
         angleDelta: angleDelta,
         opacity: opacity ?? existing?.opacity ?? 1,
         stretch: stretch ?? existing?.stretch ?? 1,

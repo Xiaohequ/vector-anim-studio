@@ -44,14 +44,35 @@ class SimpleAnimationFormat {
   /// ignorées (non représentées en v1, voir la doc).
   static Map<String, Object?> toJson(AnimationProject project) {
     final shapes = <Map<String, Object?>>[];
-    var multiLayer = false;
+    var usesV2 = false;
+    // Une forme avec une liaison de COUCHE est exportée en layers[] (avec
+    // une seule couche si besoin) : le nom de couche doit survivre au
+    // round-trip pour que « Forme/Couche » reste importable.
+    final layerBoundIds = project.isSkeleton && project.skeleton != null
+        ? project.skeleton!.bindings
+              .where((b) => b.layerId != null)
+              .map((b) => b.shapeId)
+              .toSet()
+        : <String>{};
     for (final shape in project.shapes) {
       if (shape.isInstance) continue;
-      if (shape.layers.length > 1) multiLayer = true;
-      shapes.add(_shapeToJson(shape));
+      final forceLayers = layerBoundIds.contains(shape.id);
+      if (shape.layers.length > 1 || forceLayers || _shapeExtrasUseV2(shape)) {
+        usesV2 = true;
+      }
+      shapes.add(_shapeToJson(shape, forceLayers: forceLayers));
+    }
+    final rig = project.skeleton;
+    if (project.isSkeleton && rig != null) {
+      for (final track in rig.tracks.values) {
+        if (track.any((k) => k.easing == EasingKind.customBezier)) {
+          usesV2 = true;
+        }
+      }
+      if (rig.bindings.any((b) => b.layerId != null)) usesV2 = true;
     }
     final json = <String, Object?>{
-      'version': multiLayer ? version2 : version,
+      'version': usesV2 ? version2 : version,
       'name': project.name,
       'canvas': <String, Object?>{
         'width': project.width,
@@ -61,15 +82,19 @@ class SimpleAnimationFormat {
       },
       'shapes': shapes,
     };
-    final rig = project.skeleton;
     if (project.isSkeleton && rig != null) {
       json['skeleton'] = _skeletonToJson(rig, project);
     }
     return json;
   }
 
-  static Map<String, Object?> _shapeToJson(VectorShape shape) {
-    if (shape.layers.length > 1) return _multiLayerShapeToJson(shape);
+  static Map<String, Object?> _shapeToJson(
+    VectorShape shape, {
+    bool forceLayers = false,
+  }) {
+    if (shape.layers.length > 1 || forceLayers) {
+      return _multiLayerShapeToJson(shape);
+    }
     final layer = shape.layers.isEmpty
         ? ShapeLayer(name: 'Couche', kind: ShapeKind.rect)
         : shape.layers.first;
@@ -92,8 +117,35 @@ class SimpleAnimationFormat {
     if (layer.kind == ShapeKind.path && layer.points.isNotEmpty) {
       json['points'] = _pointsToJson(layer);
     }
+    _addShapeLevelExtras(json, shape);
     _addShapeKeyframes(json, shape);
     return json;
+  }
+
+  /// La forme utilise-t-elle une extension v2 ? Déterminé directement dans
+  /// `toJson` (couches multiples ou liaison de couche).
+
+  /// Les champs extras de la forme (axes, pivot, bezier) forcent-ils la v2 ?
+  static bool _shapeExtrasUseV2(VectorShape shape) {
+    if (shape.scaleX != 1 || shape.scaleY != 1) return true;
+    if (shape.pivotDx != 0 || shape.pivotDy != 0) return true;
+    for (final key in shape.keyframes) {
+      if (key.easing == EasingKind.customBezier) return true;
+    }
+    return false;
+  }
+
+  /// Champs v2 au niveau forme (facteurs d'axe, pivot) — émis seulement
+  /// quand ils s'écartent des défauts.
+  static void _addShapeLevelExtras(
+    Map<String, Object?> json,
+    VectorShape shape,
+  ) {
+    if (shape.scaleX != 1) json['scaleX'] = shape.scaleX;
+    if (shape.scaleY != 1) json['scaleY'] = shape.scaleY;
+    if (shape.pivotDx != 0 || shape.pivotDy != 0) {
+      json['pivot'] = [shape.pivotDx, shape.pivotDy];
+    }
   }
 
   /// Forme multi-couches (vasf-2) : chaque couche porte sa primitive.
@@ -109,6 +161,7 @@ class SimpleAnimationFormat {
       'scale': shape.scale,
       'opacity': shape.opacity,
     };
+    _addShapeLevelExtras(json, shape);
     _addShapeKeyframes(json, shape);
     return json;
   }
@@ -169,7 +222,9 @@ class SimpleAnimationFormat {
   ) {
     final json = <String, Object?>{
       't': key.timeMs / 1000,
-      'easing': key.easing.name,
+      'easing': key.easing == EasingKind.customBezier
+          ? _bezierToJson(key.bezier)
+          : key.easing.name,
     };
     for (final property in AnimatableProperty.values) {
       final value = key.valueOf(property);
@@ -210,14 +265,22 @@ class SimpleAnimationFormat {
       if (bone.bendSign != 1) json['bend'] = bone.bendSign;
       bones.add(json);
     }
-    // Liaisons par NOMS (les liaisons de couche ne sont pas représentées).
+    // Liaisons par NOMS ; une liaison de COUCHE (v0.9.6) s'écrit
+    // « Forme/Couche » (vasf-2).
     final bindings = <String, Object?>{};
     for (final binding in rig.bindings) {
-      if (binding.layerId != null) continue;
       final boneName = boneNameById[binding.boneId];
       final shape = project.shapeById(binding.shapeId);
       if (boneName == null || shape == null) continue;
-      bindings[shape.name] = boneName;
+      if (binding.layerId != null) {
+        final layer = shape.layers
+            .where((l) => l.id == binding.layerId)
+            .firstOrNull;
+        if (layer == null) continue;
+        bindings['${shape.name}/${layer.name}'] = boneName;
+      } else {
+        bindings[shape.name] = boneName;
+      }
     }
     final keyframes = <Map<String, Object?>>[];
     for (final entry in rig.tracks.entries) {
@@ -231,7 +294,9 @@ class SimpleAnimationFormat {
           't': key.timeMs / 1000,
           // Angle MONDE absolu (delta interne + angle de repos monde).
           'angle': restDeg + _radToDeg(key.angleDelta),
-          'easing': key.easing.name,
+          'easing': key.easing == EasingKind.customBezier
+              ? _bezierToJson(key.bezier)
+              : key.easing.name,
         };
         if (key.opacity != 1) json['opacity'] = key.opacity;
         if (key.stretch != 1) json['stretch'] = key.stretch;
@@ -245,6 +310,17 @@ class SimpleAnimationFormat {
       if (bindings.isNotEmpty) 'bind': bindings,
       if (keyframes.isNotEmpty) 'keyframes': keyframes,
     };
+  }
+
+  /// Easing sérialisé : courbes nommées telles quelles, cubic-bezier en
+  /// chaîne CSS `cubic-bezier(x1, y1, x2, y2)`.
+  static String _bezierToJson(List<double>? bezier) {
+    final b = (bezier != null && bezier.length == 4) ? bezier : defaultBezier;
+    String f(double v) => v
+        .toStringAsFixed(4)
+        .replaceAll(RegExp(r'0+$'), '')
+        .replaceAll(RegExp(r'\.$'), '');
+    return 'cubic-bezier(${f(b[0])}, ${f(b[1])}, ${f(b[2])}, ${f(b[3])})';
   }
 
   // ------------------------------------------------------------------ import
@@ -280,6 +356,7 @@ class _PendingBoneKey {
     this.timeMs,
     this.angleDelta,
     this.easing,
+    this.bezier,
     this.opacity,
     this.stretch,
     this.squash,
@@ -289,6 +366,7 @@ class _PendingBoneKey {
   int timeMs;
   final double angleDelta;
   final EasingKind easing;
+  final List<double>? bezier;
   final double opacity;
   final double stretch;
   final double squash;
@@ -298,6 +376,7 @@ class _PendingBoneKey {
     timeMs,
     angleDelta,
     easing,
+    bezier,
     opacity,
     stretch,
     squash,
@@ -387,16 +466,41 @@ class _Parse {
     return parsed;
   }
 
-  EasingKind easingAt(String path, Object? value) {
-    if (value == null) return EasingKind.easeInOut;
+  /// Easing nommé OU cubic-bezier CSS : retourne (easing, bezier).
+  ({EasingKind easing, List<double>? bezier}) easingSpecAt(
+    String path,
+    Object? value,
+  ) {
+    if (value == null) return (easing: EasingKind.easeInOut, bezier: null);
+    if (value is String) {
+      final s = value.trim();
+      if (s.startsWith('cubic-bezier(') && s.endsWith(')')) {
+        final parts = s
+            .substring('cubic-bezier('.length, s.length - 1)
+            .split(',');
+        final xs = [for (final p in parts) double.tryParse(p.trim())];
+        if (parts.length == 4 && xs.every((x) => x != null)) {
+          final bezier = [for (final x in xs) x!];
+          if (bezier[0] < 0 ||
+              bezier[0] > 1 ||
+              bezier[2] < 0 ||
+              bezier[2] > 1) {
+            problem('$path : cubic-bezier — x1 et x2 dans [0, 1] attendus');
+          }
+          return (easing: EasingKind.customBezier, bezier: bezier);
+        }
+        problem('$path : cubic-bezier(x1, y1, x2, y2) attendu');
+        return (easing: EasingKind.easeInOut, bezier: null);
+      }
+    }
     for (final easing in EasingKind.values) {
-      if (easing.name == value) return easing;
+      if (easing.name == value) return (easing: easing, bezier: null);
     }
     problem(
       '$path : easing inconnu « $value » (valeurs : linear, easeIn, '
-      'easeOut, easeInOut, step)',
+      'easeOut, easeInOut, step, cubic-bezier(x1, y1, x2, y2))',
     );
-    return EasingKind.easeInOut;
+    return (easing: EasingKind.easeInOut, bezier: null);
   }
 
   ShapeKind kindAt(String path, Object? value) {
@@ -596,6 +700,12 @@ class _Parse {
       numAt('$path.rotation', json['rotation'], fallback: 0),
     );
     shape.scale = numAt('$path.scale', json['scale'], fallback: 1);
+    shape.scaleX = numAt('$path.scaleX', json['scaleX'], fallback: 1);
+    shape.scaleY = numAt('$path.scaleY', json['scaleY'], fallback: 1);
+    // Pivot de rotation (vasf-2) : [dx, dy] en unités scène depuis le centre.
+    final pivotPair = listOf('$path.pivot', json['pivot']) ?? const <Object?>[];
+    shape.pivotDx = numAt('$path.pivot[0]', _at(pivotPair, 0), fallback: 0);
+    shape.pivotDy = numAt('$path.pivot[1]', _at(pivotPair, 1), fallback: 0);
     shape.opacity = numAt('$path.opacity', json['opacity'], fallback: 1);
     _parseShapeTime(path, json, shape);
     _parseShapeKeyframes('$path.keyframes', json['keyframes'], shape);
@@ -726,6 +836,8 @@ class _Parse {
       AnimatableProperty.y: shape.y,
       AnimatableProperty.rotation: shape.rotation,
       AnimatableProperty.scale: shape.scale,
+      AnimatableProperty.scaleX: shape.scaleX,
+      AnimatableProperty.scaleY: shape.scaleY,
       AnimatableProperty.opacity: shape.opacity,
       AnimatableProperty.strokeWidth: shape.strokeWidth,
     };
@@ -738,7 +850,7 @@ class _Parse {
         problem('$keyPath.t : temps ≥ 0 attendu (en secondes)');
         continue;
       }
-      final easing = easingAt('$keyPath.easing', json['easing']);
+      final spec = easingSpecAt('$keyPath.easing', json['easing']);
       final values = <AnimatableProperty, double>{};
       for (final property in AnimatableProperty.values) {
         final raw = json[property.name];
@@ -760,7 +872,8 @@ class _Parse {
         ShapeKeyframe(
           timeMs: (t * 1000).round(),
           values: values,
-          easing: easing,
+          easing: spec.easing,
+          bezier: spec.bezier,
         ),
       );
     }
@@ -890,15 +1003,19 @@ class _Parse {
           (parent == null ? 0.0 : worldRestDeg[parent.id]!) + angleWorldDeg;
       worldRestJoint[bone.id] = joint;
     }
-    // Liaisons pièces → os (par noms).
+    // Liaisons pièces → os (par noms). Une clé « Forme/Couche » (vasf-2)
+    // lie la couche nommée de la forme ; une clé simple = forme entière.
     final bind = mapOf('skeleton.bind', json['bind']);
     if (bind != null) {
       for (final entry in bind.entries) {
+        final slash = entry.key.indexOf('/');
+        final shapeName = slash < 0 ? entry.key : entry.key.substring(0, slash);
+        final layerName = slash < 0 ? null : entry.key.substring(slash + 1);
         final shape = project.shapes
-            .where((s) => s.name == entry.key)
+            .where((s) => s.name == shapeName)
             .firstOrNull;
         if (shape == null) {
-          problem('skeleton.bind : forme « ${entry.key} » inconnue');
+          problem('skeleton.bind : forme « $shapeName » inconnue');
           continue;
         }
         final bone = byName[entry.value];
@@ -906,7 +1023,21 @@ class _Parse {
           problem('skeleton.bind : os « ${entry.value} » inconnu');
           continue;
         }
-        rig.bindShape(shape.id, bone.id);
+        if (layerName == null) {
+          rig.bindShape(shape.id, bone.id);
+        } else {
+          final layer = shape.layers
+              .where((l) => l.name == layerName)
+              .firstOrNull;
+          if (layer == null) {
+            problem(
+              'skeleton.bind : couche « $layerName » inconnue sur la forme '
+              '« $shapeName »',
+            );
+            continue;
+          }
+          rig.bindLayer(shape.id, layer.id, bone.id);
+        }
       }
     }
   }
@@ -937,12 +1068,14 @@ class _Parse {
         keyJson['angle'],
         fallback: restDeg,
       );
+      final spec = easingSpecAt('$path.easing', keyJson['easing']);
       pending.add(
         _PendingBoneKey(
           bone.id,
           (t * 1000).round(),
           _degToRad(angleDeg - restDeg),
-          easingAt('$path.easing', keyJson['easing']),
+          spec.easing,
+          spec.bezier,
           numAt('$path.opacity', keyJson['opacity'], fallback: 1),
           numAt('$path.stretch', keyJson['stretch'], fallback: 1),
           numAt('$path.squash', keyJson['squash'], fallback: 1),
@@ -956,6 +1089,7 @@ class _Parse {
         key.timeMs,
         key.angleDelta,
         easing: key.easing,
+        bezier: key.bezier,
         opacity: key.opacity,
         stretch: key.stretch,
         squash: key.squash,

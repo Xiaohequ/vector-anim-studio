@@ -31,10 +31,23 @@ String shapeKindLabel(ShapeKind kind) => switch (kind) {
 };
 
 /// Propriétés animables d'une forme complète (transformation de groupe).
-enum AnimatableProperty { x, y, rotation, scale, opacity, strokeWidth }
+/// `scale` = échelle uniforme ; `scaleX`/`scaleY` = facteurs d'axe (v0.13,
+/// squash & stretch non uniforme — échelle effective = scale × facteur).
+enum AnimatableProperty {
+  x,
+  y,
+  rotation,
+  scale,
+  scaleX,
+  scaleY,
+  opacity,
+  strokeWidth,
+}
 
-/// Interpolations disponibles entre deux keyframes.
-enum EasingKind { linear, easeIn, easeOut, easeInOut, step }
+/// Interpolations disponibles entre deux keyframes. `customBezier` = courbe
+/// cubic-bezier paramétrée par les 4 valeurs `bezier` de la keyframe (défauts
+/// dans [defaultBezier] quand `bezier` est null).
+enum EasingKind { linear, easeIn, easeOut, easeInOut, step, customBezier }
 
 /// Formats de projet proposés à la création.
 enum ProjectFormat { portrait, landscape, square }
@@ -85,8 +98,54 @@ double applyEasing(EasingKind easing, double t) {
       return (1 - math.pow(-2 * u + 2, 2) / 2).toDouble();
     case EasingKind.step:
       return 0;
+    case EasingKind.customBezier:
+      // Sans paramètre ici : neutre (linéaire). Les échantillonneurs passent
+      // par [easingProgress], qui connaît la bezier de la keyframe.
+      return u;
   }
 }
+
+/// Paramètres cubic-bezier par défaut (proche d'easeInOut).
+const List<double> defaultBezier = <double>[0.25, 0.1, 0.25, 1.0];
+
+/// Évalue une courbe cubic-bezier CSS : x et y sont des polynômes de [0,1]
+/// (`3u(1-u)²·x1 + 3u²(1-u)·x2 + u³`). On résout x(u) = t par dichotomie
+/// (robuste, x monotone quand x1/x2 ∈ [0,1]) puis on renvoie y(u).
+double applyBezierEasing(double x1, double y1, double x2, double y2, double t) {
+  double xOf(double u) =>
+      3 * u * (1 - u) * (1 - u) * x1 + 3 * u * u * (1 - u) * x2 + u * u * u;
+  double yOf(double u) =>
+      3 * u * (1 - u) * (1 - u) * y1 + 3 * u * u * (1 - u) * y2 + u * u * u;
+  final target = t.clamp(0.0, 1.0);
+  if (target <= 0) return 0;
+  if (target >= 1) return 1;
+  var lo = 0.0;
+  var hi = 1.0;
+  for (var i = 0; i < 60; i++) {
+    final mid = (lo + hi) / 2;
+    if (xOf(mid) < target) {
+      lo = mid;
+    } else {
+      hi = mid;
+    }
+  }
+  return yOf((lo + hi) / 2);
+}
+
+/// Progression d'interpolation d'une keyframe : courbe nommée, ou cubic-bezier
+/// quand `easing` vaut `customBezier` (`bezier` de la keyframe, sinon
+/// [defaultBezier]). Sert aux poses de forme ET aux keyframes d'os.
+double easingProgress(EasingKind easing, List<double>? bezier, double p) =>
+    (easing == EasingKind.customBezier &&
+        (bezier == null || bezier.length == 4))
+    ? applyBezierEasing(
+        bezier?[0] ?? defaultBezier[0],
+        bezier?[1] ?? defaultBezier[1],
+        bezier?[2] ?? defaultBezier[2],
+        bezier?[3] ?? defaultBezier[3],
+        p,
+      )
+    : applyEasing(easing, p);
 
 /// Étiquette lisible d'une propriété (interface).
 String propertyLabel(AnimatableProperty property) => switch (property) {
@@ -94,6 +153,8 @@ String propertyLabel(AnimatableProperty property) => switch (property) {
   AnimatableProperty.y => 'Position Y',
   AnimatableProperty.rotation => 'Rotation',
   AnimatableProperty.scale => 'Échelle',
+  AnimatableProperty.scaleX => 'Échelle X',
+  AnimatableProperty.scaleY => 'Échelle Y',
   AnimatableProperty.opacity => 'Opacité',
   AnimatableProperty.strokeWidth => 'Épaisseur',
 };
@@ -132,6 +193,7 @@ String easingLabel(EasingKind easing) => switch (easing) {
   EasingKind.easeOut => 'Sortie',
   EasingKind.easeInOut => 'Entrée/sortie',
   EasingKind.step => 'Palier',
+  EasingKind.customBezier => 'Personnalisé (Bézier)',
 };
 
 /// Une keyframe « pose » : toutes les propriétés de la forme à `timeMs`.
@@ -140,12 +202,20 @@ class ShapeKeyframe {
     required this.timeMs,
     Map<AnimatableProperty, double>? values,
     this.easing = EasingKind.easeInOut,
-  }) : values = values ?? <AnimatableProperty, double>{};
+    List<double>? bezier,
+  }) : values = values ?? <AnimatableProperty, double>{},
+       bezier = (bezier != null && bezier.length == 4)
+           ? List<double>.from(bezier)
+           : null;
 
   int timeMs;
 
   /// Courbe d'interpolation du segment qui arrive sur cette keyframe.
   EasingKind easing;
+
+  /// Paramètres cubic-bezier `[x1, y1, x2, y2]` quand `easing` vaut
+  /// `customBezier` (null → [defaultBezier]).
+  List<double>? bezier;
 
   final Map<AnimatableProperty, double> values;
 
@@ -155,11 +225,13 @@ class ShapeKeyframe {
     timeMs: timeMs,
     values: Map<AnimatableProperty, double>.from(values),
     easing: easing,
+    bezier: bezier,
   );
 
   Map<String, Object?> toJson() => <String, Object?>{
     'timeMs': timeMs,
     'easing': easing.name,
+    if (bezier != null) 'bezier': List<double>.from(bezier!),
     'values': <String, double>{
       for (final entry in values.entries) entry.key.name: entry.value,
     },
@@ -175,6 +247,9 @@ class ShapeKeyframe {
         (e) => e.name == json['easing'],
         orElse: () => EasingKind.easeInOut,
       ),
+      bezier: (json['bezier'] as List<Object?>?)
+          ?.map((v) => (v as num).toDouble())
+          .toList(),
       values: <AnimatableProperty, double>{
         for (final property in AnimatableProperty.values)
           if (raw[property.name] != null)
@@ -348,6 +423,10 @@ class VectorShape {
     this.y = 320,
     this.rotation = 0,
     this.scale = 1,
+    this.scaleX = 1,
+    this.scaleY = 1,
+    this.pivotDx = 0,
+    this.pivotDy = 0,
     this.opacity = 1,
     this.strokeWidth = 1,
     this.startMs = 0,
@@ -377,6 +456,19 @@ class VectorShape {
   double y;
   double rotation;
   double scale;
+
+  /// Facteurs d'axe (v0.13, squash & stretch non uniforme) : l'échelle
+  /// effective = scale × facteur, par axe.
+  double scaleX;
+  double scaleY;
+
+  /// Pivot de rotation (v0.13) : offset en unités scène depuis le centre,
+  /// DANS le repère de la forme (la porte tourne autour de son gond). La
+  /// position du centre est inchangée ; non animable (statique).
+  double pivotDx;
+  double pivotDy;
+
+  /// Opacité du groupe (multiplie celle des couches).
   double opacity;
 
   /// Multiplicateur d'épaisseur de trait appliqué à toutes les couches.
@@ -404,6 +496,8 @@ class VectorShape {
     AnimatableProperty.y => y,
     AnimatableProperty.rotation => rotation,
     AnimatableProperty.scale => scale,
+    AnimatableProperty.scaleX => scaleX,
+    AnimatableProperty.scaleY => scaleY,
     AnimatableProperty.opacity => opacity,
     AnimatableProperty.strokeWidth => strokeWidth,
   };
@@ -418,6 +512,10 @@ class VectorShape {
         rotation = value;
       case AnimatableProperty.scale:
         scale = value;
+      case AnimatableProperty.scaleX:
+        scaleX = value;
+      case AnimatableProperty.scaleY:
+        scaleY = value;
       case AnimatableProperty.opacity:
         opacity = value;
       case AnimatableProperty.strokeWidth:
@@ -440,7 +538,11 @@ class VectorShape {
       final b = keyframes[i + 1];
       if (timeMs >= a.timeMs && timeMs <= b.timeMs) {
         final span = math.max(1, b.timeMs - a.timeMs);
-        final progress = applyEasing(b.easing, (timeMs - a.timeMs) / span);
+        final progress = easingProgress(
+          b.easing,
+          b.bezier,
+          (timeMs - a.timeMs) / span,
+        );
         final from = a.valueOf(property) ?? base;
         final to = b.valueOf(property) ?? base;
         return from + (to - from) * progress;
@@ -544,6 +646,10 @@ class VectorShape {
       y: y,
       rotation: rotation,
       scale: scale,
+      scaleX: scaleX,
+      scaleY: scaleY,
+      pivotDx: pivotDx,
+      pivotDy: pivotDy,
       opacity: opacity,
       strokeWidth: strokeWidth,
       startMs: startMs,
@@ -595,6 +701,10 @@ class VectorShape {
     'y': y,
     'rotation': rotation,
     'scale': scale,
+    'scaleX': scaleX,
+    'scaleY': scaleY,
+    'pivotDx': pivotDx,
+    'pivotDy': pivotDy,
     'opacity': opacity,
     'strokeWidth': strokeWidth,
     'startMs': startMs,
@@ -615,6 +725,10 @@ class VectorShape {
       y: (json['y'] as num?)?.toDouble() ?? 0,
       rotation: (json['rotation'] as num?)?.toDouble() ?? 0,
       scale: (json['scale'] as num?)?.toDouble() ?? 1,
+      scaleX: (json['scaleX'] as num?)?.toDouble() ?? 1,
+      scaleY: (json['scaleY'] as num?)?.toDouble() ?? 1,
+      pivotDx: (json['pivotDx'] as num?)?.toDouble() ?? 0,
+      pivotDy: (json['pivotDy'] as num?)?.toDouble() ?? 0,
       opacity: (json['opacity'] as num?)?.toDouble() ?? 1,
       strokeWidth: (json['strokeWidth'] as num?)?.toDouble() ?? 1,
       startMs: (json['startMs'] as num?)?.toInt() ?? 0,

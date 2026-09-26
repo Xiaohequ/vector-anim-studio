@@ -833,5 +833,248 @@ void main() {
       // Copie de la keyframe t=1 : angle monde 60° − repos 90° = −30°.
       expect(rig.angleDeltaAt(child.id, 2000), closeTo(-math.pi / 6, 1e-9));
     });
+
+    test('scaleX/scaleY : bases + keyframes, round trip', () {
+      final imported = SimpleAnimationFormat.fromJson(<String, Object?>{
+        'version': 2,
+        'shapes': <Object?>[
+          <String, Object?>{
+            'name': 'Gel',
+            'type': 'circle',
+            'end': 1,
+            'scale': 2,
+            'scaleX': 0.5,
+            'keyframes': <Object?>[
+              <String, Object?>{'t': 0, 'scaleY': 1.5},
+            ],
+          },
+        ],
+      });
+      final shape = imported.shapes.first;
+      expect(shape.scale, 2);
+      expect(shape.scaleX, 0.5); // facteur d'axe (base)
+      expect(shape.scaleY, 1); // base
+      expect(
+        shape.keyframes[0].valueOf(AnimatableProperty.scaleY),
+        1.5, // keyframe ≠ base
+      );
+      // valueAt renvoie le FACTEUR brut (la composition scale × facteur
+      // se fait au rendu, dans le painter).
+      expect(shape.valueAt(AnimatableProperty.scaleX, 0), closeTo(0.5, 1e-9));
+      final json = SimpleAnimationFormat.toJson(imported);
+      expect(json['version'], 2);
+      final round = SimpleAnimationFormat.fromJson(json);
+      final shape2 = round.shapes.first;
+      expect(shape2.scale, 2);
+      expect(shape2.scaleX, 0.5);
+      expect(shape2.keyframes[0].valueOf(AnimatableProperty.scaleY), 1.5);
+    });
+
+    test('pivot : exporté/importé, version 2', () {
+      final original = AnimationProject.blank(name: 'Porte');
+      final shape = VectorShape(name: 'Porte', startMs: 0, endMs: 1000);
+      shape.pivotDx = 30;
+      shape.pivotDy = -20;
+      shape.layers.add(ShapeLayer(name: 'Couche', kind: ShapeKind.rect));
+      original.shapes.add(shape);
+      final json = SimpleAnimationFormat.toJson(original);
+      expect(json['version'], 2);
+      final imported = SimpleAnimationFormat.fromJson(json);
+      expect(imported.shapes.first.pivotDx, 30);
+      expect(imported.shapes.first.pivotDy, -20);
+    });
+
+    test('cubic-bezier : parse CSS, interpolation, round trip', () {
+      final imported = SimpleAnimationFormat.fromJson(<String, Object?>{
+        'version': 2,
+        'shapes': <Object?>[
+          <String, Object?>{
+            'name': 'Bloc',
+            'type': 'rect',
+            'end': 1,
+            'keyframes': <Object?>[
+              <String, Object?>{'t': 0, 'x': 0, 'easing': 'linear'},
+              <String, Object?>{
+                't': 1,
+                'x': 100,
+                'easing': 'cubic-bezier(0.25, 0.1, 0.25, 1)',
+              },
+            ],
+          },
+        ],
+      });
+      final shape = imported.shapes.first;
+      expect(shape.keyframes[1].easing, EasingKind.customBezier);
+      expect(shape.keyframes[1].bezier, <double>[0.25, 0.1, 0.25, 1]);
+      // Bézier par défaut (≈ easeInOut) : à mi-course, x ≈ 80,3.
+      expect(shape.valueAt(AnimatableProperty.x, 500), closeTo(80.3, 0.5));
+      // Round trip : la chaîne CSS ressort identique.
+      final json = SimpleAnimationFormat.toJson(imported);
+      final keys =
+          (json['shapes'] as List<Object?>).first as Map<String, Object?>;
+      final exported =
+          (keys['keyframes'] as List<Object?>)[1] as Map<String, Object?>;
+      expect(exported['easing'], 'cubic-bezier(0.25, 0.1, 0.25, 1)');
+      final round = SimpleAnimationFormat.fromJson(json);
+      expect(round.shapes.first.keyframes[1].bezier, <double>[
+        0.25,
+        0.1,
+        0.25,
+        1,
+      ]);
+    });
+
+    test('cubic-bezier invalide : erreur collectée', () {
+      try {
+        SimpleAnimationFormat.fromJson(<String, Object?>{
+          'version': 2,
+          'shapes': <Object?>[
+            <String, Object?>{
+              'name': 'Bloc',
+              'type': 'rect',
+              'end': 1,
+              'keyframes': <Object?>[
+                <String, Object?>{
+                  't': 0,
+                  'x': 0,
+                  'easing': 'cubic-bezier(2, 0, 0.25, 1)',
+                },
+              ],
+            },
+          ],
+        });
+        fail('SimpleFormatException attendu');
+      } on SimpleFormatException catch (error) {
+        expect(
+          error.toString(),
+          contains('cubic-bezier — x1 et x2 dans [0, 1] attendus'),
+        );
+      }
+    });
+
+    test('keyframe d\'os cubic-bezier : sampler + round trip', () {
+      final imported = SimpleAnimationFormat.fromJson(<String, Object?>{
+        'version': 2,
+        'shapes': <Object?>[
+          <String, Object?>{'name': 'Bloc', 'type': 'rect', 'end': 2},
+        ],
+        'skeleton': <String, Object?>{
+          'bones': <Object?>[
+            <String, Object?>{
+              'name': 'Bras',
+              'joint': <Object?>[100, 320],
+              'angle': 0,
+              'length': 100,
+            },
+          ],
+          'keyframes': <Object?>[
+            <String, Object?>{'bone': 'Bras', 't': 0, 'angle': 0},
+            <String, Object?>{
+              'bone': 'Bras',
+              't': 1,
+              'angle': 30,
+              'easing':
+                  'cubic-bezier(0.3333333333, 0.3333333333, 0.6666666667, 0.6666666667)',
+            },
+          ],
+        },
+      });
+      final rig = imported.skeleton!;
+      final bone = rig.bones.first;
+      final track = rig.tracks[bone.id]!;
+      expect(track[1].easing, EasingKind.customBezier);
+      expect(track[1].bezier!.length, 4);
+      // Bézier identité : 15° à mi-course.
+      expect(rig.angleDeltaAt(bone.id, 500), closeTo(math.pi / 12, 1e-6));
+      // Round trip.
+      final json = SimpleAnimationFormat.toJson(imported);
+      final skeleton = json['skeleton'] as Map<String, Object?>;
+      final exported =
+          (skeleton['keyframes'] as List<Object?>)[1] as Map<String, Object?>;
+      expect(
+        exported['easing'],
+        'cubic-bezier(0.3333, 0.3333, 0.6667, 0.6667)',
+      );
+      final round = SimpleAnimationFormat.fromJson(json);
+      expect(
+        round.skeleton!.angleDeltaAt(round.skeleton!.bones.first.id, 500),
+        closeTo(math.pi / 12, 1e-6),
+      );
+    });
+
+    test('bind de couche : « Forme/Couche » importé et exporté', () {
+      final imported = SimpleAnimationFormat.fromJson(<String, Object?>{
+        'version': 2,
+        'shapes': <Object?>[
+          <String, Object?>{
+            'name': 'Visage',
+            'end': 2,
+            'layers': <Object?>[
+              <String, Object?>{
+                'name': 'Œil',
+                'type': 'circle',
+                'width': 24,
+                'height': 24,
+              },
+            ],
+          },
+        ],
+        'skeleton': <String, Object?>{
+          'bones': <Object?>[
+            <String, Object?>{
+              'name': 'OeilG',
+              'joint': <Object?>[100, 100],
+              'angle': 0,
+              'length': 40,
+            },
+          ],
+          'bind': <String, Object?>{'Visage/Œil': 'OeilG'},
+        },
+      });
+      final rig = imported.skeleton!;
+      final shape = imported.shapes.first;
+      final layer = shape.layers.first;
+      // La couche est liée ; la FORME ne l'est pas (liaison de couche
+      // ne capture pas la forme entière).
+      expect(rig.bindingForLayer(shape.id, layer.id), isNotNull);
+      expect(
+        rig.bindingForLayer(shape.id, layer.id)!.boneId,
+        rig.bones.first.id,
+      );
+      expect(rig.boneIdForShape(shape.id), isNull);
+      // Round trip : la liaison de couche est exportée « Forme/Couche ».
+      final json = SimpleAnimationFormat.toJson(imported);
+      expect(json['version'], 2);
+      final skeleton = json['skeleton'] as Map<String, Object?>;
+      expect((skeleton['bind'] as Map<String, Object?>)['Visage/Œil'], 'OeilG');
+      final round = SimpleAnimationFormat.fromJson(json);
+      expect(
+        round.skeleton!.bindingForLayer(
+          round.shapes.first.id,
+          round.shapes.first.layers.first.id,
+        ),
+        isNotNull,
+      );
+    });
+
+    test('courbes cubic-bezier : valeurs de référence', () {
+      // Identité exacte : cubic-bezier(1/3, 1/3, 2/3, 2/3) = linéaire
+      // (x(u) = u[(1-u) + u]² = u).
+      expect(
+        applyBezierEasing(1 / 3, 1 / 3, 2 / 3, 2 / 3, 0.3),
+        closeTo(0.3, 1e-9),
+      );
+      // Extrémités.
+      expect(applyBezierEasing(0.25, 0.1, 0.25, 1, 0), 0);
+      expect(applyBezierEasing(0.25, 0.1, 0.25, 1, 1), 1);
+      // Par défaut (proche easeInOut) : à mi-course, ≈ 0,803.
+      expect(applyBezierEasing(0.25, 0.1, 0.25, 1, 0.5), closeTo(0.803, 0.005));
+      // easingProgress : bezier de la keyframe, défaut si null.
+      expect(
+        easingProgress(EasingKind.customBezier, null, 0.5),
+        closeTo(0.803, 0.005),
+      );
+      expect(easingProgress(EasingKind.easeIn, null, 0.5), closeTo(0.25, 1e-9));
+    });
   });
 }

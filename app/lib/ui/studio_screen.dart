@@ -515,6 +515,19 @@ class _StudioScreenState extends State<StudioScreen>
     _scheduleSave();
   }
 
+  /// Pivot de rotation (v0.13) : statique, pas d'auto-key — un glisser des
+  /// deux sliders coalescé en une seule entrée d'annulation.
+  void _setPivot(double dx, double dy) {
+    final shape = _selected;
+    if (shape == null) return;
+    _pushUndo(tag: 'pivot:${shape.id}');
+    setState(() {
+      shape.pivotDx = dx;
+      shape.pivotDy = dy;
+    });
+    _scheduleSave();
+  }
+
   Future<void> _setKeyframeEasing(EasingKind easing) async {
     final shape = _selected;
     final controller = _controller;
@@ -547,6 +560,7 @@ class _StudioScreenState extends State<StudioScreen>
         onKeyframeEasing: _setKeyframeEasing,
         onEditLayers: () => _editShape(shape),
         onOpenSource: () => _openSourceProject(shape),
+        onPivotChanged: _setPivot,
         skeletonPiece: project.isSkeleton,
         skeletonNote: _bindingNote(shape),
         skeletonRig: project.isSkeleton ? project.skeleton : null,

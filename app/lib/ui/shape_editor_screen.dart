@@ -406,14 +406,16 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
             geo.canvasToScene(details.localFocalPoint) -
             geo.canvasToScene(_gestureStartPoint);
         // La couche vit dans le repère de la forme : le delta de scène est
-        // repassé en local (rotation et échelle de la forme inversées).
+        // repassé en local (rotation et échelles PAR AXE de la forme
+        // inversées — v0.13 squash & stretch).
         final shapePose = SelectionGeometry.shapePose(_draft, _draft.startMs);
         final cosR = math.cos(-shapePose.rotation);
         final sinR = math.sin(-shapePose.rotation);
-        final safeScale = math.max(0.0001, shapePose.scale.abs());
+        final safeSx = math.max(0.0001, shapePose.sx.abs());
+        final safeSy = math.max(0.0001, shapePose.sy.abs());
         final local = Offset(
-          (sceneDelta.dx * cosR - sceneDelta.dy * sinR) / safeScale,
-          (sceneDelta.dx * sinR + sceneDelta.dy * cosR) / safeScale,
+          (sceneDelta.dx * cosR - sceneDelta.dy * sinR) / safeSx,
+          (sceneDelta.dx * sinR + sceneDelta.dy * cosR) / safeSy,
         );
         setState(() {
           layer.x = _gestureBaseX + local.dx;

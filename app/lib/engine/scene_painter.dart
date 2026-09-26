@@ -191,6 +191,13 @@ class ScenePainter extends CustomPainter {
     final y = shape.valueAt(AnimatableProperty.y, sampleMs);
     final rotation = shape.valueAt(AnimatableProperty.rotation, sampleMs);
     final scale = shape.valueAt(AnimatableProperty.scale, sampleMs);
+    // Échelle par axe (v0.13) : effective = scale × facteur.
+    final effX = scale * shape.valueAt(AnimatableProperty.scaleX, sampleMs);
+    final effY = scale * shape.valueAt(AnimatableProperty.scaleY, sampleMs);
+    // Pivot de rotation (v0.13) : offset DANS le repère de la forme — la
+    // chaîne tourne autour de centre + pivot sans déplacer le centre.
+    final px = shape.pivotDx;
+    final py = shape.pivotDy;
     final opacity = shape.valueAt(AnimatableProperty.opacity, sampleMs);
     final strokeFactor = shape.valueAt(
       AnimatableProperty.strokeWidth,
@@ -202,9 +209,15 @@ class ScenePainter extends CustomPainter {
       // Rig maître : l'os emporte l'instance (transformée os(t) ∘ os(repos)⁻¹),
       // la pose de la forme sert ensuite d'offset de repos.
       if (boneFrame != null) _applyBoneDelta(canvas, boneFrame);
+      final cx = effX <= 0 ? 0.0001 : effX;
+      final cy = effY <= 0 ? 0.0001 : effY;
+      // Pivot ancré à sa position VISUELLE (S·pivot) : sous une échelle non
+      // uniforme, le gond reste collé au bord visuel de la forme.
       canvas.translate(x, y);
+      canvas.translate(cx * px, cy * py);
       canvas.rotate(rotation);
-      canvas.scale(scale <= 0 ? 0.0001 : scale);
+      canvas.scale(cx, cy);
+      canvas.translate(-px, -py);
       _paintInstance(canvas, shape, opacity, depth, sampleMs);
       canvas.restore();
       return;
@@ -236,11 +249,15 @@ class ScenePainter extends CustomPainter {
       final carried = layerFrame ?? boneFrame;
       final boneOpacity = carried?.opacity ?? 1;
       final effectiveOpacity = (opacity * boneOpacity).clamp(0.0, 1.0);
+      final cx = effX <= 0 ? 0.0001 : effX;
+      final cy = effY <= 0 ? 0.0001 : effY;
       canvas.save();
       if (carried != null) _applyBoneDelta(canvas, carried);
       canvas.translate(x, y);
+      canvas.translate(cx * px, cy * py);
       canvas.rotate(rotation);
-      canvas.scale(scale <= 0 ? 0.0001 : scale);
+      canvas.scale(cx, cy);
+      canvas.translate(-px, -py);
       _paintLayer(canvas, layer, effectiveOpacity, strokeFactor);
       canvas.restore();
     }

@@ -19,6 +19,7 @@ class ShapePropertiesSheet extends StatefulWidget {
     required this.onKeyframeEasing,
     required this.onEditLayers,
     this.onOpenSource,
+    this.onPivotChanged,
     this.skeletonPiece = false,
     this.skeletonNote,
     this.skeletonRig,
@@ -56,6 +57,10 @@ class ShapePropertiesSheet extends StatefulWidget {
 
   /// Délie une couche de son os.
   final Future<void> Function(ShapeLayer layer)? onUnbindLayer;
+
+  /// Écrit le pivot de rotation (offset dx/dy depuis le centre, unités
+  /// scène) — v0.13. Statique (non animable) : pas d'auto-key.
+  final void Function(double dx, double dy)? onPivotChanged;
 
   @override
   State<ShapePropertiesSheet> createState() => _ShapePropertiesSheetState();
@@ -146,6 +151,8 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                   if (property != AnimatableProperty.strokeWidth ||
                       !shape.isInstance)
                     _buildPropertyRow(shape, property, controller),
+                if (!widget.skeletonPiece && widget.onPivotChanged != null)
+                  ..._buildPivotRows(shape),
                 if (widget.skeletonPiece &&
                     widget.skeletonRig != null &&
                     shape.layers.isNotEmpty)
@@ -264,6 +271,56 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
     return rows;
   }
 
+  /// Sliders du pivot de rotation (statique, unités scène, offset depuis le
+  /// centre). Chaque slider passe les DEUX valeurs au callback (l'autre est
+  /// relue sur la forme) pour coalescer en une seule entrée d'annulation.
+  List<Widget> _buildPivotRows(VectorShape shape) {
+    Widget row(String label, double value) {
+      return Row(
+        children: <Widget>[
+          SizedBox(
+            width: 92,
+            child: Text(label, style: const TextStyle(fontSize: 12)),
+          ),
+          Expanded(
+            child: Slider(
+              min: -500,
+              max: 500,
+              divisions: 500,
+              value: value.clamp(-500, 500),
+              onChanged: (next) {
+                final dx = label == 'Pivot X' ? next : shape.pivotDx;
+                final dy = label == 'Pivot X' ? shape.pivotDy : next;
+                widget.onPivotChanged?.call(dx, dy);
+                _refresh();
+              },
+            ),
+          ),
+          SizedBox(
+            width: 32,
+            child: Text(
+              '${value.round()}',
+              textAlign: TextAlign.end,
+              style: const TextStyle(fontSize: 10, color: Colors.white54),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return <Widget>[
+      const Padding(
+        padding: EdgeInsets.only(top: 6, bottom: 2),
+        child: Text(
+          'Pivot de rotation (offset depuis le centre)',
+          style: TextStyle(fontSize: 11, color: Colors.white70),
+        ),
+      ),
+      row('Pivot X', shape.pivotDx),
+      row('Pivot Y', shape.pivotDy),
+    ];
+  }
+
   Widget _buildPropertyRow(
     VectorShape shape,
     AnimatableProperty property,
@@ -275,6 +332,8 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
       AnimatableProperty.y => (0.0, widget.project.height, 1.0),
       AnimatableProperty.rotation => (-3.15, 3.15, 0.01),
       AnimatableProperty.scale => (0.05, 4.0, 0.01),
+      AnimatableProperty.scaleX => (0.05, 4.0, 0.01),
+      AnimatableProperty.scaleY => (0.05, 4.0, 0.01),
       AnimatableProperty.opacity => (0.0, 1.0, 0.01),
       AnimatableProperty.strokeWidth => (0.0, 6.0, 0.05),
     };

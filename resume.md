@@ -6,8 +6,9 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Repo : https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`)
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
-- Dernière version : **0.12.0** (vasf-2 Groupe 1 : couches multiples, palette
-  d'alias, cycles, defs+ref — tout développé à l'import, moteur inchangé)
+- Dernière version : **0.13.0** (vasf-2 Groupe 2 : scaleX/scaleY par keyframe,
+  pivot de rotation, easing cubic-bezier, liaison de couche dans `bind` ;
+  en attente de validation appareil — Groupe 1 v0.12.0 validé le 26/09)
 - Détails techniques : `docs/PLAN.md` · Notes de version : `RELEASE_NOTES.md`
 
 ---
@@ -55,7 +56,9 @@ v0.9.0, l'**animation squelette** (rig maître).
 - **v0.11.0 (26/09)** : format d'échange vasf-1 — les JSON exemples
   (`docs/vasf-1-examples.json` : balle rebondissante + squelette saluant)
   s'importent correctement sur appareil via « Importer un JSON… ».
-- Retours utilisateur → le cas échéant patch v0.11.x.
+- **v0.12.0 (26/09)** : vasf-2 Groupe 1 (couches multiples, palette d'alias,
+  cycles, defs+ref) validé par l'utilisateur.
+- Retours utilisateur → le cas échéant patch v0.12.x.
 
 ---
 
@@ -171,7 +174,36 @@ v0.9.0, l'**animation squelette** (rig maître).
   correction ; rig initial JAMAIS tendu à fond (L1+L2 > distance joint→effecteur)
   sinon toute cible est hors de portée (le solveur clampe, tip ≠ cible).
 
-### v0.12.0 (livrée — vasf-2 Groupe 1, format seul)
+### v0.13.0 (livrée — vasf-2 Groupe 2, moteur léger — en attente de validation appareil)
+- **scaleX/scaleY par keyframe** : deux nouvelles AnimatableProperty (« Échelle X/Y »)
+  ; échelle effective = `scale` × facteur d0027axe (composition au rendu) — la
+  keyframe porte le FACTEUR brut (une keyframe à 1 remplace le facteur de base,
+  elle ne le restaure pas) ; sliders auto dans la sheet de propriétés ; les
+  gestes pinch restent multiplicatifs sur la base (inchangés).
+- **Pivot de rotation** : `VectorShape.pivotDx/pivotDy` — offset en unités de
+  forme depuis le centre, STATIQUE (non animable) ; gond ancré à sa position
+  VISUELLE `centre + S·pivot` (sous échelle non uniforme, le gond reste collé
+  au bord visuel) ; chaîne painter = translate(x,y)·translate(S·pivot)·
+  rotate·scale(eff)·translate(−pivot) ; lignes pivot dans la sheet + réglage
+  via `_setPivot`.
+- **Easing cubic-bezier** : `EasingKind.customBezier` + `key.bezier` (forme ET
+  os) — chaîne CSS `cubic-bezier(x1, y1, x2, y2)` (x1/x2 bornés [0,1],
+  dichotomie 60 itérations) ; identité linéaire = (1/3, 1/3, 2/3, 2/3) ;
+  édition des 4 paramètres import-seulement (option « Personnalisé (Bézier) »
+  dans les 2 dropdowns).
+- **Liaison de couche dans `bind`** (vasf) : clé `« Forme/Couche »` → os ; une
+  forme avec liaison de couche est EXPORTÉE en `layers[]` même à une seule
+  couche (le nom de couche doit survivre au round-trip) ; import exige une
+  couche nommée existante sinon erreur collectée.
+- Export `version: 2` dès qu0027une extension G1 **ou** G2 est présente (multi-
+  couches, liaison de couche, scaleX/Y ≠ 1, pivot ≠ 0, customBezier).
+- Exemple dédié `docs/vasf-2-g2-example.json` (balle squash+stretch bézier,
+  porte sur pivot, lampe à couche liée à un os en cycle) ; skill + validateur
+  Python étendus (références mises à jour).
+- 153/153 tests (146 + 7 G2 dans `test/simple_format_test.dart`),
+  `flutter analyze` 0 problème.
+
+### v0.12.0 (livrée — vasf-2 Groupe 1, format seul — VALIDÉE APPAREIL 26/09)
 - **Couches multiples** : `shapes[].layers[]` (type/couleur/filled/strokeWidth/
   width/height/points + pose locale `x`/`y`/rotation/scale/opacité par couche) ;
   les champs plats de géométrie sont ignorés quand `layers` est présent, la pose
@@ -214,9 +246,10 @@ v0.9.0, l'**animation squelette** (rig maître).
 ### v0.12 — extensions du format vasf (validées 26/09, détails PLAN.md § 5 bis)
 - Groupe 1 — format seul (l'importeur développe) : couches multiples par
   forme (`layers[]`), palette d'alias, cycles, définitions réutilisables —
-  PRIORITÉ.
+  **livré et validé sur appareil en v0.12.0**.
 - Groupe 2 — moteur léger : scaleX/scaleY par keyframe, pivot de rotation,
-  easing cubic-bezier, liaison de couche exposée dans `bind`.
+  easing cubic-bezier, liaison de couche exposée dans `bind` —
+  **livré en v0.13.0** (en attente de validation appareil).
 - Groupe 3 — moteur lourd : morph de points (path animé), couleur animée,
   translation d'os + IK à plus de 2 os.
 - Autres options v0.12 : reciblage de binding à la keyframe, test de rendu
