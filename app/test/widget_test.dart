@@ -485,4 +485,60 @@ void main() {
     await tester.tap(find.byIcon(Icons.pause));
     await tester.pumpAndSettle();
   });
+
+  testWidgets('importer un JSON vasf crée et ouvre un nouveau projet', (
+    tester,
+  ) async {
+    final repository = _MemoryRepository();
+    await pumpStudio(tester, repository, seededProject());
+
+    // Menu Export ▸ Importer un JSON…
+    await tester.tap(find.byTooltip('Export'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Importer un JSON…'));
+    await tester.pumpAndSettle();
+
+    // Coller un JSON vasf valide.
+    await tester.enterText(
+      find.byType(TextField).last,
+      '{"version": 1, "name": "Importé", "shapes": ['
+      '{"name": "B", "type": "circle", "end": 1}]}',
+    );
+    await tester.tap(find.text('Importer'));
+    await tester.pumpAndSettle();
+
+    // Le nouveau projet est ouvert (titre AppBar) et enregistré.
+    expect(find.text('Importé'), findsOneWidget);
+    final summaries = await repository.listSummaries();
+    expect(summaries.map((s) => s.name), contains('Importé'));
+    // Le canvas vasf par défaut : 720×1280.
+    final imported = summaries.lastWhere((s) => s.name == 'Importé');
+    expect(imported.width, 720);
+    expect(imported.height, 1280);
+  });
+
+  testWidgets('import invalide : les erreurs s’affichent dans le dialogue', (
+    tester,
+  ) async {
+    final repository = _MemoryRepository();
+    await pumpStudio(tester, repository, seededProject());
+
+    await tester.tap(find.byTooltip('Export'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Importer un JSON…'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byType(TextField).last,
+      '{"version": 9, "shapes": []}',
+    );
+    await tester.tap(find.text('Importer'));
+    await tester.pumpAndSettle();
+
+    // Les problèmes sont listés (version + shapes vides)…
+    expect(find.textContaining('version'), findsWidgets);
+    expect(find.textContaining('au moins une forme'), findsOneWidget);
+    // …et le dialogue reste ouvert (bouton toujours présent).
+    expect(find.text('Importer'), findsOneWidget);
+  });
 }

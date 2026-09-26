@@ -1,0 +1,55 @@
+{
+  "_readme": "Deux exemples VASF-1 valides. Exemple 1 : personnage squelette (bras saluant). Exemple 2 : balle rebondissante vectorielle. L'application accepte UN SEUL de ces objets par import.",
+  "example1_skeleton_waving": {
+    "version": 1,
+    "name": "Rat qui salue",
+    "canvas": {"width": 720, "height": 1280, "fps": 25, "background": "#14161C"},
+    "shapes": [
+      {"name": "Torse", "type": "rect", "color": "#3ECF8E", "width": 140, "height": 180, "x": 360, "y": 700, "end": 2.5},
+      {"name": "Bras", "type": "rect", "color": "#5B8DEF", "width": 40, "height": 110, "x": 300, "y": 660, "end": 2.5},
+      {"name": "Avant-bras", "type": "rect", "color": "#7DD3FC", "width": 34, "height": 90, "x": 300, "y": 560, "end": 2.5}
+    ],
+    "skeleton": {
+      "name": "Corps",
+      "bones": [
+        {"name": "Épaule", "joint": [360, 620], "angle": 0, "length": 90},
+        {"name": "Coude", "parent": "Épaule", "joint": [360, 710], "angle": 100, "length": 80, "ik": true},
+        {"name": "Poignet", "parent": "Coude", "joint": [425, 740], "angle": 60, "length": 60}
+      ],
+      "bind": {"Bras": "Épaule", "Avant-bras": "Coude"},
+      "keyframes": [
+        {"bone": "Épaule", "t": 0.0, "angle": 0},
+        {"bone": "Épaule", "t": 0.8, "angle": 20},
+        {"bone": "Épaule", "t": 1.6, "angle": 0},
+        {"bone": "Coude", "t": 0.0, "angle": 100},
+        {"bone": "Coude", "t": 0.8, "angle": 150},
+        {"bone": "Coude", "t": 1.6, "angle": 100},
+        {"bone": "Poignet", "t": 0.0, "angle": 60},
+        {"bone": "Poignet", "t": 0.8, "angle": 20},
+        {"bone": "Poignet", "t": 1.6, "angle": 60}
+      ]
+    }
+  },
+  "example2_bouncing_ball": {
+    "version": 1,
+    "name": "Balle rebondissante",
+    "canvas": {"width": 720, "height": 1280, "fps": 25, "background": "#14161C"},
+    "shapes": [
+      {
+        "name": "Balle",
+        "type": "circle",
+        "color": "#FF5C5C",
+        "width": 120, "height": 120,
+        "end": 1.6,
+        "x": 360, "y": 400,
+        "keyframes": [
+          {"t": 0.0, "x": 360, "y": 300},
+          {"t": 0.4, "x": 360, "y": 1040, "easing": "easeIn"},
+          {"t": 0.8, "x": 360, "y": 300, "easing": "easeOut"},
+          {"t": 1.2, "x": 360, "y": 1040, "easing": "easeIn"},
+          {"t": 1.6, "x": 360, "y": 300, "easing": "easeOut"}
+        ]
+      }
+    ]
+  }
+}

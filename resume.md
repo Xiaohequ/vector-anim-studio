@@ -6,9 +6,9 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Repo : https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`)
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
-- Dernière version : **0.10.1** (correctif : le glisser IK marche depuis toute
-  sélection — enfant, parent ou aucune — et les boutons ⚙/✥ ne recouvrent plus
-  l'effecteur ; 123 tests)
+- Dernière version : **0.11.0** (format d'échange vasf-1 pour agents IA :
+  export + import par collage des deux formats, spec et exemples livrés ;
+  136 tests)
 - Détails techniques : `docs/PLAN.md` · Notes de version : `RELEASE_NOTES.md`
 
 ---
@@ -50,9 +50,9 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 ## ⏳ En attente
 
-- **Validation sur appareil réel** : v0.10.0 (z d'os, opacité/étirement/écrasement
-  par os, IK 2 os — glisser l'effecteur, inverser le coude). Les versions v0.9.1 →
-  v0.9.5 (chaîne rigging complète) sont déjà validées sur appareil.
+- **Validé sur appareil réel (25/09)** : la chaîne rigging complète v0.9.1 →
+  v0.9.5 ET la v0.10.1 (z d'os, opacité/étirement/écrasement par os, **IK 2 os
+  opérationnel** — « Ça a marché »).
 - Retours utilisateur → le cas échéant patch v0.10.x.
 
 ---
@@ -168,6 +168,24 @@ v0.9.0, l'**animation squelette** (rig maître).
   foyer DÉJÀ déplacé : premier move de 22 px écran (< slop IK 26) puis move de
   correction ; rig initial JAMAIS tendu à fond (L1+L2 > distance joint→effecteur)
   sinon toute cible est hors de portée (le solveur clampe, tip ≠ cible).
+
+### v0.11.0 (livrée — format d'échange vasf-1 pour agents IA)
+- **`lib/engine/simple_animation_format.dart`** : conversion bidirectionnelle
+  projet ↔ JSON simple. Secondes/degrés/hex, keyframes partielles portées
+  (poses complètes à l'import), squelette en coordonnées MONDE (l'import
+  reconstruit offsets relatifs + restAngle, `keyframes[].angle` = absolu),
+  liaisons par NOMS, noms de formes uniquifiés, erreurs TOUTES collectées en
+  français avec chemins (`shapes[2].keyframes[0].t`), défauts 720×1280/25 fps.
+- **UI** : Export ▸ « JSON simple — agents IA (vasf) » (export sparse) et
+  ▸ « Importer un JSON… » (dialogue collage, détection auto vasf/complet,
+  création d'un NOUVEAU projet puis ouverture, erreurs affichées dans le
+  dialogue) ; piège : dispose du TextEditingController DIFFÉRÉ (timer 1 s,
+  annulé au dispose de l'écran) sinon assert « used after disposed » pendant
+  l'animation de sortie du dialogue.
+- **Docs agents** : `docs/vasf-1-format.md` (spec EN complète) +
+  `docs/vasf-1-examples.json` (squelette saluant, balle rebondissante).
+- Limites v1 : une primitive par forme, pas d'instances, liaisons de couche
+  ignorées à l'export.
 
 ### v0.11+ (proposé)
 - Reciblage de binding à la keyframe (reprise de préhension).

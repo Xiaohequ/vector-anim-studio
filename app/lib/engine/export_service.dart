@@ -9,6 +9,7 @@ import 'package:flutter_quick_video_encoder/flutter_quick_video_encoder.dart';
 
 import '../models/animation.dart';
 import 'scene_painter.dart';
+import 'simple_animation_format.dart';
 
 /// Format de sortie vidéo.
 enum VideoFormat { mp4, gif }
@@ -208,6 +209,19 @@ class ExportService {
       p.join(dir.path, '${_slug(project.name)}-${_stamp()}.json'),
     );
     await file.writeAsString(_prettyJson(project.toJson()));
+    return file;
+  }
+
+  /// Exporte le projet au format SIMPLE « vasf-1 » (pour agents IA) — les
+  /// instances imbriquées sont ignorées.
+  Future<File> exportSimpleJson() async {
+    final dir = await outputDirectory();
+    final file = File(
+      p.join(dir.path, '${_slug(project.name)}-${_stamp()}-vasf.json'),
+    );
+    await file.writeAsString(
+      _prettyJson(SimpleAnimationFormat.toJson(project)),
+    );
     return file;
   }
 
