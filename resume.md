@@ -6,11 +6,11 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Repo : https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`)
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
-- Dernière version : **0.13.1** (bugfix pivot des retours v0.13.0 : sliders
-  pivot visibles aussi en projet squelette, `pivot` dans `layers[]` refusé
-  à l'import au lieu d'être ignoré en silence ; régression verrouillée par
-  un test de rendu mesuré sur le VRAI fichier d'exemple G2) — en attente de
-  validation appareil. v0.13.0 (vasf-2 Groupe 2) validée le 26/09 sauf pivot.
+- Dernière version : **0.13.2** (bugfix persistance : le schéma SQLite v4 ne
+  stockait NI les facteurs d'axe/pivot de forme NI le cubic-bezier des
+  keyframes — schéma v5 + save/load ; c'était LA cause du pivot « sans
+  effet » rapporté) — en attente de validation appareil. v0.13.0 (vasf-2
+  Groupe 2) validée le 26/09 sauf pivot.
 - Détails techniques : `docs/PLAN.md` · Notes de version : `RELEASE_NOTES.md`
 
 ---
@@ -176,7 +176,35 @@ v0.9.0, l'**animation squelette** (rig maître).
   correction ; rig initial JAMAIS tendu à fond (L1+L2 > distance joint→effecteur)
   sinon toute cible est hors de portée (le solveur clampe, tip ≠ cible).
 
-### v0.13.1 (livrée — bugfix pivot des retours v0.13.0, en attente de validation appareil)
+### v0.13.2 (livrée — persistance pivot/axes/bézier, schéma v5 — en attente de validation appareil)
+- **Retour utilisateur v2** : le pivot de `docs/vasf-2-g2-example.json`
+  « pas pris en compte à l'import » — alors que la sonde headless (sans DB)
+  montrait un import correct. **Cause réelle trouvée** : la chaîne import →
+  save → load perdait les champs — le schéma SQLite `shapes` n'avait ni
+  `scale_x`/`scale_y` ni `pivot_dx`/`pivot_dy`, et `shape_keyframes` ne
+  stockait pas `bezier_json` : l'app importe, SAUVEGARDE puis recharge le
+  projet depuis la DB → pivot retombé à 0 (rotation au centre), export
+  sans pivot, overshoot bézier mort au rechargement. Le squash/stretch de
+  la balle survivait car les facteurs par keyframe vivent dans
+  `values_json`.
+- **Corrections** : schéma v5 — 4 colonnes sur `shapes` + `bezier_json`
+  sur `shape_keyframes` (ALTER additif dans `_addAxisPivotAndBezierColumns`,
+  onCreate + onUpgrade `oldVersion < 5`) ; save() et load() écrivent/lisent
+  les 4 champs ; `_decodeKeyframe` parse `bezier_json` (null → defaultBezier,
+  garde longueur 4).
+- **Tests** : round-trip repository étendu (pivot −120/15, scale_x 0,8,
+  scale_y 1,2, keyframe customBezier bezier [0.34, 1.56, 0.64, 1.0]
+  vérifiés après save/load) — 157/157, analyze 0 problème, CI run #31
+  verte, release `v0.13.2-build31` (`vector-anim-studio-0.13.2.apk`,
+  53,8 Mo).
+- **Leçon** : un test qui valide le FORMAT ne couvre pas la PERSISTANCE —
+  tout nouveau champ de modèle DOIT passer par le schéma DB (v5) et un
+  round-trip save/load, sinon il meurt silencieusement à la fermeture de
+  l'app. Piège ancres de patch : les blocs CREATE TABLE shapes/layers ont
+  des lignes identiques (rotation/scale/opacity) — ancrer avec les lignes
+  distinctives au-dessus.
+
+### v0.13.1 (livrée — bugfix pivot : sliders + refus layers[], diagnostic par sondes)
 - **Retours utilisateur** : pivot de la porte sans effet (rotation autour
   du centre), sliders Pivot X/Y introuvables, pas de pivot dans le JSON
   exporté — tout le reste (squash/stretch, bezier, liaison de couche,
