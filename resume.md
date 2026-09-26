@@ -6,9 +6,11 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Repo : https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`)
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
-- Dernière version : **0.13.0** (vasf-2 Groupe 2 : scaleX/scaleY par keyframe,
-  pivot de rotation, easing cubic-bezier, liaison de couche dans `bind` ;
-  en attente de validation appareil — Groupe 1 v0.12.0 validé le 26/09)
+- Dernière version : **0.13.1** (bugfix pivot des retours v0.13.0 : sliders
+  pivot visibles aussi en projet squelette, `pivot` dans `layers[]` refusé
+  à l'import au lieu d'être ignoré en silence ; régression verrouillée par
+  un test de rendu mesuré sur le VRAI fichier d'exemple G2) — en attente de
+  validation appareil. v0.13.0 (vasf-2 Groupe 2) validée le 26/09 sauf pivot.
 - Détails techniques : `docs/PLAN.md` · Notes de version : `RELEASE_NOTES.md`
 
 ---
@@ -174,7 +176,37 @@ v0.9.0, l'**animation squelette** (rig maître).
   correction ; rig initial JAMAIS tendu à fond (L1+L2 > distance joint→effecteur)
   sinon toute cible est hors de portée (le solveur clampe, tip ≠ cible).
 
-### v0.13.0 (livrée — vasf-2 Groupe 2, moteur léger — en attente de validation appareil)
+### v0.13.1 (livrée — bugfix pivot des retours v0.13.0, en attente de validation appareil)
+- **Retours utilisateur** : pivot de la porte sans effet (rotation autour
+  du centre), sliders Pivot X/Y introuvables, pas de pivot dans le JSON
+  exporté — tout le reste (squash/stretch, bezier, liaison de couche,
+  export v2) validé OK.
+- **Diagnostic par sondes headless** (import du VRAI exemple G2 + rendu
+  t=1,7 s + centroid du masque bleu) : l'import/export/painter du pivot
+  fonctionnaient DÉJÀ pour un JSON conforme (centroid mesuré (242,0 / 485,1)
+  vs prédiction bord gauche (242,5 / 485,7)). Les 3 symptômes correspondent
+  à un pivot placé dans `layers[]` (ignoré en silence par l'import ET le
+  validateur) et/ou à l'absence des sliders en projet squelette.
+- **Corrections** : ① sliders Pivot X/Y affichés dans TOUS les projets
+  (garde `!skeletonPiece` retirée — le pivot s'applique aussi aux pièces
+  non liées d'un projet squelette, ex. porte de l'exemple G2) ;
+  ② `pivot` dans `layers[]` → erreur d'import explicite en français
+  (« se règle au niveau de la FORME ») au lieu du silence ; ③ validateur
+  Python aligné (même erreur + warning pour tout champ inconnu d'une
+  couche) ; ④ spec + skill mis à jour (pivot au niveau forme uniquement).
+- **Tests** : 157/157 (153 + unité pivot-en-couche refusé + 2 tests widget
+  sheet squelette/vectoriel + test de rendu du vrai exemple G2 : centroid
+  bleu attendu ≈ (242, 486), pas (280, 430)) — CI run #30 verte, release
+  `v0.13.1-build30` (`vector-anim-studio-0.13.1.apk`, 53,7 Mo).
+- **Leçons diagnostics** : un test de rendu mesuré (centroid de masque
+  couleur) tranche un débat code-vs-appareil sans installer l'APK ;
+  `PictureRecorder.toImage` exige `tester.runAsync` sinon timeout 10 min ;
+  les tests widget de sheet doivent défiler (`scrollUntilVisible`) car les
+  lignes basses sont hors du viewport (LazyList) ; cibler le slider par
+  sa POSITION dans l'arbre (`find.byType(Slider).last` = Pivot Y) plutôt
+  que `.first`.
+
+### v0.13.0 (livrée — vasf-2 Groupe 2, moteur léger — pivot resté à valider)
 - **scaleX/scaleY par keyframe** : deux nouvelles AnimatableProperty (« Échelle X/Y »)
   ; échelle effective = `scale` × facteur d0027axe (composition au rendu) — la
   keyframe porte le FACTEUR brut (une keyframe à 1 remplace le facteur de base,
