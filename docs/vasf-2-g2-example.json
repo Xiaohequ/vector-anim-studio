@@ -16,6 +16,7 @@
       "color": "#FF5C5C",
       "width": 120, "height": 120,
       "x": 360, "y": 400, "end": 1.5,
+      "cycle": {"repeat": 6},
       "keyframes": [
         {"t": 0.0, "y": 400, "scaleX": 0.85, "scaleY": 1.25},
         {"t": 0.55, "y": 1010, "easing": "easeIn"},
@@ -52,7 +53,7 @@
       {"name": "Tête", "joint": [200, 850], "angle": -90, "length": 40}
     ],
     "bind": {"Lampadaire/Lampe": "Tête"},
-    "cycle": {"repeat": 3},
+    "cycle": {"repeat": 4},
     "keyframes": [
       {"bone": "Tête", "t": 0.0, "angle": -90},
       {"bone": "Tête", "t": 0.6, "angle": -74, "easing": "easeInOut"},
