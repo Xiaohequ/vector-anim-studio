@@ -1,3 +1,26 @@
+# Vector Anim Studio 0.13.2
+
+## Correction majeure (retours appareil — la vraie cause du pivot « sans effet »)
+
+- **Le pivot (et les facteurs d'axe, et le cubic-bezier) n'étaient PAS
+  persistés dans la base SQLite** : l'import plaçait bien le pivot en
+  mémoire, mais l'application sauvegarde le projet puis le recharge depuis
+  la base — le schéma `shapes` n'avait ni `scale_x`/`scale_y` ni
+  `pivot_dx`/`pivot_dy`, et `shape_keyframes` ne stockait pas les 4
+  paramètres du cubic-bezier. Résultat : après import, la porte tournait
+  autour de son centre « comme avant », l'export ne contenait aucun pivot,
+  et l'overshoot du cubic-bezier mourait au premier rechargement.
+- **Schéma v5** : 4 colonnes sur `shapes` (scale_x/scale_y/pivot_dx/
+pivot_dy) + `bezier_json` sur `shape_keyframes` — migration ALTER additif
+  (les projets existants sont conservés), save/load mis à jour dans les
+  deux sens.
+- **Round-trip verrouillé par test** : le test d'enregistrement vérifie
+  désormais pivot, facteurs d'axe et bezier après save/load (7/7
+  repository, 157/157 au total, analyze 0 problème).
+- Pour mémoire v0.13.1 : sliders Pivot X/Y désormais visibles aussi dans
+  les projets squelettes, et un `pivot` posé dans `layers[]` est refusé à
+  l'import (message en français).
+
 # Vector Anim Studio 0.13.1
 
 ## Corrections (retours appareil sur la v0.13.0)

@@ -46,7 +46,7 @@ class ProjectRepository {
   /// v2 : les keyframes sont des « poses » (toutes les propriétés à un temps).
   /// v3 : instances d'animation (colonnes embedded_*). v4 : type de projet
   /// (vector/skeleton) + rig squelette sérialisé en JSON sur la ligne projet.
-  static const int schemaVersion = 4;
+  static const int schemaVersion = 5;
 
   final DatabaseFactory _factory;
   final String? databasePath;
@@ -89,6 +89,10 @@ class ProjectRepository {
               y REAL NOT NULL,
               rotation REAL NOT NULL,
               scale REAL NOT NULL,
+              scale_x REAL NOT NULL DEFAULT 1,
+              scale_y REAL NOT NULL DEFAULT 1,
+              pivot_dx REAL NOT NULL DEFAULT 0,
+              pivot_dy REAL NOT NULL DEFAULT 0,
               opacity REAL NOT NULL,
               stroke_width REAL NOT NULL,
               start_ms INTEGER NOT NULL,
@@ -129,6 +133,7 @@ class ProjectRepository {
               shape_id TEXT NOT NULL,
               time_ms INTEGER NOT NULL,
               easing TEXT NOT NULL,
+              bezier_json TEXT,
               values_json TEXT NOT NULL,
               FOREIGN KEY (shape_id) REFERENCES shapes (id) ON DELETE CASCADE
             )
@@ -147,6 +152,7 @@ class ProjectRepository {
           if (oldVersion < 2) await _migrateKeysToPoses(db);
           if (oldVersion < 3) await _addEmbeddedColumns(db);
           if (oldVersion < 4) await _addTypeAndSkeletonColumns(db);
+          if (oldVersion < 5) await _addAxisPivotAndBezierColumns(db);
         },
       ),
     );
@@ -170,6 +176,28 @@ class ProjectRepository {
       "ALTER TABLE projects ADD COLUMN type TEXT NOT NULL DEFAULT 'vector'",
     );
     await db.execute('ALTER TABLE projects ADD COLUMN skeleton TEXT');
+  }
+
+  /// Schéma v4 → v5 : facteurs d'axe + pivot de rotation au niveau forme
+  /// (v0.13) et paramètres cubic-bezier par keyframe — v0.13.0 ne les
+  /// persistait PAS : après sauvegarde/rechargement le pivot retombait à 0
+  /// (rotation au centre « comme avant ») et l'overshoot bézier mourait.
+  Future<void> _addAxisPivotAndBezierColumns(Database db) async {
+    await db.execute(
+      'ALTER TABLE shapes ADD COLUMN scale_x REAL NOT NULL DEFAULT 1',
+    );
+    await db.execute(
+      'ALTER TABLE shapes ADD COLUMN scale_y REAL NOT NULL DEFAULT 1',
+    );
+    await db.execute(
+      'ALTER TABLE shapes ADD COLUMN pivot_dx REAL NOT NULL DEFAULT 0',
+    );
+    await db.execute(
+      'ALTER TABLE shapes ADD COLUMN pivot_dy REAL NOT NULL DEFAULT 0',
+    );
+    await db.execute(
+      'ALTER TABLE shape_keyframes ADD COLUMN bezier_json TEXT',
+    );
   }
 
   /// Schéma v1 → v2 : les pistes par propriété sont regroupées en poses.
@@ -289,12 +317,22 @@ class ProjectRepository {
   static ShapeKeyframe _decodeKeyframe(Map<String, Object?> row) {
     final raw = (jsonDecode(row['values_json'] as String) as Map)
         .cast<String, Object?>();
+    // Paramètres cubic-bezier (v0.13) : null si absents (schéma < v5 ou
+    // easing nommé) — la keyframe retombe sur [defaultBezier].
+    final bezierRaw = row['bezier_json'];
+    final bezier = bezierRaw == null
+        ? null
+        : [
+            for (final v in (jsonDecode(bezierRaw as String) as List))
+              (v as num).toDouble(),
+          ];
     return ShapeKeyframe(
       timeMs: (row['time_ms'] as num).toInt(),
       easing: EasingKind.values.firstWhere(
         (e) => e.name == row['easing'],
         orElse: () => EasingKind.easeInOut,
       ),
+      bezier: (bezier != null && bezier.length == 4) ? bezier : null,
       values: <AnimatableProperty, double>{
         for (final property in AnimatableProperty.values)
           if (raw[property.name] != null)
@@ -395,6 +433,10 @@ class ProjectRepository {
         y: (shapeRow['y'] as num).toDouble(),
         rotation: (shapeRow['rotation'] as num).toDouble(),
         scale: (shapeRow['scale'] as num).toDouble(),
+        scaleX: (shapeRow['scale_x'] as num?)?.toDouble() ?? 1,
+        scaleY: (shapeRow['scale_y'] as num?)?.toDouble() ?? 1,
+        pivotDx: (shapeRow['pivot_dx'] as num?)?.toDouble() ?? 0,
+        pivotDy: (shapeRow['pivot_dy'] as num?)?.toDouble() ?? 0,
         opacity: (shapeRow['opacity'] as num).toDouble(),
         strokeWidth: (shapeRow['stroke_width'] as num).toDouble(),
         startMs: (shapeRow['start_ms'] as num).toInt(),
@@ -521,6 +563,10 @@ class ProjectRepository {
           'y': shape.y,
           'rotation': shape.rotation,
           'scale': shape.scale,
+          'scale_x': shape.scaleX,
+          'scale_y': shape.scaleY,
+          'pivot_dx': shape.pivotDx,
+          'pivot_dy': shape.pivotDy,
           'opacity': shape.opacity,
           'stroke_width': shape.strokeWidth,
           'start_ms': shape.startMs,
@@ -558,6 +604,9 @@ class ProjectRepository {
             'shape_id': shape.id,
             'time_ms': keyframe.timeMs,
             'easing': keyframe.easing.name,
+            'bezier_json': keyframe.bezier == null
+                ? null
+                : jsonEncode(keyframe.bezier),
             'values_json': jsonEncode(<String, double>{
               for (final entry in keyframe.values.entries)
                 entry.key.name: entry.value,

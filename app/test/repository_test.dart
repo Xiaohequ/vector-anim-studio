@@ -55,6 +55,11 @@ void main() {
         ShapeLayer(name: 'Cercle', kind: ShapeKind.circle, filled: false),
       ],
     );
+    // v0.13.2 : facteurs d'axe + pivot de rotation doivent survivre à la DB.
+    shape.scaleX = 0.8;
+    shape.scaleY = 1.2;
+    shape.pivotDx = -120;
+    shape.pivotDy = 15;
     final pose = shape.poseAt(0);
     shape.setKeyframes(<ShapeKeyframe>[
       ShapeKeyframe(
@@ -71,6 +76,16 @@ void main() {
         values: <AnimatableProperty, double>{
           ...pose,
           AnimatableProperty.opacity: 1,
+        },
+      ),
+      ShapeKeyframe(
+        timeMs: 2000,
+        easing: EasingKind.customBezier,
+        bezier: const <double>[0.34, 1.56, 0.64, 1.0],
+        values: <AnimatableProperty, double>{
+          ...pose,
+          AnimatableProperty.opacity: 1,
+          AnimatableProperty.scale: 1.5,
         },
       ),
     ]);
@@ -99,9 +114,25 @@ void main() {
     expect(loadedShape.layers.first.points.first, const Offset(0, 0));
     expect(loadedShape.layers[1].filled, isFalse);
 
-    expect(loadedShape.keyframes.length, 2);
+    // v0.13.2 : le pivot + les facteurs d'axe ne sont plus perdus en DB
+    // (v0.13.0 : la porte tournait autour du centre après rechargement).
+    expect(loadedShape.scaleX, 0.8);
+    expect(loadedShape.scaleY, 1.2);
+    expect(loadedShape.pivotDx, -120);
+    expect(loadedShape.pivotDy, 15);
+
+    expect(loadedShape.keyframes.length, 3);
     expect(loadedShape.keyframes.first.timeMs, 200);
     expect(loadedShape.keyframes.first.easing, EasingKind.easeOut);
+    // cubic-bezier : les 4 paramètres survivent au round-trip (v0.13.0 les
+    // perdait → overshoot mort après rechargement).
+    expect(loadedShape.keyframes[2].easing, EasingKind.customBezier);
+    expect(loadedShape.keyframes[2].bezier, const <double>[
+      0.34,
+      1.56,
+      0.64,
+      1.0,
+    ]);
     expect(loadedShape.valueAt(AnimatableProperty.opacity, 1200), 1);
     expect(
       loadedShape.valueAt(AnimatableProperty.opacity, 700),
