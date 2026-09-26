@@ -6,9 +6,8 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Repo : https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`)
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
-- Dernière version : **0.11.0** (format d'échange vasf-1 pour agents IA :
-  export + import par collage des deux formats, spec et exemples livrés ;
-  136 tests)
+- Dernière version : **0.12.0** (vasf-2 Groupe 1 : couches multiples, palette
+  d'alias, cycles, defs+ref — tout développé à l'import, moteur inchangé)
 - Détails techniques : `docs/PLAN.md` · Notes de version : `RELEASE_NOTES.md`
 
 ---
@@ -48,12 +47,15 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 ---
 
-## ⏳ En attente
+## ✅ Validé sur appareil
 
-- **Validé sur appareil réel (25/09)** : la chaîne rigging complète v0.9.1 →
-  v0.9.5 ET la v0.10.1 (z d'os, opacité/étirement/écrasement par os, **IK 2 os
+- **v0.10.1 (25/09)** : la chaîne rigging complète v0.9.1 → v0.9.5 ET la
+  v0.10.1 (z d'os, opacité/étirement/écrasement par os, **IK 2 os
   opérationnel** — « Ça a marché »).
-- Retours utilisateur → le cas échéant patch v0.10.x.
+- **v0.11.0 (26/09)** : format d'échange vasf-1 — les JSON exemples
+  (`docs/vasf-1-examples.json` : balle rebondissante + squelette saluant)
+  s'importent correctement sur appareil via « Importer un JSON… ».
+- Retours utilisateur → le cas échéant patch v0.11.x.
 
 ---
 
@@ -169,6 +171,28 @@ v0.9.0, l'**animation squelette** (rig maître).
   correction ; rig initial JAMAIS tendu à fond (L1+L2 > distance joint→effecteur)
   sinon toute cible est hors de portée (le solveur clampe, tip ≠ cible).
 
+### v0.12.0 (livrée — vasf-2 Groupe 1, format seul)
+- **Couches multiples** : `shapes[].layers[]` (type/couleur/filled/strokeWidth/
+  width/height/points + pose locale `x`/`y`/rotation/scale/opacité par couche) ;
+  les champs plats de géométrie sont ignorés quand `layers` est présent, la pose
+  forme reste celle du groupe ; export `layers[]` + `version: 2` pour les formes
+  multi-couches, à plat + `version: 1` sinon.
+- **Palette** : `theme` top-level, couleurs `"$alias"` partout (fond, formes,
+  couches, defs) ; alias inconnu → erreur collectée.
+- **Cycle** : `cycle.repeat` (forme) et `skeleton.cycle.repeat` (tous les os) —
+  duplication du motif de keyframes à l'import, période = dernier − premier
+  temps, saut de la 1ʳᵉ keyframe répétée au raccord quand le temps est déjà
+  posé (motif bouclé = timeline propre) ; `endMs` étendu ; ignoré sans
+  keyframes ; `repeat` invalide → erreur.
+- **Defs** : `defs` (géométrie seule) + `ref` au niveau forme, surcharge par
+  champ (ex. œil droit rouge) ; ref inconnue → erreur.
+- Importeur : version 1 **et** 2 acceptées (3+ → erreur) ; `_parseLayer`
+  factorise forme-à-plat / couches ; `_PendingBoneKey` bufferise les keyframes
+  d'os (cycle avant insertion) ; `colorRef` résout les alias.
+- Spec `docs/vasf-1-format.md` (section VASF-2 + piège path recentré),
+  exemples +3ᵉ (multi-couches), skill `generer-animation-json` et validateur
+  Python étendus à la v2.
+
 ### v0.11.0 (livrée — format d'échange vasf-1 pour agents IA)
 - **`lib/engine/simple_animation_format.dart`** : conversion bidirectionnelle
   projet ↔ JSON simple. Secondes/degrés/hex, keyframes partielles portées
@@ -187,10 +211,18 @@ v0.9.0, l'**animation squelette** (rig maître).
 - Limites v1 : une primitive par forme, pas d'instances, liaisons de couche
   ignorées à l'export.
 
-### v0.11+ (proposé)
-- Reciblage de binding à la keyframe (reprise de préhension).
-- IK à plus de 2 os ou IK de translation (membres isolées).
-- Test de rendu permanent en CI (capture PNG + comparaison).
+### v0.12 — extensions du format vasf (validées 26/09, détails PLAN.md § 5 bis)
+- Groupe 1 — format seul (l'importeur développe) : couches multiples par
+  forme (`layers[]`), palette d'alias, cycles, définitions réutilisables —
+  PRIORITÉ.
+- Groupe 2 — moteur léger : scaleX/scaleY par keyframe, pivot de rotation,
+  easing cubic-bezier, liaison de couche exposée dans `bind`.
+- Groupe 3 — moteur lourd : morph de points (path animé), couleur animée,
+  translation d'os + IK à plus de 2 os.
+- Autres options v0.12 : reciblage de binding à la keyframe, test de rendu
+  permanent en CI, import par fichier.
+- Le skill agent `skills/generer-animation-json/` génère le vasf-1
+  (références + validateur `validate_vasf.py`) — à étendre à la v2.
 
 ### Backlog de long terme
 - Signature release (keystore + secrets GitHub) et/ou App Bundle `.aab`.

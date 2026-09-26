@@ -474,4 +474,364 @@ void main() {
       expect(rig2.boneIdForShape(imported.shapes.first.id), isNotNull);
     });
   });
+
+  group('vasf-2', () {
+    test('version 2 acceptée, version 3 rejetée', () {
+      final imported = SimpleAnimationFormat.fromJson(<String, Object?>{
+        'version': 2,
+        'shapes': <Object?>[
+          <String, Object?>{'name': 'Bloc', 'type': 'rect', 'end': 1},
+        ],
+      });
+      expect(imported.shapes, hasLength(1));
+      expect(
+        () => SimpleAnimationFormat.fromJson(<String, Object?>{
+          'version': 3,
+          'shapes': <Object?>[
+            <String, Object?>{'name': 'Bloc', 'type': 'rect'},
+          ],
+        }),
+        throwsA(isA<SimpleFormatException>()),
+      );
+      try {
+        SimpleAnimationFormat.fromJson(<String, Object?>{
+          'version': 3,
+          'shapes': <Object?>[
+            <String, Object?>{'name': 'Bloc', 'type': 'rect'},
+          ],
+        });
+        fail('SimpleFormatException attendu');
+      } on SimpleFormatException catch (error) {
+        expect(error.toString(), contains('version : 1 ou 2 attendu'));
+      }
+    });
+
+    test('palette : les alias sont résolus partout', () {
+      final imported = SimpleAnimationFormat.fromJson(<String, Object?>{
+        'version': 2,
+        'theme': <String, Object?>{'peau': '#FFE3C2', 'rouge': '#FF5C5C'},
+        'canvas': <String, Object?>{'background': '\$rouge'},
+        'shapes': <Object?>[
+          <String, Object?>{
+            'name': 'Tête',
+            'type': 'circle',
+            'color': '\$peau',
+            'end': 1,
+          },
+        ],
+      });
+      expect(imported.backgroundValue, 0xFFFF5C5C);
+      expect(imported.shapes.first.layers.first.colorValue, 0xFFFFE3C2);
+    });
+
+    test('alias inconnu : erreur collectée avec chemin', () {
+      try {
+        SimpleAnimationFormat.fromJson(<String, Object?>{
+          'version': 2,
+          'shapes': <Object?>[
+            <String, Object?>{
+              'name': 'Tête',
+              'type': 'circle',
+              'color': '\$ombre',
+              'end': 1,
+            },
+          ],
+        });
+        fail('SimpleFormatException attendu');
+      } on SimpleFormatException catch (error) {
+        expect(
+          error.toString(),
+          contains('shapes[0].color : alias « ombre » inconnu'),
+        );
+      }
+    });
+
+    test('layers[] : une forme multi-couches est importée en une forme', () {
+      final imported = SimpleAnimationFormat.fromJson(<String, Object?>{
+        'version': 2,
+        'shapes': <Object?>[
+          <String, Object?>{
+            'name': 'Visage',
+            'x': 300,
+            'y': 400,
+            'end': 2,
+            'layers': <Object?>[
+              <String, Object?>{
+                'name': 'Peau',
+                'type': 'circle',
+                'color': '#FFE3C2',
+                'width': 160,
+                'height': 160,
+              },
+              <String, Object?>{
+                'name': 'Œil',
+                'type': 'circle',
+                'color': '#14161C',
+                'width': 24,
+                'height': 24,
+                'x': -30,
+                'y': -20,
+              },
+            ],
+          },
+        ],
+      });
+      expect(imported.shapes, hasLength(1));
+      final shape = imported.shapes.first;
+      expect(shape.name, 'Visage');
+      expect(shape.x, 300);
+      expect(shape.y, 400);
+      expect(shape.layers, hasLength(2));
+      expect(shape.layers[0].name, 'Peau');
+      expect(shape.layers[0].kind, ShapeKind.circle);
+      expect(shape.layers[0].colorValue, 0xFFFFE3C2);
+      expect(shape.layers[0].width, 160);
+      expect(shape.layers[0].x, 0);
+      expect(shape.layers[1].name, 'Œil');
+      expect(shape.layers[1].colorValue, 0xFF14161C);
+      expect(shape.layers[1].width, 24);
+      expect(shape.layers[1].x, -30);
+      expect(shape.layers[1].y, -20);
+    });
+
+    test('layers[] : points de path par couche (bbox + recentrage)', () {
+      final imported = SimpleAnimationFormat.fromJson(<String, Object?>{
+        'version': 2,
+        'shapes': <Object?>[
+          <String, Object?>{
+            'name': 'Bouche',
+            'end': 1,
+            'layers': <Object?>[
+              <String, Object?>{
+                'name': 'Trait',
+                'type': 'path',
+                'points': <Object?>[
+                  <Object?>[0, 0],
+                  <Object?>[80, 0],
+                  <Object?>[80, 30],
+                ],
+              },
+            ],
+          },
+        ],
+      });
+      final layer = imported.shapes.first.layers.first;
+      expect(layer.width, 80);
+      expect(layer.height, 30);
+      expect(layer.points[0], const Offset(0, 0));
+      expect(layer.points[1], const Offset(80, 0));
+      expect(layer.points[2], const Offset(80, 30));
+    });
+
+    test('round-trip multi-couches : export → import → identique', () {
+      final original = AnimationProject.blank(name: 'Perso');
+      final shape = VectorShape(name: 'Visage', startMs: 0, endMs: 2000);
+      shape.x = 300;
+      shape.y = 400;
+      shape.layers.add(
+        ShapeLayer(
+          name: 'Peau',
+          kind: ShapeKind.circle,
+          width: 160,
+          height: 160,
+        )..colorValue = 0xFFFFE3C2,
+      );
+      final eye =
+          ShapeLayer(name: 'Œil', kind: ShapeKind.circle, width: 24, height: 24)
+            ..colorValue = 0xFF14161C
+            ..x = -30
+            ..y = -20;
+      shape.layers.add(eye);
+      shape.upsertKeyframe(1000, <AnimatableProperty, double>{
+        AnimatableProperty.x: 320,
+        AnimatableProperty.y: 410,
+        AnimatableProperty.rotation: 0,
+        AnimatableProperty.scale: 1,
+        AnimatableProperty.opacity: 1,
+        AnimatableProperty.strokeWidth: 1,
+      });
+      original.shapes.add(shape);
+
+      final json = SimpleAnimationFormat.toJson(original);
+      expect(json['version'], 2); // multi-couches → vasf-2
+      final imported = SimpleAnimationFormat.fromJson(json);
+      final shape2 = imported.shapes.first;
+      expect(shape2.name, 'Visage');
+      expect(shape2.x, 300);
+      expect(shape2.layers, hasLength(2));
+      expect(shape2.layers[0].colorValue, 0xFFFFE3C2);
+      expect(shape2.layers[1].x, -30);
+      expect(shape2.layers[1].y, -20);
+      expect(shape2.keyframes, hasLength(1));
+      expect(shape2.keyframes.first.timeMs, 1000);
+      expect(shape2.keyframes.first.valueOf(AnimatableProperty.x), 320);
+
+      // Une forme à couche unique reste exportée à plat (vasf-1).
+      final single = AnimationProject.blank(name: 'Plat');
+      final flat = VectorShape(name: 'Bloc', startMs: 0, endMs: 1000);
+      flat.layers.add(ShapeLayer(name: 'Couche', kind: ShapeKind.rect));
+      single.shapes.add(flat);
+      expect(SimpleAnimationFormat.toJson(single)['version'], 1);
+    });
+
+    test('cycle : le motif de keyframes est dupliqué (raccord propre)', () {
+      final imported = SimpleAnimationFormat.fromJson(<String, Object?>{
+        'version': 2,
+        'shapes': <Object?>[
+          <String, Object?>{
+            'name': 'Marcheur',
+            'type': 'rect',
+            'cycle': <String, Object?>{'repeat': 2},
+            'keyframes': <Object?>[
+              <String, Object?>{'t': 0, 'x': 0, 'y': 100, 'easing': 'linear'},
+              <String, Object?>{'t': 1, 'x': 40, 'y': 100, 'easing': 'linear'},
+              <String, Object?>{'t': 2, 'x': 0, 'y': 100, 'easing': 'linear'},
+            ],
+          },
+        ],
+      });
+      final shape = imported.shapes.first;
+      // Période 2 s, 2 répétitions : 0,1,2 puis 3,4 puis 5,6 (raccord sauté).
+      expect(shape.keyframes.map((k) => k.timeMs).toList(), <int>[
+        0,
+        1000,
+        2000,
+        3000,
+        4000,
+        5000,
+        6000,
+      ]);
+      expect(shape.keyframes[3].valueOf(AnimatableProperty.x), 40);
+      expect(shape.keyframes[5].valueOf(AnimatableProperty.x), 40);
+      expect(shape.endMs, 6000);
+    });
+
+    test('cycle sans keyframes : ignoré ; repeat invalide : erreur', () {
+      final imported = SimpleAnimationFormat.fromJson(<String, Object?>{
+        'version': 2,
+        'shapes': <Object?>[
+          <String, Object?>{
+            'name': 'Statique',
+            'type': 'rect',
+            'end': 1,
+            'cycle': <String, Object?>{'repeat': 3},
+          },
+        ],
+      });
+      expect(imported.shapes.first.keyframes, isEmpty);
+      try {
+        SimpleAnimationFormat.fromJson(<String, Object?>{
+          'version': 2,
+          'shapes': <Object?>[
+            <String, Object?>{
+              'name': 'Bloc',
+              'type': 'rect',
+              'end': 1,
+              'cycle': <String, Object?>{'repeat': 0},
+            },
+          ],
+        });
+        fail('SimpleFormatException attendu');
+      } on SimpleFormatException catch (error) {
+        expect(
+          error.toString(),
+          contains('shapes[0].cycle.repeat : entier ≥ 1 attendu'),
+        );
+      }
+    });
+
+    test('ref : la définition fournit la géométrie, la forme surcharge', () {
+      final imported = SimpleAnimationFormat.fromJson(<String, Object?>{
+        'version': 2,
+        'defs': <String, Object?>{
+          'oeil': <String, Object?>{
+            'type': 'circle',
+            'color': '#14161C',
+            'width': 24,
+            'height': 24,
+          },
+        },
+        'shapes': <Object?>[
+          <String, Object?>{
+            'name': 'Œil gauche',
+            'ref': 'oeil',
+            'x': 100,
+            'y': 100,
+            'end': 1,
+          },
+          <String, Object?>{
+            'name': 'Œil droit',
+            'ref': 'oeil',
+            'x': 160,
+            'y': 100,
+            'end': 1,
+            'color': '#FF5C5C',
+          },
+        ],
+      });
+      final left = imported.shapes[0].layers.first;
+      expect(left.kind, ShapeKind.circle);
+      expect(left.colorValue, 0xFF14161C);
+      expect(left.width, 24);
+      final right = imported.shapes[1].layers.first;
+      expect(right.colorValue, 0xFFFF5C5C); // surchargé
+      expect(right.width, 24); // hérité
+      try {
+        SimpleAnimationFormat.fromJson(<String, Object?>{
+          'version': 2,
+          'shapes': <Object?>[
+            <String, Object?>{'name': 'X', 'ref': 'inconnue', 'type': 'rect'},
+          ],
+        });
+        fail('SimpleFormatException attendu');
+      } on SimpleFormatException catch (error) {
+        expect(
+          error.toString(),
+          contains('shapes[0].ref : définition « inconnue » inconnue'),
+        );
+      }
+    });
+
+    test('cycle de squelette : tous les os sont répétés', () {
+      final imported = SimpleAnimationFormat.fromJson(<String, Object?>{
+        'version': 2,
+        'shapes': <Object?>[
+          <String, Object?>{'name': 'Bloc', 'type': 'rect', 'end': 3},
+        ],
+        'skeleton': <String, Object?>{
+          'bones': <Object?>[
+            <String, Object?>{
+              'name': 'Bras',
+              'joint': <Object?>[100, 320],
+              'angle': 0,
+              'length': 100,
+            },
+            <String, Object?>{
+              'name': 'Avant-bras',
+              'parent': 'Bras',
+              'joint': <Object?>[200, 420],
+              'angle': 90,
+              'length': 80,
+            },
+          ],
+          'cycle': <String, Object?>{'repeat': 1},
+          'keyframes': <Object?>[
+            <String, Object?>{'bone': 'Bras', 't': 0, 'angle': 0},
+            <String, Object?>{'bone': 'Bras', 't': 1, 'angle': 30},
+            <String, Object?>{'bone': 'Avant-bras', 't': 0, 'angle': 90},
+            <String, Object?>{'bone': 'Avant-bras', 't': 1, 'angle': 60},
+          ],
+        },
+      });
+      final rig = imported.skeleton!;
+      final root = rig.bones[0];
+      final child = rig.bones[1];
+      // Période 1 s : raccord à t=1 sauté, copie à t=2 pour chaque os.
+      expect(rig.tracks[root.id], hasLength(3));
+      expect(rig.tracks[child.id], hasLength(3));
+      expect(rig.angleDeltaAt(root.id, 2000), closeTo(math.pi / 6, 1e-9));
+      // Copie de la keyframe t=1 : angle monde 60° − repos 90° = −30°.
+      expect(rig.angleDeltaAt(child.id, 2000), closeTo(-math.pi / 6, 1e-9));
+    });
+  });
 }

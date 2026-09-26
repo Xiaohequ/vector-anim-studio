@@ -1,19 +1,54 @@
-# Vector Anim Studio 0.11.0
+# Vector Anim Studio 0.12.0
 
 ## Nouveautés
 
-- **Format d'échange simple « vasf-1 » pour agents IA** : un JSON compact (secondes, degrés, couleurs `#RRGGBB`, noms au lieu d'ids) décrivant une animation complète — formes primitives, keyframes (poses partielles permises, les propriétés absentes sont portées) et **squelette complet** (os avec `joint`/`angle` en monde, liaisons par noms, keyframes d'os avec angle absolu + opacité/étirement/écrasement, z, IK).
-- **Import dans l'app** : menu Export ▸ « Importer un JSON… » → collage (presse-papiers) dans un dialogue. Les DEUX formats sont détectés automatiquement (vasf si champ `version`, sinon le projet complet). L'import crée un NOUVEAU projet et l'ouvre. Les erreurs sont TOUTES collectées, affichées en français avec leur chemin (`shapes[2].keyframes[0].t : …`) — l'agent IA corrige et retente.
-- **Export vasf** : menu Export ▸ « JSON simple — agents IA (vasf) » (fichier partagé via Telegram/partage). Les propriétés identiques à la keyframe précédente sont omises (sparse) pour rester lisible.
-- **Spec + exemples livrés** : `docs/vasf-1-format.md` (spécification complète en anglais, pour les agents) et `docs/vasf-1-examples.json` (squelette saluant + balle rebondissante). Canvas par défaut vasf : 720×1280, 25 fps, fond `#14161C`.
+- **Extensions du format d'échange « vasf-2 » (Groupe 1 — format seul)** : tout est
+  développé À L'IMPORT, le moteur d'animation est inchangé ; un fichier `version: 1`
+  reste importable tel quel, `version: 2` marque les fichiers qui utilisent les
+  extensions.
+  - **Couches multiples par forme** (`"layers": [...]`) : plusieurs primitives dans
+    UNE forme (un visage avec yeux + bouche n'a plus besoin d'une forme par élément).
+    Ordre de dessin = ordre du tableau ; chaque couche porte type/couleur/remplissage/
+    épaisseur/taille/points + pose locale (`x`/`y` relatifs au centre de forme,
+    rotation, échelle, opacité). Les `x/y/rotation/scale/opacity/keyframes` de la
+    forme restent la pose du GROUPE. À l'export, une forme multi-couches émet
+    `layers[]` (version 2), une forme à couche unique reste à plat (version 1).
+  - **Palette d'alias** (`"theme": {"peau": "#FFE3C2", …}`) : toute couleur (fond,
+    forme, couche, def) accepte `"$peau"` — retouche globale en 1 ligne ; alias
+    inconnu = erreur collectée. L'export n'émet jamais de palette (couleurs
+    développées).
+  - **Cycles** (`"cycle": {"repeat": N}`) : le motif de keyframes est répété N fois
+    de plus après la dernière, période = dernier − premier temps ; au raccord, la
+    première keyframe répétée est sautée quand elle tombe sur un temps déjà posé
+    (un motif bouclé donne une timeline propre). Disponible au niveau forme ET au
+    niveau `skeleton` (répète tous les os — cycle de marche sans écrire 300
+    keyframes). Sans keyframes, `cycle` est ignoré.
+  - **Définitions réutilisables** (`"defs": {"oeil": {...}}` + `"ref": "oeil"`) :
+    géométrie définie une fois, instanciée par forme ; la forme peut surcharger
+    chaque champ (ex. œil droit rouge). Géométrie seule (pas de pose/temps dans une
+    def), pas de refs imbriquées, `ref` au niveau forme uniquement.
+- **Import** : erreurs toujours toutes collectées en français avec chemins précis
+  (`theme.peau`, `shapes[0].layers[1].type`, `defs.oeil.type`, `shapes[1].ref`,
+  `shapes[0].cycle.repeat`).
 
-## Limites v1 (documentées)
+## Spec, exemples & skill agent
 
-- Une primitive par forme ; pas d'instances imbriquées ; liaisons de couche ignorées à l'export.
+- `docs/vasf-1-format.md` : section « VASF-2 extensions » (theme, layers, cycle,
+  defs) + piège documenté (les `points` d'un path sont recentrés sur l'origine de
+  la couche — le placer via le `x`/`y` de la couche).
+- `docs/vasf-1-examples.json` : 3ᵉ exemple « Bonhomme qui hoche la tête »
+  (vasf-2 : multi-couches + theme + defs + cycle).
+- Skill agent `generer-animation-json` étendu à la v2 (validateur Python inclus :
+  exemples 1/2/3 valides, recueil complet rejeté, erreurs v2 collectées).
 
 ## Analyse & tests
 
-- `flutter analyze` : 0 problème ; **136 tests verts** — 11 nouveaux sur le format (round-trips vectoriel et squelette avec poses évaluées à 5 instants, keyframes partielles portées, défauts, path/bbox, noms uniquifiés, collecte d'erreurs avec chemins) + 2 tests widget (import réussi → nouveau projet ouvert et sauvegardé ; import invalide → erreurs affichées dans le dialogue qui reste ouvert).
+- `flutter analyze` : 0 problème ; **146 tests verts** — 10 nouveaux sur le format
+  (version 2 acceptée / 3 rejetée, résolution et erreur d'alias, forme
+  multi-couches importée en une forme, points de path par couche, round-trip
+  export→import multi-couches, cycle de forme avec raccord propre, cycle ignoré
+  sans keyframes / repeat invalide, ref avec surcharge + ref inconnue, cycle de
+  squelette répété sur tous les os).
 
 <!--
 Ce fichier est utilisé tel quel comme description de chaque release GitHub.

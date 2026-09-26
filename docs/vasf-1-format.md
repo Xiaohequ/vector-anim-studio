@@ -1,20 +1,23 @@
-# VASF-1 — Vector Anim Studio simple JSON format
+# VASF — Vector Anim Studio simple JSON format (v1 + extensions v2)
 
-VASF-1 is a compact, LLM-friendly JSON format for describing a complete 2D vector
+VASF is a compact, LLM-friendly JSON format for describing a complete 2D vector
 animation (shapes, keyframes, optional skeleton rig) that the **Vector Anim Studio**
 Android app can import directly.
 
 Rules of thumb for generating a valid file:
 
 - **Seconds** (double) for every time value. **Degrees** for every angle.
-- Colors are strings `#RRGGBB` (or `#AARRGGBB`).
-- A shape is **one primitive**. Characters made of several parts = several shapes,
-  each bound to its own bone.
+- Colors are strings `#RRGGBB` (or `#AARRGGBB`), or `"$alias"` resolved in the
+  `theme` palette (VASF-2).
+- A shape is **one primitive** by default; `"layers": [...]` (VASF-2) packs
+  several primitives into one shape. Characters made of several parts = several
+  shapes, each bound to its own bone.
 - Draw order = order of the `shapes` array (first = background).
 - Keyframes may be **partial**: a missing property is carried over from the
   previous keyframe (or from the base pose for the first keyframe).
 - The importer collects ALL problems and reports them in French — fix them and retry.
 - Nested project instances are not representable in VASF-1 (ignored on export).
+- The VASF-2 extensions (below) are optional: a `version: 1` file stays valid.
 
 # Top level
 
@@ -30,11 +33,13 @@ Rules of thumb for generating a valid file:
 
 | field | type | default | notes |
 |---|---|---|---|
-| version | int | required | must be `1` |
+| version | int | required | `1`, or `2` when using the VASF-2 extensions below |
 | name | string | "Animation importée" | project name |
 | canvas.width / height | number | 720 / 1280 | 16…4096 |
 | canvas.fps | int | 25 | 5…60 (export fps) |
-| canvas.background | string | `#14161C` | scene background |
+| canvas.background | string | `#14161C` | scene background (or `"$alias"`) |
+| theme | object | optional | VASF-2 color palette: `{"peau": "#FFE3C2", …}` |
+| defs | object | optional | VASF-2 reusable primitive definitions |
 | shapes | array | required, ≥ 1 | draw order = array order |
 | skeleton | object | optional | presence switches the project to **skeleton type** |
 
@@ -74,6 +79,9 @@ convention). Positive degrees = clockwise on screen.
 | rotation | 0 | base rotation, degrees |
 | scale | 1 | base scale (0.05–4 recommended) |
 | opacity | 1 | 0–1 |
+| layers | optional | VASF-2: array of primitive objects (see below) — overrides `type/color/filled/strokeWidth/width/height/points` |
+| ref | optional | VASF-2: name of a `defs` entry used as geometry defaults (see below) |
+| cycle | optional | VASF-2: `{"repeat": N}` repeats the keyframe pattern (see below) |
 | keyframes | optional | see below |
 
 ### Keyframe (shape)
@@ -121,6 +129,7 @@ convention). Positive degrees = clockwise on screen.
 | bone.ik | false | enable 2-bone IK (needs exactly one child) |
 | bone.bend | 1 | elbow side for IK: +1 or −1 |
 | bind | optional | map **shape name → bone name** |
+| cycle | optional | VASF-2: `{"repeat": N}` repeats ALL bone keyframes (period = last − first time) |
 | keyframes | optional | bone animation (see below) |
 
 ### Keyframe (bone)
@@ -163,11 +172,91 @@ convention). Positive degrees = clockwise on screen.
 }
 ```
 
-See `docs/vasf-1-examples.json` for a skeleton example (character waving an arm).
+See `docs/vasf-1-examples.json` for a skeleton example (character waving an arm)
+and a VASF-2 example (multi-layer character with theme, defs and cycle).
 
-# Limitations (v1)
+# VASF-2 extensions (optional — `version: 2`)
 
-- One primitive per shape (no multi-layer shapes).
+Everything below is optional; a `version: 1` file stays importable unchanged.
+The importer EXPANDS all of it at import time — the animation engine is
+unchanged, so the app renders exactly what it always rendered.
+
+## Theme (color palette)
+
+```json
+{"theme": {"peau": "#FFE3C2", "encre": "#14161C"}}
+```
+
+Any color field (canvas background, shape color, layer color, def color) may
+reference an alias: `"color": "$peau"`. Change the palette once, everything
+follows. An unknown alias is a collected error. Theme values must be literal
+`#RRGGBB`/`#AARRGGBB` colors (no `$` of alias of alias).
+
+## Layers — several primitives in one shape
+
+```json
+{
+  "name": "Visage",
+  "x": 360, "y": 640, "end": 2,
+  "layers": [
+    {"name": "Peau", "type": "circle", "color": "$peau", "width": 170, "height": 170},
+    {"name": "Œil", "type": "circle", "color": "$encre", "width": 26, "height": 26, "x": -34, "y": -22},
+    {"name": "Sourire", "type": "path", "filled": false, "strokeWidth": 5,
+     "points": [[-38, 28], [38, 28], [0, 58]], "y": 43}
+  ],
+  "keyframes": [ {"t": 0, "y": 640}, {"t": 0.5, "y": 620}, {"t": 1, "y": 640} ]
+}
+```
+
+Each layer accepts: `name` ("Couche"), `type`, `color` (alias OK), `filled`,
+`strokeWidth`, `width` / `height`, `points` (path), plus a LOCAL pose
+`x` / `y` (offset from the shape center), `rotation`, `scale`, `opacity`.
+Draw order = array order (last = front). When `layers` is present, the
+shape-level `type/color/filled/strokeWidth/width/height/points` are ignored;
+`x/y/rotation/scale/opacity/keyframes` remain the GROUP pose (the whole face
+moves as one).
+
+IMPORTANT for paths: `points` are re-centered on the layer origin, so place a
+path with the layer's `x`/`y` (the smile above sits at y = 43, the bbox center
+of its points).
+
+## Cycle — repeat the keyframe pattern
+
+`"cycle": {"repeat": N}` on a shape (or on `skeleton`, for ALL bones) repeats
+the keyframe pattern N MORE times after the last keyframe. Period = last
+keyframe time − first keyframe time. At each seam, the repeated first keyframe
+is skipped when it lands on a time already present — end the pattern with the
+pose it started with for a clean loop.
+
+Example: keys at 0 / 0.5 / 1.0 with `repeat: 3` → keys at 0, 0.5, 1.0, 1.5,
+2.0, 2.5, 3.0, 3.5, 4.0. A keyframe beyond `end` extends the window as usual.
+`repeat` must be an integer ≥ 1; without keyframes, `cycle` is ignored.
+
+## Defs — reusable primitive definitions
+
+```json
+{
+  "defs": {"oeil": {"type": "circle", "color": "$encre", "width": 26, "height": 26}},
+  "shapes": [
+    {"name": "Œil gauche", "ref": "oeil", "x": 326, "y": 618, "end": 2},
+    {"name": "Œil droit", "ref": "oeil", "x": 394, "y": 618, "end": 2, "color": "#FF5C5C"}
+  ]
+}
+```
+
+A def holds geometry only: `type`, `color`, `filled`, `strokeWidth`,
+`width` / `height`, `points` (anything else is ignored). A shape with
+`"ref": "oeil"` inherits those as defaults and may override any of them (the
+example turns the right eye red). Name / start / end / pose / keyframes always
+come from the shape itself. No nested refs; `ref` works at shape level only
+(not inside `layers[]`).
+
+# Limitations
+
+- VASF-2 layer pose is static: a layer's x/y/rotation/scale/opacity cannot be
+  keyframed — only the group pose animates (layer-level animation is planned).
 - No nested project instances.
 - Layer bindings (single layer bound to a bone) are ignored on export.
-- Layers stay locally neutral: a shape's pose is its entire geometry.
+- The export writes `version: 2` only when a shape has several layers;
+  single-layer shapes export flat (v1), and the palette/defs are never
+  exported (colors are expanded).

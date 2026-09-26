@@ -4,19 +4,27 @@ import 'dart:ui' show Offset;
 import '../models/animation.dart';
 import '../models/skeleton.dart';
 
-/// Format d'échange « vasf-1 » : un JSON SIMPLE, pensé pour être ÉCRIT par un
+/// Format d'échange « vasf » : un JSON SIMPLE, pensé pour être ÉCRIT par un
 /// agent IA (ou à la main), converti vers/depuis le projet interne. Spécification
 /// complète et exemples : `docs/vasf-1-format.md`.
 ///
-/// Contrats : temps en secondes, couleurs « #RRGGBB », angles en DEGRÉS monde
-/// (y vers le bas, positif = horaire), keyframes partielles (une propriété
-/// absente hérite de la keyframe précédente ou de la base), une forme = une
-/// primitive, ordre de dessin = ordre de la liste, `joint`/`angle` d'os et
+/// Contrats : temps en secondes, couleurs « #RRGGBB » (ou alias « $nom » de la
+/// palette `theme`), angles en DEGRÉS monde (y vers le bas, positif = horaire),
+/// keyframes partielles (une propriété absente hérite de la keyframe précédente
+/// ou de la base), ordre de dessin = ordre de la liste, `joint`/`angle` d'os et
 /// `keyframes[].angle` exprimés MONDE (l'import convertit en interne).
+///
+/// Extensions v2 (champs optionnels, l'import développe, le moteur est
+/// inchangé) : `theme` (palette d'alias), `layers[]` (formes multi-couches),
+/// `cycle.repeat` (répétition du motif de keyframes), `defs` + `ref`
+/// (définitions réutilisables). Un fichier `version: 1` reste importable.
 class SimpleAnimationFormat {
   SimpleAnimationFormat._();
 
   static const int version = 1;
+
+  /// Version des fichiers qui utilisent les extensions v2 (multi-couches).
+  static const int version2 = 2;
 
   // Défauts (canvas validé utilisateur : 720×1280, 25 fps).
   static const double defaultWidth = 720;
@@ -36,12 +44,14 @@ class SimpleAnimationFormat {
   /// ignorées (non représentées en v1, voir la doc).
   static Map<String, Object?> toJson(AnimationProject project) {
     final shapes = <Map<String, Object?>>[];
+    var multiLayer = false;
     for (final shape in project.shapes) {
       if (shape.isInstance) continue;
+      if (shape.layers.length > 1) multiLayer = true;
       shapes.add(_shapeToJson(shape));
     }
     final json = <String, Object?>{
-      'version': version,
+      'version': multiLayer ? version2 : version,
       'name': project.name,
       'canvas': <String, Object?>{
         'width': project.width,
@@ -59,6 +69,7 @@ class SimpleAnimationFormat {
   }
 
   static Map<String, Object?> _shapeToJson(VectorShape shape) {
+    if (shape.layers.length > 1) return _multiLayerShapeToJson(shape);
     final layer = shape.layers.isEmpty
         ? ShapeLayer(name: 'Couche', kind: ShapeKind.rect)
         : shape.layers.first;
@@ -79,31 +90,77 @@ class SimpleAnimationFormat {
       'opacity': shape.opacity,
     };
     if (layer.kind == ShapeKind.path && layer.points.isNotEmpty) {
-      final points = layer.points;
-      final minx = points.map((p) => p.dx).reduce(math.min);
-      final maxx = points.map((p) => p.dx).reduce(math.max);
-      final miny = points.map((p) => p.dy).reduce(math.min);
-      final maxy = points.map((p) => p.dy).reduce(math.max);
-      json['points'] = [
-        for (final p in points)
-          [
-            p.dx - layer.width / 2 + (minx + maxx) / 2,
-            p.dy - layer.height / 2 + (miny + maxy) / 2,
-          ],
-      ];
+      json['points'] = _pointsToJson(layer);
     }
-    if (shape.hasKeyframes) {
-      // Export sparse : une propriété égale à la keyframe précédente (ou à
-      // la base pour la première) est omise.
-      final previous = <AnimatableProperty, double>{
-        for (final property in AnimatableProperty.values)
-          property: shape.baseOf(property),
-      };
-      json['keyframes'] = [
-        for (final key in shape.keyframes) _shapeKeyframeToJson(key, previous),
-      ];
+    _addShapeKeyframes(json, shape);
+    return json;
+  }
+
+  /// Forme multi-couches (vasf-2) : chaque couche porte sa primitive.
+  static Map<String, Object?> _multiLayerShapeToJson(VectorShape shape) {
+    final json = <String, Object?>{
+      'name': shape.name,
+      'layers': [for (final layer in shape.layers) _layerToJson(layer)],
+      'start': shape.startMs / 1000,
+      'end': shape.endMs / 1000,
+      'x': shape.x,
+      'y': shape.y,
+      'rotation': _radToDeg(shape.rotation),
+      'scale': shape.scale,
+      'opacity': shape.opacity,
+    };
+    _addShapeKeyframes(json, shape);
+    return json;
+  }
+
+  static Map<String, Object?> _layerToJson(ShapeLayer layer) {
+    final json = <String, Object?>{
+      'name': layer.name,
+      'type': layer.kind.name,
+      'color': _colorToHex(layer.colorValue),
+      'filled': layer.filled,
+      'strokeWidth': layer.strokeWidth,
+      'width': layer.width,
+      'height': layer.height,
+    };
+    if (layer.x != 0) json['x'] = layer.x;
+    if (layer.y != 0) json['y'] = layer.y;
+    if (layer.rotation != 0) json['rotation'] = _radToDeg(layer.rotation);
+    if (layer.scale != 1) json['scale'] = layer.scale;
+    if (layer.opacity != 1) json['opacity'] = layer.opacity;
+    if (layer.kind == ShapeKind.path && layer.points.isNotEmpty) {
+      json['points'] = _pointsToJson(layer);
     }
     return json;
+  }
+
+  static void _addShapeKeyframes(Map<String, Object?> json, VectorShape shape) {
+    if (!shape.hasKeyframes) return;
+    // Export sparse : une propriété égale à la keyframe précédente (ou à
+    // la base pour la première) est omise.
+    final previous = <AnimatableProperty, double>{
+      for (final property in AnimatableProperty.values)
+        property: shape.baseOf(property),
+    };
+    json['keyframes'] = [
+      for (final key in shape.keyframes) _shapeKeyframeToJson(key, previous),
+    ];
+  }
+
+  /// Points exportés « autour du centre » (conversion inverse de l'import).
+  static List<Object?> _pointsToJson(ShapeLayer layer) {
+    final points = layer.points;
+    final minx = points.map((p) => p.dx).reduce(math.min);
+    final maxx = points.map((p) => p.dx).reduce(math.max);
+    final miny = points.map((p) => p.dy).reduce(math.min);
+    final maxy = points.map((p) => p.dy).reduce(math.max);
+    return [
+      for (final p in points)
+        [
+          p.dx - layer.width / 2 + (minx + maxx) / 2,
+          p.dy - layer.height / 2 + (miny + maxy) / 2,
+        ],
+    ];
   }
 
   static Map<String, Object?> _shapeKeyframeToJson(
@@ -213,6 +270,38 @@ class SimpleFormatException implements Exception {
 
   @override
   String toString() => 'Format simple invalide :\n- ${problems.join('\n- ')}';
+}
+
+/// Keyframe d'os en attente (l'import la parse, applique le cycle, puis
+/// insère le tout dans le rig).
+class _PendingBoneKey {
+  _PendingBoneKey(
+    this.boneId,
+    this.timeMs,
+    this.angleDelta,
+    this.easing,
+    this.opacity,
+    this.stretch,
+    this.squash,
+  );
+
+  final String boneId;
+  int timeMs;
+  final double angleDelta;
+  final EasingKind easing;
+  final double opacity;
+  final double stretch;
+  final double squash;
+
+  _PendingBoneKey withTime(int timeMs) => _PendingBoneKey(
+    boneId,
+    timeMs,
+    angleDelta,
+    easing,
+    opacity,
+    stretch,
+    squash,
+  );
 }
 
 double _radToDeg(double radians) => radians * 180 / 3.1415926535897932;
@@ -327,13 +416,65 @@ class _Parse {
   late AnimationProject project;
   final _usedShapeNames = <String>{};
 
+  // Palette « theme » (alias → couleur) et définitions réutilisables (vasf-2).
+  final _palette = <String, int>{};
+  final _defs = <String, Map<String, Object?>>{};
+
+  /// Clés de géométrie portées par une définition `defs`.
+  static const _defGeometryKeys = [
+    'type',
+    'color',
+    'filled',
+    'strokeWidth',
+    'width',
+    'height',
+    'points',
+  ];
+
+  void _parseTheme(Object? raw) {
+    final map = mapOf('theme', raw);
+    if (map == null) return;
+    for (final entry in map.entries) {
+      final color = colorAt('theme.${entry.key}', entry.value, fallback: 0);
+      if (color != 0) _palette[entry.key] = color;
+    }
+  }
+
+  void _parseDefs(Object? raw) {
+    final map = mapOf('defs', raw);
+    if (map == null) return;
+    for (final entry in map.entries) {
+      final def = mapOf('defs.${entry.key}', entry.value);
+      if (def == null) continue;
+      _defs[entry.key] = def;
+    }
+  }
+
+  /// Couleur littérale ou alias « $nom » résolu dans la palette `theme`.
+  int colorRef(String path, Object? value, {required int fallback}) {
+    if (value is String) {
+      final trimmed = value.trim();
+      if (trimmed.startsWith('\$')) {
+        final alias = trimmed.substring(1);
+        final resolved = _palette[alias];
+        if (resolved == null) {
+          problem('$path : alias « $alias » inconnu (palette « theme »)');
+          return fallback;
+        }
+        return resolved;
+      }
+    }
+    return colorAt(path, value, fallback: fallback);
+  }
+
   AnimationProject parse(Map<String, Object?> json) {
     final version = intAt('version', json['version'], fallback: 0);
-    if (version != SimpleAnimationFormat.version) {
-      problem(
-        'version : ${SimpleAnimationFormat.version} attendu (trouvé $version)',
-      );
+    if (version != SimpleAnimationFormat.version &&
+        version != SimpleAnimationFormat.version2) {
+      problem('version : 1 ou 2 attendu (trouvé $version)');
     }
+    _parseTheme(json['theme']);
+    _parseDefs(json['defs']);
 
     final canvas = mapOf('canvas', json['canvas']) ?? const <String, Object?>{};
     final width = numAt(
@@ -359,7 +500,7 @@ class _Parse {
     if (fps < 5 || fps > 60) {
       problem('canvas.fps : entre 5 et 60 attendu ($fps)');
     }
-    final background = colorAt(
+    final background = colorRef(
       'canvas.background',
       canvas['background'],
       fallback: SimpleAnimationFormat.defaultBackground,
@@ -408,20 +549,47 @@ class _Parse {
       name = '$name $n';
     }
     _usedShapeNames.add(name);
-    final layer = ShapeLayer(
-      name: 'Couche',
-      kind: kindAt('$path.type', json['type']),
-      colorValue: colorAt(
-        '$path.color',
-        json['color'],
-        fallback: SimpleAnimationFormat.defaultShapeColor,
-      ),
-      filled: boolAt('$path.filled', json['filled'], fallback: true),
-      strokeWidth: numAt('$path.strokeWidth', json['strokeWidth'], fallback: 4),
-    );
-    final shape = VectorShape(name: name, layers: [layer]);
+    // Définition réutilisable (vasf-2) : la def fournit la géométrie par
+    // défaut, la forme peut surcharger chaque champ. Pas de ref imbriquée.
+    var effective = json;
+    final refRaw = json['ref'];
+    if (refRaw != null) {
+      final refName = refRaw is String && refRaw.trim().isNotEmpty
+          ? refRaw.trim()
+          : null;
+      if (refName == null) {
+        problem('$path.ref : texte non vide attendu');
+      } else {
+        final def = _defs[refName];
+        if (def == null) {
+          problem('$path.ref : définition « $refName » inconnue');
+        } else {
+          effective = <String, Object?>{
+            for (final key in _defGeometryKeys)
+              if (def[key] != null) key: def[key],
+            ...json,
+          };
+        }
+      }
+    }
+    final layers = <ShapeLayer>[];
+    final rawLayers = listOf('$path.layers', effective['layers']);
+    if (rawLayers != null) {
+      for (var i = 0; i < rawLayers.length; i++) {
+        final layerPath = '$path.layers[$i]';
+        final layerJson = mapOf(layerPath, rawLayers[i]);
+        if (layerJson == null) continue;
+        layers.add(_parseLayer(layerPath, layerJson, localPose: true));
+      }
+      if (layers.isEmpty) {
+        problem('$path.layers : au moins une couche attendue');
+      }
+    } else {
+      layers.add(_parseLayer(path, effective, localPose: false));
+    }
+    final shape = VectorShape(name: name, layers: layers);
     // Pose de base de la forme (centre du groupe) : la seule géométrie de
-    // position — la couche reste locale-neutre.
+    // position — les couches restent locales.
     shape.x = numAt('$path.x', json['x'], fallback: project.width / 2);
     shape.y = numAt('$path.y', json['y'], fallback: project.height / 2);
     shape.rotation = _degToRad(
@@ -430,9 +598,43 @@ class _Parse {
     shape.scale = numAt('$path.scale', json['scale'], fallback: 1);
     shape.opacity = numAt('$path.opacity', json['opacity'], fallback: 1);
     _parseShapeTime(path, json, shape);
-    _parseShapeGeometry(path, json, shape);
     _parseShapeKeyframes('$path.keyframes', json['keyframes'], shape);
+    _applyShapeCycle(path, json, shape);
     project.shapes.add(shape);
+  }
+
+  /// Une couche : primitive locale à la forme. En mode `layers[]` (localPose)
+  /// la couche porte aussi sa pose locale (x/y/rotation/scale/opacité) ; à
+  /// plat (vasf-1) la couche reste locale-neutre.
+  ShapeLayer _parseLayer(
+    String path,
+    Map<String, Object?> json, {
+    required bool localPose,
+  }) {
+    final layer = ShapeLayer(
+      name: localPose
+          ? strAt('$path.name', json['name'], fallback: 'Couche')
+          : 'Couche',
+      kind: kindAt('$path.type', json['type']),
+      colorValue: colorRef(
+        '$path.color',
+        json['color'],
+        fallback: SimpleAnimationFormat.defaultShapeColor,
+      ),
+      filled: boolAt('$path.filled', json['filled'], fallback: true),
+      strokeWidth: numAt('$path.strokeWidth', json['strokeWidth'], fallback: 4),
+    );
+    if (localPose) {
+      layer.x = numAt('$path.x', json['x'], fallback: 0);
+      layer.y = numAt('$path.y', json['y'], fallback: 0);
+      layer.rotation = _degToRad(
+        numAt('$path.rotation', json['rotation'], fallback: 0),
+      );
+      layer.scale = numAt('$path.scale', json['scale'], fallback: 1);
+      layer.opacity = numAt('$path.opacity', json['opacity'], fallback: 1);
+    }
+    _applyGeometry(path, json, layer);
+    return layer;
   }
 
   void _parseShapeTime(
@@ -456,12 +658,11 @@ class _Parse {
     shape.endMs = (end * 1000).round();
   }
 
-  void _parseShapeGeometry(
+  void _applyGeometry(
     String path,
     Map<String, Object?> json,
-    VectorShape shape,
+    ShapeLayer layer,
   ) {
-    final layer = shape.layers.first;
     final rawPoints = listOf('$path.points', json['points']);
     if (layer.kind == ShapeKind.path && rawPoints != null) {
       final points = <Offset>[];
@@ -565,6 +766,41 @@ class _Parse {
     }
     shape.keyframes.sort((a, b) => a.timeMs.compareTo(b.timeMs));
     // Une keyframe au-delà de la fin du segment étend la fin.
+    for (final key in shape.keyframes) {
+      if (key.timeMs > shape.endMs) shape.endMs = key.timeMs;
+    }
+  }
+
+  /// `cycle.repeat` (vasf-2) : le motif de keyframes est répété N fois de plus
+  /// après la dernière keyframe, période = dernier − premier temps. Au
+  /// raccord, la première keyframe d'une répétition est sautée quand son
+  /// temps tombe sur la dernière déjà posée (motif bouclé → timeline
+  /// propre). Sans keyframes, `cycle` est ignoré.
+  void _applyShapeCycle(
+    String path,
+    Map<String, Object?> json,
+    VectorShape shape,
+  ) {
+    final cycle = mapOf('$path.cycle', json['cycle']);
+    if (cycle == null) return;
+    final repeat = intAt('$path.cycle.repeat', cycle['repeat'], fallback: 0);
+    if (repeat < 1) {
+      problem('$path.cycle.repeat : entier ≥ 1 attendu ($repeat)');
+      return;
+    }
+    if (shape.keyframes.isEmpty) return;
+    final first = shape.keyframes.first.timeMs;
+    final last = shape.keyframes.last.timeMs;
+    final period = last - first;
+    if (period <= 0) return;
+    final count = shape.keyframes.length;
+    for (var r = 1; r <= repeat; r++) {
+      for (var i = 0; i < count; i++) {
+        if (i == 0) continue; // raccord
+        final key = shape.keyframes[i];
+        shape.keyframes.add(key.copy()..timeMs = key.timeMs + r * period);
+      }
+    }
     for (final key in shape.keyframes) {
       if (key.timeMs > shape.endMs) shape.endMs = key.timeMs;
     }
@@ -678,34 +914,86 @@ class _Parse {
   void _parseSkeletonKeyframes(Map<String, Object?> json, SkeletonRig rig) {
     final list =
         listOf('skeleton.keyframes', json['keyframes']) ?? const <Object?>[];
+    final pending = <_PendingBoneKey>[];
     for (var i = 0; i < list.length; i++) {
       final path = 'skeleton.keyframes[$i]';
-      final json = mapOf(path, list[i]);
-      if (json == null) continue;
-      final boneName = strAt('$path.bone', json['bone'], fallback: '');
+      final keyJson = mapOf(path, list[i]);
+      if (keyJson == null) continue;
+      final boneName = strAt('$path.bone', keyJson['bone'], fallback: '');
       final bone = rig.bones.where((b) => b.name == boneName).firstOrNull;
       if (bone == null) {
         problem('$path.bone : os « $boneName » inconnu');
         continue;
       }
-      final t = numAt('$path.t', json['t'], fallback: -1);
+      final t = numAt('$path.t', keyJson['t'], fallback: -1);
       if (t < 0) {
         problem('$path.t : temps ≥ 0 attendu (en secondes)');
         continue;
       }
       // Angle MONDE absolu → delta par rapport à l'angle de repos monde.
       final restDeg = _restWorldDeg(rig, bone);
-      final angleDeg = numAt('$path.angle', json['angle'], fallback: restDeg);
-      rig.upsertKeyframe(
-        bone.id,
-        (t * 1000).round(),
-        _degToRad(angleDeg - restDeg),
-        easing: easingAt('$path.easing', json['easing']),
-        opacity: numAt('$path.opacity', json['opacity'], fallback: 1),
-        stretch: numAt('$path.stretch', json['stretch'], fallback: 1),
-        squash: numAt('$path.squash', json['squash'], fallback: 1),
+      final angleDeg = numAt(
+        '$path.angle',
+        keyJson['angle'],
+        fallback: restDeg,
+      );
+      pending.add(
+        _PendingBoneKey(
+          bone.id,
+          (t * 1000).round(),
+          _degToRad(angleDeg - restDeg),
+          easingAt('$path.easing', keyJson['easing']),
+          numAt('$path.opacity', keyJson['opacity'], fallback: 1),
+          numAt('$path.stretch', keyJson['stretch'], fallback: 1),
+          numAt('$path.squash', keyJson['squash'], fallback: 1),
+        ),
       );
     }
+    _applySkeletonCycle(json, pending);
+    for (final key in pending) {
+      rig.upsertKeyframe(
+        key.boneId,
+        key.timeMs,
+        key.angleDelta,
+        easing: key.easing,
+        opacity: key.opacity,
+        stretch: key.stretch,
+        squash: key.squash,
+      );
+    }
+  }
+
+  /// `skeleton.cycle.repeat` (vasf-2) : répète le motif de keyframes de TOUS
+  /// les os, période = (plus grand − plus petit temps) du squelette. Au
+  /// raccord, une keyframe tombant sur un temps déjà posé pour le même os
+  /// est sautée (motif bouclé → timeline propre).
+  void _applySkeletonCycle(
+    Map<String, Object?> json,
+    List<_PendingBoneKey> pending,
+  ) {
+    final cycle = mapOf('skeleton.cycle', json['cycle']);
+    if (cycle == null) return;
+    final repeat = intAt('skeleton.cycle.repeat', cycle['repeat'], fallback: 0);
+    if (repeat < 1) {
+      problem('skeleton.cycle.repeat : entier ≥ 1 attendu ($repeat)');
+      return;
+    }
+    if (pending.isEmpty) return;
+    final first = pending.map((k) => k.timeMs).reduce(math.min);
+    final last = pending.map((k) => k.timeMs).reduce(math.max);
+    final period = last - first;
+    if (period <= 0) return;
+    final extra = <_PendingBoneKey>[];
+    for (var r = 1; r <= repeat; r++) {
+      for (final key in pending) {
+        final time = key.timeMs + r * period;
+        final exists =
+            pending.any((x) => x.boneId == key.boneId && x.timeMs == time) ||
+            extra.any((x) => x.boneId == key.boneId && x.timeMs == time);
+        if (!exists) extra.add(key.withTime(time));
+      }
+    }
+    pending.addAll(extra);
   }
 
   /// Angle de repos MONDE d'un os (somme des restAngle de la chaîne).
