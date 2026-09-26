@@ -297,6 +297,10 @@ non-uniform scale it stays glued to the visual edge of the shape. STATIC:
  "pivot": [-120, 0], "keyframes": [{"t": 0, "rotation": 0}, {"t": 1.2, "rotation": 70}]}
 ```
 
+Shape-level only: put `pivot` on the SHAPE, never inside a `layers[]` entry —
+a `pivot` found in a layer is REJECTED at import (it would otherwise be
+silently ignored and the shape would rotate around its center as before).
+
 ## Custom easing — `cubic-bezier(...)`
 
 `easing` accepts the CSS chain form on shape AND bone keyframes:

@@ -1,3 +1,34 @@
+# Vector Anim Studio 0.13.1
+
+## Corrections (retours appareil sur la v0.13.0)
+
+- **Pivot introuvable dans un projet squelette** : les sliders « Pivot X / Y »
+  de la sheet de propriétés étaient masqués dès que le projet était de type
+  squelette (garde `skeletonPiece` trop large) — or l'exemple vasf-2 G2
+  (porte sur gond, lampadaire) EST un projet squelette : le pivot était
+  invisible et irréglable. Les sliders sont désormais affichés dans tous les
+  projets (le pivot reste statique, non animable).
+- **`pivot` dans `layers[]` ignoré en silence** : un JSON plaçant le pivot
+  dans une couche (au lieu de la forme) était importé sans erreur, la forme
+  tournait autour de son centre « comme avant », et l'export ne contenait
+  aucun pivot. L'import refuse désormais explicitement un `pivot` posé dans
+  `layers[]` avec un message en français indiquant de le mettre sur la forme
+  (le validateur Python `validate_vasf.py` produit la même erreur, plus un
+  avertissement pour tout champ inconnu d'une couche).
+- **Régression verrouillée par des tests** : un test widget vérifie les
+  sliders pivot dans un projet squelette ET vectoriel ; un test de rendu
+  importe le VRAI fichier d'exemple `docs/vasf-2-g2-example.json` et mesure
+  le centroid bleu de la porte à t=1,7 s — attendu ≈ (242, 486) (gond au
+  bord gauche) et pas ≈ (280, 430) (rotation autour du centre).
+
+## Vérifié empiriquement
+
+- L'import et l'export du pivot fonctionnaient déjà dans la v0.13.0 pour un
+  JSON conforme (sonde : `pivot=-120.0,0.0` importé, centroid de rendu à
+  1 px de la prédiction bord gauche). Le bug rapporté vient d'un JSON où le
+  pivot était posé dans la couche — maintenant refusé au lieu d'être
+  silencieusement ignoré.
+
 # Vector Anim Studio 0.13.0
 
 ## Nouveautés

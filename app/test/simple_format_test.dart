@@ -884,6 +884,33 @@ void main() {
       expect(imported.shapes.first.pivotDy, -20);
     });
 
+    test('pivot dans layers[] : refusé (sinon rotation autour du centre '
+        'en silence, bug v0.13.0)', () {
+      try {
+        SimpleAnimationFormat.fromJson(<String, Object?>{
+          'version': 2,
+          'shapes': <Object?>[
+            <String, Object?>{
+              'name': 'Porte',
+              'layers': <Object?>[
+                <String, Object?>{
+                  'name': 'Panneau',
+                  'type': 'rect',
+                  'width': 240,
+                  'height': 420,
+                  'pivot': <Object?>[-120, 0],
+                },
+              ],
+            },
+          ],
+        });
+        fail('SimpleFormatException attendu');
+      } on SimpleFormatException catch (error) {
+        expect(error.toString(), contains('shapes[0].layers[0].pivot'));
+        expect(error.toString(), contains('au niveau de la FORME'));
+      }
+    });
+
     test('cubic-bezier : parse CSS, interpolation, round trip', () {
       final imported = SimpleAnimationFormat.fromJson(<String, Object?>{
         'version': 2,

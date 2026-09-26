@@ -151,8 +151,10 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                   if (property != AnimatableProperty.strokeWidth ||
                       !shape.isInstance)
                     _buildPropertyRow(shape, property, controller),
-                if (!widget.skeletonPiece && widget.onPivotChanged != null)
-                  ..._buildPivotRows(shape),
+                // Pivot (v0.13.1) : visible dans TOUS les projets — le pivot
+                // est un réglage de forme qui s'applique aussi aux pièces
+                // d'un projet squelette (ex. porte non liée de l'exemple G2).
+                if (widget.onPivotChanged != null) ..._buildPivotRows(shape),
                 if (widget.skeletonPiece &&
                     widget.skeletonRig != null &&
                     shape.layers.isNotEmpty)

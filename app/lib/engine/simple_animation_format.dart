@@ -742,6 +742,16 @@ class _Parse {
       );
       layer.scale = numAt('$path.scale', json['scale'], fallback: 1);
       layer.opacity = numAt('$path.opacity', json['opacity'], fallback: 1);
+      // Pivot de rotation (v0.13.1) : réglage au niveau de la FORME — dans
+      // layers[] il serait ignoré en silence et la forme tournerait autour
+      // de son centre « comme avant ». Refus explicite pour forcer le fix.
+      if (json['pivot'] != null) {
+        problem(
+          '$path.pivot : le pivot de rotation se règle au niveau de la '
+          'FORME (champ « pivot » de la forme, ex. porte : [-largeur/2, 0]), '
+          'pas dans layers[]',
+        );
+      }
     }
     _applyGeometry(path, json, layer);
     return layer;
