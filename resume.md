@@ -9,8 +9,10 @@ v0.9.0, l'**animation squelette** (rig maître).
 - Dernière version : **0.13.2** (bugfix persistance : le schéma SQLite v4 ne
   stockait NI les facteurs d'axe/pivot de forme NI le cubic-bezier des
   keyframes — schéma v5 + save/load ; c'était LA cause du pivot « sans
-  effet » rapporté) — en attente de validation appareil. v0.13.0 (vasf-2
-  Groupe 2) validée le 26/09 sauf pivot.
+  effet » rapporté) — **validée sur appareil (27/09)** : pivot configuré,
+  lisible dans la sheet et présent dans le JSON exporté ; round-trip
+  export de l'exemple G2 vérifié conforme. v0.13.0 (vasf-2 Groupe 2)
+  validée le 26/09, pivot compris.
 - Détails techniques : `docs/PLAN.md` · Notes de version : `RELEASE_NOTES.md`
 
 ---
@@ -60,7 +62,13 @@ v0.9.0, l'**animation squelette** (rig maître).
   s'importent correctement sur appareil via « Importer un JSON… ».
 - **v0.12.0 (26/09)** : vasf-2 Groupe 1 (couches multiples, palette d'alias,
   cycles, defs+ref) validé par l'utilisateur.
-- Retours utilisateur → le cas échéant patch v0.12.x.
+- **v0.13.2 (27/09)** : pivot de rotation persistant (schéma SQLite v5) —
+  configuré sur l'appareil, lisible dans la sheet et présent dans le JSON
+  exporté ; JSON exporté depuis l'exemple G2 comparé à la source :
+  conforme (pivot, scaleX/scaleY par keyframe, cubic-bezier, liaison de
+  couche `Lampadaire/Lampe` → `Tête`, coordonnées monde du squelette,
+  cycles développés en timelines équivalentes).
+- Retours utilisateur → le cas échéant patch v0.13.x.
 
 ---
 
@@ -309,7 +317,7 @@ v0.9.0, l'**animation squelette** (rig maître).
   **livré et validé sur appareil en v0.12.0**.
 - Groupe 2 — moteur léger : scaleX/scaleY par keyframe, pivot de rotation,
   easing cubic-bezier, liaison de couche exposée dans `bind` —
-  **livré en v0.13.0** (en attente de validation appareil).
+  **livré en v0.13.0, validé appareil (26/09 ; pivot confirmé en v0.13.2)**.
 - Groupe 3 — moteur lourd : morph de points (path animé), couleur animée,
   translation d'os + IK à plus de 2 os.
 - Autres options v0.12 : reciblage de binding à la keyframe, test de rendu
