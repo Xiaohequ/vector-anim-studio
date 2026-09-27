@@ -6,13 +6,15 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Repo : https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`)
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
-- Dernière version : **0.13.2** (bugfix persistance : le schéma SQLite v4 ne
-  stockait NI les facteurs d'axe/pivot de forme NI le cubic-bezier des
-  keyframes — schéma v5 + save/load ; c'était LA cause du pivot « sans
-  effet » rapporté) — **validée sur appareil (27/09)** : pivot configuré,
-  lisible dans la sheet et présent dans le JSON exporté ; round-trip
-  export de l'exemple G2 vérifié conforme. v0.13.0 (vasf-2 Groupe 2)
-  validée le 26/09, pivot compris.
+- Dernière version : **0.14.0** (option C : import par fichier — sélecteur
+  système SAF, le collage presse-papiers est retiré ; reciblage « sans
+  saut » — re-lier une pièce/couche à un autre os réécrit ses poses pour
+  préserver la position MONDE au changement, gond + rotation, base au
+  curseur + keyframes recalées à leur propre instant ; tests de rendu
+  PERMANENTS en CI — suite `test/render_regression_test.dart`, centroids
+  de masques couleur : pièce liée suit l'os, couche liée suit son os,
+  reciblage avant/après identique). v0.13.2 (persistance pivot/axes/
+  bézier, schéma v5) validée appareil le 27/09.
 - Détails techniques : `docs/PLAN.md` · Notes de version : `RELEASE_NOTES.md`
 
 ---
@@ -184,7 +186,29 @@ v0.9.0, l'**animation squelette** (rig maître).
   correction ; rig initial JAMAIS tendu à fond (L1+L2 > distance joint→effecteur)
   sinon toute cible est hors de portée (le solveur clampe, tip ≠ cible).
 
-### v0.13.2 (livrée — persistance pivot/axes/bézier, schéma v5 — en attente de validation appareil)
+### v0.14.0 (livrée — option C : import fichier + reciblage + rendu CI)
+- **Import par fichier** (`_importJsonFile`) : `FilePicker.pickFiles`
+  (file_picker 13.1, `FileType.custom` json) → lecture en mémoire →
+  `_parseImportText` (inchangé) → NOUVEAU projet + ouverture ; erreurs =
+  dialogue « Import impossible » défilant ; le dialogue de collage et le
+  timer différé du controller sont SUPPRIMÉS (piège dispose réglé).
+  Fakes de test : `base class` étendant `PlatformFile` (contenu en
+  mémoire — dart:io ne progresse pas en fake-async) +
+  `FilePickerPlatform.instance` substitué (token OK par héritage,
+  restauration via addTearDown).
+- **Reciblage sans saut** (`lib/engine/binding_retarget.dart`) :
+  `retargetShape` (base + keyframes recalées à leur propre instant, GOND
+  `rotationCenterScene()` conservé — PAS la seule origine, sinon le
+  contenu pivote) et `retargetLayer` (couches statiques → correction
+  unique au curseur) ; `BoneFrame.mapPointInverse` ajouté. Limites
+  documentées : os étirés (non-rigide) et interpolation entre keyframes.
+- **Tests** : 165/165 — piège debug : un enfant SANS keyframes suit le
+  parent avec le MÊME delta → le reciblage parent→enfant est un no-op
+  mathématique (donner un delta propre à l'enfant dans les tests) ; la
+  zone AVANT la 1re keyframe de la pièce est portée (carry) → monde non
+  préservable là (mettre des keyframes à tous les temps de la piste).
+
+### v0.13.2 (livrée — persistance pivot/axes/bézier, schéma v5 — validée appareil 27/09)
 - **Retour utilisateur v2** : le pivot de `docs/vasf-2-g2-example.json`
   « pas pris en compte à l'import » — alors que la sonde headless (sans DB)
   montrait un import correct. **Cause réelle trouvée** : la chaîne import →
