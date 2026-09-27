@@ -46,8 +46,9 @@ void main() {
     );
   }
 
-  testWidgets('projet SQUELETTE : les sliders Pivot X/Y sont affichés',
-      (tester) async {
+  testWidgets('projet SQUELETTE : les sliders Pivot X/Y sont affichés', (
+    tester,
+  ) async {
     final captured = <(double, double)>[];
     await pumpSheet(
       tester,
@@ -62,8 +63,10 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
     await tester.pumpAndSettle();
-    expect(find.text('Pivot de rotation (offset depuis le centre)'),
-        findsOneWidget);
+    expect(
+      find.text('Pivot de rotation (offset depuis le centre)'),
+      findsOneWidget,
+    );
     expect(find.text('Pivot X'), findsOneWidget);
     expect(find.text('Pivot Y'), findsOneWidget);
     // La valeur importée (-120) est affichée sur la ligne Pivot X.
@@ -77,21 +80,20 @@ void main() {
     expect(captured.last.$2, greaterThan(10));
   });
 
-  testWidgets('projet VECTORIEL : les sliders Pivot X/Y restent affichés',
-      (tester) async {
-    await pumpSheet(
-      tester,
-      skeletonPiece: false,
-      onPivotChanged: (dx, dy) {},
-    );
+  testWidgets('projet VECTORIEL : les sliders Pivot X/Y restent affichés', (
+    tester,
+  ) async {
+    await pumpSheet(tester, skeletonPiece: false, onPivotChanged: (dx, dy) {});
     await tester.scrollUntilVisible(
       find.text('Pivot X'),
       120,
       scrollable: find.byType(Scrollable).first,
     );
     await tester.pumpAndSettle();
-    expect(find.text('Pivot de rotation (offset depuis le centre)'),
-        findsOneWidget);
+    expect(
+      find.text('Pivot de rotation (offset depuis le centre)'),
+      findsOneWidget,
+    );
     expect(find.text('Pivot X'), findsOneWidget);
     expect(find.text('Pivot Y'), findsOneWidget);
   });

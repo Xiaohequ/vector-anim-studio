@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +11,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../data/project_repository.dart';
 import '../engine/animation_presets.dart';
+import '../engine/binding_retarget.dart';
 import '../engine/export_service.dart';
 import '../engine/rig_overlay_painter.dart';
 import '../engine/scene_painter.dart';
@@ -244,7 +246,6 @@ class _StudioScreenState extends State<StudioScreen>
   @override
   void dispose() {
     _saveTimer?.cancel();
-    _importControllerTimer?.cancel();
     _ticker?.dispose();
     _controller?.dispose();
     super.dispose();
@@ -754,7 +755,17 @@ class _StudioScreenState extends State<StudioScreen>
     final picked = await _pickBone(rig, 'Lier « ${shape.name} » à quel os ?');
     if (picked == null || !mounted) return;
     _pushUndo();
-    setState(() => rig.bindShape(shape.id, picked));
+    setState(() {
+      // Déjà liée → reciblage sans saut (les poses suivent) ; sinon simple
+      // liaison (les sliders deviennent l'offset de repos dans le repère de
+      // l'os).
+      BindingRetarget.retargetShape(
+        rig,
+        shape,
+        picked,
+        _controller?.timeMs ?? 0,
+      );
+    });
     await _flushSave();
     final bone = rig.boneById(picked);
     _snack('Pièce liée à l’os « ${bone?.name ?? '?'} »');
@@ -775,7 +786,17 @@ class _StudioScreenState extends State<StudioScreen>
     );
     if (picked == null || !mounted) return;
     _pushUndo();
-    setState(() => rig.bindLayer(shape.id, layer.id, picked));
+    setState(() {
+      // Reciblage sans saut pour la couche aussi (v0.14) — les couches
+      // étant statiques, la correction est unique (au temps du curseur).
+      BindingRetarget.retargetLayer(
+        rig,
+        shape,
+        layer,
+        picked,
+        _controller?.timeMs ?? 0,
+      );
+    });
     await _flushSave();
     final bone = rig.boneById(picked);
     _snack('Couche « ${layer.name} » liée à « ${bone?.name ?? '?'} »');
@@ -1803,17 +1824,9 @@ class _StudioScreenState extends State<StudioScreen>
     }
   }
 
-  /// Dernier projet importé (résultat du dialogue d'import) + dernier
-  /// message d'erreur affiché DANS le dialogue (pour corriger sans perdre
-  /// le texte collé).
-  AnimationProject? _lastImported;
   String? _lastImportError;
 
-  /// Dispose différé du controller de texte du dialogue d'import (annulé au
-  /// dispose de l'écran — pas de timer pendent).
-  Timer? _importControllerTimer;
-
-  /// Décode le texte collé : format simple « vasf » (champ version) ou
+  /// Décode un contenu JSON : format simple « vasf » (champ version) ou
   /// projet complet — null + [_lastImportError] en cas de problème.
   AnimationProject? _parseImportText(String text) {
     _lastImportError = null;
@@ -1843,87 +1856,37 @@ class _StudioScreenState extends State<StudioScreen>
     }
   }
 
-  /// Import d'une animation : dialogue avec collage (presse-papiers). La
-  /// réussite crée un NOUVEAU projet (jamais de remplacement à l'aveugle)
-  /// et l'ouvre.
-  Future<void> _importJsonDialog() async {
+  /// Import d'une animation depuis un FICHIER (.json) : sélecteur système
+  /// (SAF sous Android, aucune permission à déclarer). La réussite crée un
+  /// NOUVEAU projet (jamais de remplacement à l'aveugle) et l'ouvre.
+  Future<void> _importJsonFile() async {
     _lastImportError = null;
-    _lastImported = null;
-    final controller = TextEditingController();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) => AlertDialog(
-          title: const Text('Importer un JSON'),
-          content: SizedBox(
-            width: 480,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                const Text(
-                  'Colle un JSON « vasf » (simple, pour agents IA) ou un '
-                  'projet complet. Un NOUVEAU projet sera créé.',
-                  style: TextStyle(fontSize: 12, color: Colors.white70),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: controller,
-                  maxLines: 12,
-                  autofocus: true,
-                ),
-                if (_lastImportError != null) ...<Widget>[
-                  const SizedBox(height: 8),
-                  Flexible(
-                    child: SingleChildScrollView(
-                      child: Text(
-                        _lastImportError!,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: Color(0xFFFF8A8A),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Annuler'),
-            ),
-            FilledButton(
-              onPressed: () {
-                final imported = _parseImportText(controller.text);
-                if (imported == null) {
-                  setDialogState(() {});
-                  return;
-                }
-                _lastImported = imported;
-                Navigator.of(dialogContext).pop(true);
-              },
-              child: const Text('Importer'),
-            ),
-          ],
-        ),
-      ),
-    );
-    // Le controller est différé d'une seconde : le TextField reste vivant
-    // pendant l'animation de sortie du dialogue (dispose immédiat = assert
-    // « used after being disposed »). Annulé si l'écran est détruit avant
-    // (pas de timer pendent à la fin des tests).
-    _importControllerTimer?.cancel();
-    _importControllerTimer = Timer(
-      const Duration(seconds: 1),
-      controller.dispose,
-    );
-    final imported = _lastImported;
-    if (ok != true || imported == null || !mounted) return;
+    final List<PlatformFile> picked;
+    try {
+      picked = await FilePicker.pickFiles(
+        dialogTitle: 'Importer une animation',
+        type: FileType.custom,
+        allowedExtensions: <String>['json'],
+      );
+    } catch (error) {
+      _snack('Sélecteur de fichiers indisponible : $error');
+      return;
+    }
+    if (picked.isEmpty || !mounted) return; // annulé par l'utilisateur
+    String text;
+    try {
+      text = utf8.decode(await picked.first.readAsBytes());
+    } catch (error) {
+      _snack('Fichier illisible : $error');
+      return;
+    }
+    final imported = _parseImportText(text);
+    if (imported == null) {
+      await _showImportProblems(_lastImportError ?? 'JSON invalide');
+      return;
+    }
     await widget.repository.save(imported);
     if (!mounted) return;
-    _lastImported = null;
     await Navigator.of(context).pushReplacement(
       MaterialPageRoute<void>(
         builder: (_) =>
@@ -1931,6 +1894,28 @@ class _StudioScreenState extends State<StudioScreen>
       ),
     );
     _snack('Projet importé : ${imported.name}');
+  }
+
+  /// Liste des problèmes d'un JSON refusé — dialogue défilant, fermable.
+  Future<void> _showImportProblems(String problems) {
+    return showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Import impossible'),
+        content: SingleChildScrollView(
+          child: Text(
+            problems,
+            style: const TextStyle(fontSize: 12, color: Color(0xFFFF8A8A)),
+          ),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Fermer'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _share(File file, String mimeType) async {
@@ -2807,7 +2792,7 @@ class _StudioScreenState extends State<StudioScreen>
         'json' => _exportJson(),
         'clipboard' => _copyJson(),
         'simple' => _exportSimpleJson(),
-        'import' => _importJsonDialog(),
+        'import' => _importJsonFile(),
         _ => null,
       },
       itemBuilder: (context) => const <PopupMenuEntry<String>>[
@@ -2827,7 +2812,7 @@ class _StudioScreenState extends State<StudioScreen>
         PopupMenuDivider(),
         PopupMenuItem<String>(
           value: 'import',
-          child: Text('Importer un JSON…'),
+          child: Text('Importer un fichier JSON…'),
         ),
       ],
     );

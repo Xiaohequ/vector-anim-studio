@@ -1,5 +1,9 @@
+import 'dart:convert';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
+import 'package:cross_file/cross_file.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -486,25 +490,28 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('importer un JSON vasf crée et ouvre un nouveau projet', (
+  testWidgets('importer un fichier JSON vasf crée et ouvre un nouveau projet', (
     tester,
   ) async {
     final repository = _MemoryRepository();
     await pumpStudio(tester, repository, seededProject());
 
-    // Menu Export ▸ Importer un JSON…
+    // Faux sélecteur : un fichier « demo.json » en mémoire.
+    final original = FilePickerPlatform.instance;
+    addTearDown(() => FilePickerPlatform.instance = original);
+    FilePickerPlatform.instance = _FakePickerPlatform(
+      Uint8List.fromList(
+        utf8.encode(
+          '{"version": 1, "name": "Importé", "shapes": ['
+          '{"name": "B", "type": "circle", "end": 1}]}',
+        ),
+      ),
+    );
+
+    // Menu Export ▸ Importer un fichier JSON…
     await tester.tap(find.byTooltip('Export'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Importer un JSON…'));
-    await tester.pumpAndSettle();
-
-    // Coller un JSON vasf valide.
-    await tester.enterText(
-      find.byType(TextField).last,
-      '{"version": 1, "name": "Importé", "shapes": ['
-      '{"name": "B", "type": "circle", "end": 1}]}',
-    );
-    await tester.tap(find.text('Importer'));
+    await tester.tap(find.text('Importer un fichier JSON…'));
     await tester.pumpAndSettle();
 
     // Le nouveau projet est ouvert (titre AppBar) et enregistré.
@@ -517,28 +524,84 @@ void main() {
     expect(imported.height, 1280);
   });
 
-  testWidgets('import invalide : les erreurs s’affichent dans le dialogue', (
-    tester,
-  ) async {
-    final repository = _MemoryRepository();
-    await pumpStudio(tester, repository, seededProject());
+  testWidgets(
+    'fichier JSON invalide : les erreurs s’affichent dans un dialogue',
+    (tester) async {
+      final repository = _MemoryRepository();
+      await pumpStudio(tester, repository, seededProject());
 
-    await tester.tap(find.byTooltip('Export'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Importer un JSON…'));
-    await tester.pumpAndSettle();
+      final original = FilePickerPlatform.instance;
+      addTearDown(() => FilePickerPlatform.instance = original);
+      FilePickerPlatform.instance = _FakePickerPlatform(
+        Uint8List.fromList(utf8.encode('{"version": 9, "shapes": []}')),
+      );
 
-    await tester.enterText(
-      find.byType(TextField).last,
-      '{"version": 9, "shapes": []}',
-    );
-    await tester.tap(find.text('Importer'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Export'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Importer un fichier JSON…'));
+      await tester.pumpAndSettle();
 
-    // Les problèmes sont listés (version + shapes vides)…
-    expect(find.textContaining('version'), findsWidgets);
-    expect(find.textContaining('au moins une forme'), findsOneWidget);
-    // …et le dialogue reste ouvert (bouton toujours présent).
-    expect(find.text('Importer'), findsOneWidget);
-  });
+      // Les problèmes sont listés (version + shapes vides)…
+      expect(find.text('Import impossible'), findsOneWidget);
+      expect(find.textContaining('version'), findsWidgets);
+      expect(find.textContaining('au moins une forme'), findsOneWidget);
+      // …dans un dialogue fermable.
+      expect(find.text('Fermer'), findsOneWidget);
+      // Le dépôt reste inchangé.
+      final summaries = await repository.listSummaries();
+      expect(summaries.map((s) => s.name), isNot(contains('Importé')));
+    },
+  );
+}
+
+/// Faux fichier choisi dans le sélecteur : contenu EN MÉMOIRE (aucune I/O
+/// réelle — dart:io ne progresse pas dans la zone fake-async de testWidgets).
+base class _FakePickedFile extends PlatformFile {
+  _FakePickedFile(this._name, this._bytes);
+
+  final String _name;
+  final Uint8List _bytes;
+
+  @override
+  String get name => _name;
+
+  @override
+  Uri get uri => Uri.file('/memory/$_name');
+
+  @override
+  XFile get xFile => XFile.fromData(_bytes);
+
+  @override
+  int? lengthSync() => _bytes.length;
+
+  @override
+  Future<int?> length() async => _bytes.length;
+
+  @override
+  Future<Uint8List> readAsBytes() async => _bytes;
+
+  @override
+  Stream<Uint8List> readAsByteStream() => Stream.value(_bytes);
+}
+
+/// Faux sélecteur de fichiers : renvoie un seul « demo.json ».
+class _FakePickerPlatform extends FilePickerPlatform {
+  _FakePickerPlatform(this._bytes);
+
+  final Uint8List _bytes;
+
+  @override
+  Future<List<PlatformFile>> pickFiles({
+    String? dialogTitle,
+    String? initialDirectory,
+    FileType type = FileType.any,
+    List<String>? allowedExtensions,
+    Function(FilePickerStatus)? onFileLoading,
+    int compressionQuality = 0,
+    AndroidOptions androidOptions = const AndroidOptions(),
+    DarwinOptions darwinOptions = const DarwinOptions(),
+    WindowsOptions windowsOptions = const WindowsOptions(),
+    LinuxOptions linuxOptions = const LinuxOptions(),
+    WebOptions webOptions = const WebOptions(),
+  }) async => <PlatformFile>[_FakePickedFile('demo.json', _bytes)];
 }

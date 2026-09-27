@@ -13,8 +13,9 @@ import 'package:vector_anim_studio/models/animation.dart';
 /// bord — mesuré par centroid du masque bleu (bug v0.13.0 : un pivot placé
 /// dans layers[] était ignoré en silence et la porte tournait au centre).
 void main() {
-  testWidgets('exemple G2 : pivot de la porte au bord gauche (rendu mesuré)',
-      (tester) async {
+  testWidgets('exemple G2 : pivot de la porte au bord gauche (rendu mesuré)', (
+    tester,
+  ) async {
     final raw = File('../docs/vasf-2-g2-example.json').readAsStringSync();
     final project = SimpleAnimationFormat.fromJson(
       jsonDecode(raw) as Map<String, dynamic>,
@@ -31,10 +32,10 @@ void main() {
     await tester.runAsync(() async {
       final recorder = ui.PictureRecorder();
       final canvas = ui.Canvas(recorder);
-      ScenePainter(project: project, timeMs: 1700).paint(
-        canvas,
-        const ui.Size(360, 640),
-      );
+      ScenePainter(
+        project: project,
+        timeMs: 1700,
+      ).paint(canvas, const ui.Size(360, 640));
       image = await recorder.endRecording().toImage(360, 640);
     });
     final data = await tester.runAsync(
@@ -67,7 +68,10 @@ void main() {
     final cy = sumY / count;
     expect(cx, closeTo(242.5, 20), reason: 'centroid x bleu = $cx');
     expect(cy, closeTo(485.7, 20), reason: 'centroid y bleu = $cy');
-    expect(math.sqrt(math.pow(cx - 280, 2) + math.pow(cy - 430, 2)),
-        greaterThan(30), reason: 'la porte ne tourne PAS autour du centre');
+    expect(
+      math.sqrt(math.pow(cx - 280, 2) + math.pow(cy - 430, 2)),
+      greaterThan(30),
+      reason: 'la porte ne tourne PAS autour du centre',
+    );
   });
 }

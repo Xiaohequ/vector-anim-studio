@@ -670,6 +670,15 @@ class BoneFrame {
     final scaled = Offset(local.dx * stretchX, local.dy * stretchY);
     return joint + rotateVector(scaled, worldAngle);
   }
+
+  /// Inverse de [mapPoint] : un point RENDU par l'os à l'instant courant →
+  /// ses coordonnées de repos. Sert au reciblage sans saut (re-lier une
+  /// pièce à un autre os en conservant sa position monde — v0.14).
+  Offset mapPointInverse(Offset q) {
+    final local = rotateVector(q - joint, -worldAngle);
+    final pre = Offset(local.dx / stretchX, local.dy / stretchY);
+    return rotateVector(pre, worldAngleRest) + jointRest;
+  }
 }
 
 /// Évaluation FK du rig à un instant donné : transformée monde de chaque os.

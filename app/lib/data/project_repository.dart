@@ -195,9 +195,7 @@ class ProjectRepository {
     await db.execute(
       'ALTER TABLE shapes ADD COLUMN pivot_dy REAL NOT NULL DEFAULT 0',
     );
-    await db.execute(
-      'ALTER TABLE shape_keyframes ADD COLUMN bezier_json TEXT',
-    );
+    await db.execute('ALTER TABLE shape_keyframes ADD COLUMN bezier_json TEXT');
   }
 
   /// Schéma v1 → v2 : les pistes par propriété sont regroupées en poses.
