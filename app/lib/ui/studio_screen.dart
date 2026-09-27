@@ -516,6 +516,58 @@ class _StudioScreenState extends State<StudioScreen>
     _scheduleSave();
   }
 
+  /// Couleur d'une couche (v0.15) : base si la forme n'a aucune keyframe,
+  /// sinon entrée de couleur dans la pose au curseur (auto-key).
+  void _setLayerColor(ShapeLayer layer, int color) {
+    final shape = _selected;
+    final controller = _controller;
+    if (shape == null || controller == null) return;
+    _pushUndo(tag: 'layerColor:${shape.id}:${layer.id}');
+    setState(() {
+      shape.applyLayerColor(
+        layer,
+        color,
+        controller.timeMs,
+        autoKey: true,
+        toleranceMs: controller.snapToleranceMs,
+      );
+    });
+    _scheduleSave();
+  }
+
+  /// Losange de couleur d'une couche (v0.15) : pose la couleur COURANTE
+  /// (échantillonnée au curseur) dans la pose au curseur, ou retire
+  /// l'entrée de couleur de la pose s'il y en a déjà une.
+  void _toggleLayerColor(ShapeLayer layer) {
+    final shape = _selected;
+    final controller = _controller;
+    if (shape == null || controller == null) return;
+    _pushUndo(tag: 'layerColor:${shape.id}:${layer.id}');
+    setState(() {
+      final nearest = shape.keyframeNear(
+        controller.timeMs,
+        controller.snapToleranceMs,
+      );
+      if (nearest != null && nearest.layerColors.containsKey(layer.id)) {
+        nearest.layerColors.remove(layer.id);
+      } else {
+        final color = shape.colorAtLayer(
+          layer.id,
+          controller.timeMs,
+          layer.colorValue,
+        );
+        shape.applyLayerColor(
+          layer,
+          color,
+          controller.timeMs,
+          autoKey: true,
+          toleranceMs: controller.snapToleranceMs,
+        );
+      }
+    });
+    _scheduleSave();
+  }
+
   /// Pivot de rotation (v0.13) : statique, pas d'auto-key — un glisser des
   /// deux sliders coalescé en une seule entrée d'annulation.
   void _setPivot(double dx, double dy) {
@@ -562,6 +614,8 @@ class _StudioScreenState extends State<StudioScreen>
         onEditLayers: () => _editShape(shape),
         onOpenSource: () => _openSourceProject(shape),
         onPivotChanged: _setPivot,
+        onLayerColorChanged: _setLayerColor,
+        onToggleLayerColor: _toggleLayerColor,
         skeletonPiece: project.isSkeleton,
         skeletonNote: _bindingNote(shape),
         skeletonRig: project.isSkeleton ? project.skeleton : null,
@@ -638,6 +692,7 @@ class _StudioScreenState extends State<StudioScreen>
         bone,
         controller,
         details.delta / geo.scale,
+        keyframed: true,
       );
     });
     _gestureMutated = true;
@@ -1122,16 +1177,50 @@ class _StudioScreenState extends State<StudioScreen>
     return null;
   }
 
-  /// Translate l'ancrage de repos d'un os de [step] (coordonnées scène) et
-  /// emporte les pièces liées à l'os et à sa descendance : l'os suit le
-  /// doigt ET la pièce du doigt suit (collée à l'os).
+  /// Translate l'ancrage d'un os de [step] (coordonnées scène).
+  /// Os SANS keyframes : pose de repos (translateBoneRest) + emport des
+  /// pièces liées à l'os et à sa descendance — l'os suit le doigt ET la
+  /// pièce du doigt suit (collée à l'os).
+  /// Os ANIMÉ (v0.15) : translation KEYFRAMÉE au curseur (auto-key) — la
+  /// pose de repos reste intacte, les pièces liées suivent par la
+  /// transformée os(t) aux autres instants.
   void _translateBoneFollow(
     AnimationProject project,
     SkeletonRig rig,
     RigBone bone,
     TimelineController controller,
-    Offset step,
-  ) {
+    Offset step, {
+
+    /// Glisser explicite de l'OS (poignée ✥) : si l'os est animé, écrire une
+    /// translation keyframée. Le glisser d'une PIÈCE liée garde la sémantique
+    /// repos (translateBoneRest + carry) même quand l'os est animé.
+    bool keyframed = false,
+  }) {
+    if (keyframed && rig.hasKeyframes(bone.id)) {
+      final pose = SkeletonPose.evaluate(rig, controller.timeMs);
+      final parentFrame = pose.frameOf(bone.parentId);
+      final local = parentFrame == null
+          ? step
+          : rotateVector(step, -parentFrame.worldAngle);
+      final snapped =
+          rig
+              .keyframeNear(
+                bone.id,
+                controller.timeMs,
+                controller.snapToleranceMs,
+              )
+              ?.timeMs ??
+          controller.timeMs;
+      final current = rig.translationAt(bone.id, snapped);
+      rig.upsertKeyframe(
+        bone.id,
+        snapped,
+        rig.angleDeltaAt(bone.id, snapped),
+        tx: current.dx + local.dx,
+        ty: current.dy + local.dy,
+      );
+      return;
+    }
     final before = SkeletonPose.evaluate(rig, controller.timeMs);
     rig.translateBoneRest(bone, before, step);
     final after = SkeletonPose.evaluate(rig, controller.timeMs);
@@ -1164,22 +1253,29 @@ class _StudioScreenState extends State<StudioScreen>
       final selectedBone = rig.boneById(_selectedBoneId);
       final pose = SkeletonPose.evaluate(rig, controller.timeMs);
       final geo = SceneGeometry.fitFor(project, canvasSize);
-      // IK 2 os (v0.10) : glisser l'EXTRÉMITÉ de l'enfant unique résout la
-      // chaîne — prioritaire sur la poignée de rotation. v0.10.1 : le
-      // losange vert est une vraie poignée — l'IK démarre que l'os PARENT
-      // (ikEnabled) ou l'ENFANT (effecteur) soit sélectionné, voire SANS
-      // sélection du tout (les v0.10.0 exigeaient le parent : glisser le
-      // poignet fraîchement tapé ne faisait rien).
+      // IK (v0.10, généralisé v0.15) : glisser l'EXTRÉMITÉ du dernier os de
+      // la chaîne résout toute la chaîne (2 os = solveur analytique, N os =
+      // CCD) — prioritaire sur la poignée de rotation. L'os touché est
+      // l'effecteur : la racine (ikEnabled) est un ancêtre strict… ou lui-
+      // même si sa chaîne va plus loin. v0.10.1 : parent OU effecteur OU
+      // aucune sélection — le losange vert est une vraie poignée.
       RigBone? ikParent;
       if (selectedBone != null) {
         if (selectedBone.ikEnabled) {
+          // ① L'os sélectionné est une racine IK (v0.10) : le losange est
+          // sur l'extrémité du DERNIER os de sa chaîne (descendant).
           ikParent = selectedBone;
         } else {
-          final parent = rig.boneById(selectedBone.parentId);
-          if (parent != null &&
-              parent.ikEnabled &&
-              rig.onlyChildOf(parent.id)?.id == selectedBone.id) {
-            ikParent = parent;
+          // ② L'os sélectionné est l'EFFECTEUR d'une chaîne (v0.15) : la
+          // racine (ikEnabled) est un ancêtre strict dont la chaîne
+          // d'enfants uniques mène à cet os.
+          var current = rig.boneById(selectedBone.parentId);
+          while (current != null && ikParent == null) {
+            if (current.ikEnabled &&
+                rig.ikEffectorOf(current.id)?.id == selectedBone.id) {
+              ikParent = current;
+            }
+            current = rig.boneById(current.parentId);
           }
         }
       }
@@ -1305,34 +1401,53 @@ class _StudioScreenState extends State<StudioScreen>
     switch (_gesture) {
       case _CanvasGesture.boneIk:
         final rig = project.skeleton;
-        final bone = rig?.boneById(_dragBoneId);
-        if (rig == null || bone == null) break;
-        final child = rig.onlyChildOf(bone.id);
-        if (child == null) break;
+        final root = rig?.boneById(_dragBoneId);
+        if (rig == null || root == null || !root.ikEnabled) break;
+        final chain = rig.ikChain(root.id);
+        if (chain.isEmpty) break;
         final pose = SkeletonPose.evaluate(rig, controller.timeMs);
-        final parentFrame = pose.frameOf(bone.id);
-        final childFrame = pose.frameOf(child.id);
-        if (parentFrame == null || childFrame == null) break;
         final geo = SceneGeometry.fitFor(project, canvasSize);
         final target = geo.canvasToScene(details.localFocalPoint);
-        final (parentAngle, childAngle) = solveTwoBoneIk(
-          joint: parentFrame.joint,
-          length1: math.max(1.0, parentFrame.length * parentFrame.stretchX),
-          length2: math.max(1.0, childFrame.length * childFrame.stretchX),
-          target: target,
-          bend: bone.bendSign,
-        );
+        List<double> desired;
+        if (chain.length == 2) {
+          // 2 os : solveur analytique précis (v0.10, coude contrôlé).
+          final parentFrame = pose.frameOf(chain[0].id);
+          final childFrame = pose.frameOf(chain[1].id);
+          if (parentFrame == null || childFrame == null) break;
+          final (parentAngle, childAngle) = solveTwoBoneIk(
+            joint: parentFrame.joint,
+            length1: math.max(1.0, parentFrame.length * parentFrame.stretchX),
+            length2: math.max(1.0, childFrame.length * childFrame.stretchX),
+            target: target,
+            bend: root.bendSign,
+          );
+          desired = <double>[parentAngle, childAngle];
+        } else {
+          // N os (v0.15) : CCD itératif sur la chaîne.
+          final frames = <BoneFrame>[];
+          var missing = false;
+          for (final bone in chain) {
+            final frame = pose.frameOf(bone.id);
+            if (frame == null) {
+              missing = true;
+              break;
+            }
+            frames.add(frame);
+          }
+          if (missing) break;
+          desired = solveChainIk(
+            rootJoint: frames.first.joint,
+            lengths: <double>[
+              for (final frame in frames)
+                math.max(1.0, frame.length * frame.stretchX),
+            ],
+            angles: <double>[for (final frame in frames) frame.worldAngle],
+            target: target,
+          );
+        }
         // setState à chaque update : repeint canvas + timeline en direct.
         setState(() {
-          _poseChainTo(
-            project,
-            rig,
-            bone,
-            parentAngle,
-            childAngle,
-            pose,
-            controller,
-          );
+          _poseChainAnglesTo(project, rig, chain, desired, pose, controller);
         });
         _gestureMutated = true;
       case _CanvasGesture.boneRotate:
@@ -1499,67 +1614,45 @@ class _StudioScreenState extends State<StudioScreen>
     });
   }
 
-  /// IK 2 os (v0.10) : pose les angles MONDE résolus du parent et de
-  /// l'enfant — keyframe au curseur pour un os animé (auto-key), angle de
-  /// repos sinon (l'enfant est relatif à l'angle monde du parent APRÈS sa
-  /// propre mutation, d'où la ré-évaluation `mid`). Os posé : les pièces
-  /// liées sont emportées par la nouvelle pose de repos.
-  void _poseChainTo(
+  /// IK (v0.10 2 os, v0.15 chaînes N os) : pose les angles MONDE désirés de
+  /// chaque os de la chaîne (ordre racine → effecteur) — keyframe au curseur
+  /// pour un os animé (auto-key), angle de repos sinon (chaque os est posé
+  /// DANS l'état APRÈS la mutation de son parent, d'où la ré-évaluation `mid`
+  /// à chaque étape). Os posé : les pièces liées sont emportées par la
+  /// nouvelle pose de repos.
+  void _poseChainAnglesTo(
     AnimationProject project,
     SkeletonRig rig,
-    RigBone ikParent,
-    double parentAngle,
-    double childAngle,
+    List<RigBone> chain,
+    List<double> desiredAngles,
     SkeletonPose before,
     TimelineController controller,
   ) {
-    final child = rig.onlyChildOf(ikParent.id);
-    if (child == null) return;
-    final grandFrame = before.frameOf(ikParent.parentId);
-    final parentFrameBefore = before.frameOf(ikParent.id);
-    if (parentFrameBefore == null) return;
-    if (rig.hasKeyframes(ikParent.id)) {
-      final target =
-          rig
-              .keyframeNear(
-                ikParent.id,
-                controller.timeMs,
-                controller.snapToleranceMs,
-              )
-              ?.timeMs ??
-          controller.timeMs;
-      rig.upsertKeyframe(
-        ikParent.id,
-        target,
-        parentAngle -
-            parentFrameBefore.worldAngleRest -
-            (grandFrame?.worldDelta ?? 0),
-      );
-    } else {
-      ikParent.restAngle = parentAngle - (grandFrame?.worldAngle ?? 0);
-    }
-    // L'enfant est posé dans l'état APRÈS la mutation du parent.
-    final mid = SkeletonPose.evaluate(rig, controller.timeMs);
-    final midParent = mid.frameOf(child.parentId);
-    final midChild = mid.frameOf(child.id);
-    if (midParent == null || midChild == null) return;
-    if (rig.hasKeyframes(child.id)) {
-      final target =
-          rig
-              .keyframeNear(
-                child.id,
-                controller.timeMs,
-                controller.snapToleranceMs,
-              )
-              ?.timeMs ??
-          controller.timeMs;
-      rig.upsertKeyframe(
-        child.id,
-        target,
-        childAngle - midChild.worldAngleRest - midParent.worldDelta,
-      );
-    } else {
-      child.restAngle = childAngle - midParent.worldAngle;
+    assert(chain.length == desiredAngles.length);
+    for (var i = 0; i < chain.length; i++) {
+      final bone = chain[i];
+      final mid = SkeletonPose.evaluate(rig, controller.timeMs);
+      final frame = mid.frameOf(bone.id);
+      final parentFrame = mid.frameOf(bone.parentId);
+      if (frame == null) continue;
+      final delta =
+          desiredAngles[i] -
+          frame.worldAngleRest -
+          (parentFrame?.worldDelta ?? 0);
+      if (rig.hasKeyframes(bone.id)) {
+        final target =
+            rig
+                .keyframeNear(
+                  bone.id,
+                  controller.timeMs,
+                  controller.snapToleranceMs,
+                )
+                ?.timeMs ??
+            controller.timeMs;
+        rig.upsertKeyframe(bone.id, target, delta);
+      } else {
+        bone.restAngle = desiredAngles[i] - (parentFrame?.worldAngle ?? 0);
+      }
     }
     carryBoundPieces(
       project,

@@ -251,6 +251,14 @@ class ScenePainter extends CustomPainter {
       final effectiveOpacity = (opacity * boneOpacity).clamp(0.0, 1.0);
       final cx = effX <= 0 ? 0.0001 : effX;
       final cy = effY <= 0 ? 0.0001 : effY;
+      // Couleur animée + morph de points (v0.15) : échantillonnés dans les
+      // poses de la forme — retombent sur la base sans keyframe colorée/morphée.
+      final layerColor = shape.colorAtLayer(
+        layer.id,
+        sampleMs,
+        layer.colorValue,
+      );
+      final layerPoints = shape.pointsAtLayer(layer.id, layer.points, sampleMs);
       canvas.save();
       if (carried != null) _applyBoneDelta(canvas, carried);
       canvas.translate(x, y);
@@ -258,7 +266,14 @@ class ScenePainter extends CustomPainter {
       canvas.rotate(rotation);
       canvas.scale(cx, cy);
       canvas.translate(-px, -py);
-      _paintLayer(canvas, layer, effectiveOpacity, strokeFactor);
+      _paintLayer(
+        canvas,
+        layer,
+        effectiveOpacity,
+        strokeFactor,
+        colorValue: layerColor,
+        points: layerPoints,
+      );
       canvas.restore();
     }
   }
@@ -320,13 +335,15 @@ class ScenePainter extends CustomPainter {
     Canvas canvas,
     ShapeLayer layer,
     double shapeOpacity,
-    double strokeFactor,
-  ) {
+    double strokeFactor, {
+    required int colorValue,
+    required List<Offset> points,
+  }) {
     final opacity = (shapeOpacity * layer.opacity).clamp(0.0, 1.0);
     if (opacity <= 0) return;
     final stroke = math.max(0.0, layer.strokeWidth * strokeFactor);
     final paint = Paint()
-      ..color = Color(layer.colorValue).withValues(alpha: opacity)
+      ..color = Color(colorValue).withValues(alpha: opacity)
       ..style = layer.filled ? PaintingStyle.fill : PaintingStyle.stroke
       ..strokeWidth = stroke
       ..strokeCap = StrokeCap.round
@@ -370,7 +387,7 @@ class ScenePainter extends CustomPainter {
         );
       case ShapeKind.path:
         final path = Path();
-        final pts = layer.points;
+        final pts = points;
         if (pts.isEmpty) {
           path.addRect(
             Rect.fromCenter(

@@ -247,4 +247,133 @@ void main() {
       reason: 'la pièce n a pas sauté au reciblage',
     );
   });
+
+  testWidgets('couleur animée : interpolation mesurée entre deux poses', (
+    tester,
+  ) async {
+    final project = AnimationProject.blank(name: 'Ciel');
+    final shape = VectorShape(name: 'Aplat', x: 360, y: 640);
+    shape.layers.add(
+      ShapeLayer(
+        name: 'Ciel',
+        kind: ShapeKind.rect,
+        width: 720,
+        height: 1280,
+        colorValue: 0xFF5B8DEF,
+      ),
+    );
+    project.shapes.add(shape);
+    // Pose à t=0 sans couleur (retombe sur la base bleue), pose rouge à 2 s.
+    shape.upsertKeyframe(0, shape.poseAt(0), easing: EasingKind.linear);
+    shape.upsertKeyframe(
+      2000,
+      shape.poseAt(2000),
+      easing: EasingKind.linear,
+      layerColors: {shape.layers.first.id: 0xFFFF5C5C},
+    );
+    project.fps = 25;
+
+    // À mi-course (linéaire) : couleur mélangée ≈ (0xAD, 0x74, 0xA5).
+    final pixels = await _render(tester, project, 1000);
+    int countWhere(bool Function(int r, int g, int b) match) {
+      var count = 0;
+      for (var i = 0; i < pixels.length; i += 4) {
+        if (match(pixels[i], pixels[i + 1], pixels[i + 2])) count++;
+      }
+      return count;
+    }
+
+    final blendCount = countWhere(
+      (r, g, b) =>
+          (r - 0xAD).abs() < 30 &&
+          (g - 0x74).abs() < 30 &&
+          (b - 0xA5).abs() < 30,
+    );
+    final blueCount = countWhere(
+      (r, g, b) =>
+          (r - 0x5B).abs() < 25 &&
+          (g - 0x8D).abs() < 25 &&
+          (b - 0xEF).abs() < 25,
+    );
+    expect(
+      blendCount,
+      greaterThan(400),
+      reason: 'la couleur mélangée est rendue',
+    );
+    expect(blueCount, 0, reason: 'le bleu pur a bien disparu à mi-course');
+  });
+
+  testWidgets('morph de points : le path suit les poses (centroid mesuré)', (
+    tester,
+  ) async {
+    // Grand cadre : le nuage glisse de +200 unités SANS sortir du cadre
+    // (échelle de vue 1 : rendu 800×400 d'un projet 800×400).
+    final project = AnimationProject(width: 800, height: 400, fps: 25);
+    final shape = VectorShape(name: 'Flamme', x: 200, y: 200);
+    final layer = ShapeLayer(
+      name: 'Langue',
+      kind: ShapeKind.path,
+      width: 200,
+      height: 200,
+      colorValue: 0xFFFF5C5C,
+    );
+    layer.points.addAll(const <Offset>[
+      Offset(60, 60),
+      Offset(140, 60),
+      Offset(100, 160),
+    ]);
+    shape.layers.add(layer);
+    project.shapes.add(shape);
+    shape.upsertKeyframe(
+      0,
+      shape.poseAt(0),
+      easing: EasingKind.linear,
+      layerPoints: {layer.id: List<Offset>.from(layer.points)},
+    );
+    shape.upsertKeyframe(
+      2000,
+      shape.poseAt(2000),
+      easing: EasingKind.linear,
+      layerPoints: {
+        layer.id: const <Offset>[
+          Offset(260, 60),
+          Offset(340, 60),
+          Offset(300, 160),
+        ],
+      },
+    );
+    project.fps = 25;
+
+    final start = _centroid(
+      await _render(tester, project, 0, w: 800, h: 400),
+      800,
+      400,
+      (r, g, b) =>
+          (r - 0xFF).abs() < 30 &&
+          (g - 0x5C).abs() < 30 &&
+          (b - 0x5C).abs() < 30,
+    );
+    final end = _centroid(
+      await _render(tester, project, 2000, w: 800, h: 400),
+      800,
+      400,
+      (r, g, b) =>
+          (r - 0xFF).abs() < 30 &&
+          (g - 0x5C).abs() < 30 &&
+          (b - 0x5C).abs() < 30,
+    );
+    // Le nuage a glissé de +200 unités stockées → +200 px écran (échelle 1).
+    expect(end.x - start.x, closeTo(200, 8), reason: 'le morph a été appliqué');
+    // Garde anti-faux-positif : à mi-course, le centroid est à mi-chemin.
+    final mid = _centroid(
+      await _render(tester, project, 1000, w: 800, h: 400),
+      800,
+      400,
+      (r, g, b) =>
+          (r - 0xFF).abs() < 30 &&
+          (g - 0x5C).abs() < 30 &&
+          (b - 0x5C).abs() < 30,
+    );
+    expect(mid.x - start.x, closeTo(100, 8));
+  });
 }

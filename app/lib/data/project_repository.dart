@@ -46,7 +46,9 @@ class ProjectRepository {
   /// v2 : les keyframes sont des « poses » (toutes les propriétés à un temps).
   /// v3 : instances d'animation (colonnes embedded_*). v4 : type de projet
   /// (vector/skeleton) + rig squelette sérialisé en JSON sur la ligne projet.
-  static const int schemaVersion = 5;
+  /// v5 : facteurs d'axe + pivot + bezier. v6 (v0.15) : couleur animée et
+  /// morph de points par keyframe (maps JSON layer_colors / layer_points).
+  static const int schemaVersion = 6;
 
   final DatabaseFactory _factory;
   final String? databasePath;
@@ -134,6 +136,8 @@ class ProjectRepository {
               time_ms INTEGER NOT NULL,
               easing TEXT NOT NULL,
               bezier_json TEXT,
+              layer_colors TEXT,
+              layer_points TEXT,
               values_json TEXT NOT NULL,
               FOREIGN KEY (shape_id) REFERENCES shapes (id) ON DELETE CASCADE
             )
@@ -153,6 +157,7 @@ class ProjectRepository {
           if (oldVersion < 3) await _addEmbeddedColumns(db);
           if (oldVersion < 4) await _addTypeAndSkeletonColumns(db);
           if (oldVersion < 5) await _addAxisPivotAndBezierColumns(db);
+          if (oldVersion < 6) await _addLayerKeyframeColumns(db);
         },
       ),
     );
@@ -196,6 +201,17 @@ class ProjectRepository {
       'ALTER TABLE shapes ADD COLUMN pivot_dy REAL NOT NULL DEFAULT 0',
     );
     await db.execute('ALTER TABLE shape_keyframes ADD COLUMN bezier_json TEXT');
+  }
+
+  /// Schéma v5 → v6 (v0.15) : couleur animée + morph de points par keyframe
+  /// (maps JSON id de couche → couleur / points). Additif, null par défaut.
+  Future<void> _addLayerKeyframeColumns(Database db) async {
+    await db.execute(
+      'ALTER TABLE shape_keyframes ADD COLUMN layer_colors TEXT',
+    );
+    await db.execute(
+      'ALTER TABLE shape_keyframes ADD COLUMN layer_points TEXT',
+    );
   }
 
   /// Schéma v1 → v2 : les pistes par propriété sont regroupées en poses.
@@ -324,6 +340,26 @@ class ProjectRepository {
             for (final v in (jsonDecode(bezierRaw as String) as List))
               (v as num).toDouble(),
           ];
+    // Couleur animée + morph (v0.15) : maps JSON par id de couche (null =
+    // aucune — colonnes absentes avant le schéma v6).
+    final colorsRaw = row['layer_colors'] as String?;
+    final colorsMap = colorsRaw == null || colorsRaw.trim().isEmpty
+        ? null
+        : (jsonDecode(colorsRaw) as Map).cast<String, Object?>().map(
+            (key, value) => MapEntry(key, (value as num).toInt()),
+          );
+    final pointsRaw = row['layer_points'] as String?;
+    final pointsMap = pointsRaw == null || pointsRaw.trim().isEmpty
+        ? null
+        : (jsonDecode(pointsRaw) as Map).cast<String, Object?>().map(
+            (key, value) => MapEntry(key, <Offset>[
+              for (final point in (value as List<Object?>? ?? const []))
+                Offset(
+                  ((point as List<Object?>)[0] as num).toDouble(),
+                  (point[1] as num).toDouble(),
+                ),
+            ]),
+          );
     return ShapeKeyframe(
       timeMs: (row['time_ms'] as num).toInt(),
       easing: EasingKind.values.firstWhere(
@@ -331,6 +367,8 @@ class ProjectRepository {
         orElse: () => EasingKind.easeInOut,
       ),
       bezier: (bezier != null && bezier.length == 4) ? bezier : null,
+      layerColors: colorsMap,
+      layerPoints: pointsMap,
       values: <AnimatableProperty, double>{
         for (final property in AnimatableProperty.values)
           if (raw[property.name] != null)
@@ -605,6 +643,17 @@ class ProjectRepository {
             'bezier_json': keyframe.bezier == null
                 ? null
                 : jsonEncode(keyframe.bezier),
+            'layer_colors': keyframe.layerColors.isEmpty
+                ? null
+                : jsonEncode(keyframe.layerColors),
+            'layer_points': keyframe.layerPoints.isEmpty
+                ? null
+                : jsonEncode(<String, Object?>{
+                    for (final entry in keyframe.layerPoints.entries)
+                      entry.key: [
+                        for (final point in entry.value) [point.dx, point.dy],
+                      ],
+                  }),
             'values_json': jsonEncode(<String, double>{
               for (final entry in keyframe.values.entries)
                 entry.key.name: entry.value,

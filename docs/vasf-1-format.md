@@ -1,4 +1,4 @@
-# VASF — Vector Anim Studio simple JSON format (v1 + extensions v2)
+# VASF — Vector Anim Studio simple JSON format (v1 + extensions v2, v3)
 
 VASF is a compact, LLM-friendly JSON format for describing a complete 2D vector
 animation (shapes, keyframes, optional skeleton rig) that the **Vector Anim Studio**
@@ -14,10 +14,13 @@ Rules of thumb for generating a valid file:
   shapes, each bound to its own bone.
 - Draw order = order of the `shapes` array (first = background).
 - Keyframes may be **partial**: a missing property is carried over from the
-  previous keyframe (or from the base pose for the first keyframe).
+  previous keyframe (or from the base pose for the first keyframe). The same
+  carry rule applies to the VASF-3 `color`/`colors` and `points`/`layerPoints`
+  keyframe fields.
 - The importer collects ALL problems and reports them in French — fix them and retry.
 - Nested project instances are not representable in VASF-1 (ignored on export).
-- The VASF-2 extensions (below) are optional: a `version: 1` file stays valid.
+- The VASF-2 and VASF-3 extensions (below) are optional: a `version: 1` file
+  stays valid. The importer accepts versions 1, 2 and 3.
 
 # Top level
 
@@ -130,8 +133,8 @@ convention). Positive degrees = clockwise on screen.
 | bone.length | 80 | bone length in scene units (> 0) |
 | bone.parent | none | parent bone NAME |
 | bone.z | 0 | draw order for the pieces carried by this bone (−10…10) |
-| bone.ik | false | enable 2-bone IK (needs exactly one child) |
-| bone.bend | 1 | elbow side for IK: +1 or −1 |
+| bone.ik | false | enable IK on this bone = ROOT of an IK chain (dragging the chain end solves every bone of the chain; 2 bones = exact solver, more = CCD). A chain runs through unique-child bones only |
+| bone.bend | 1 | elbow side for 2-bone IK: +1 or −1 (CCD chains may still flip) |
 | bind | optional | map **shape name → bone name** |
 | cycle | optional | VASF-2: `{"repeat": N}` repeats ALL bone keyframes (period = last − first time) |
 | keyframes | optional | bone animation (see below) |
@@ -139,7 +142,7 @@ convention). Positive degrees = clockwise on screen.
 ### Keyframe (bone)
 
 ```json
-{"bone": "Bras", "t": 0.5, "angle": -30, "easing": "easeInOut", "opacity": 0.5, "stretch": 1.2, "squash": 1}
+{"bone": "Bras", "t": 0.5, "angle": -30, "easing": "easeInOut", "opacity": 0.5, "stretch": 1.2, "squash": 1, "move": [10, -5]}
 ```
 
 - `bone` = bone name (required), `t` seconds ≥ 0 (required).
@@ -148,6 +151,11 @@ convention). Positive degrees = clockwise on screen.
   Example: a child whose world rest angle is 90° given `angle: 30` rotates −60°.
 - `opacity` (0–1), `stretch` (along the bone, 1 = neutral), `squash`
   (perpendicular, 1 = neutral) are optional per-keyframe bone properties.
+- VASF-3: `move` = optional `[dx, dy]` **world translation** (project coords)
+  of the bone's joint, relative to its rest position at that time. The joint
+  slides, children and bound pieces follow rigidly; the rest pose is untouched.
+  Internally stored in the parent's rest frame — the export round-trips it to
+  world. A keyframe may combine `angle` and `move`.
 - VASF-2: `easing` also accepts the CSS chain `"cubic-bezier(x1, y1, x2, y2)"`
   on bone keyframes.
 
@@ -333,6 +341,78 @@ of a shape to a bone; a plain key keeps binding the whole shape.
 - On export, a shape with a layer binding is emitted with `layers[]` even at
   a single layer (so the layer name survives the round-trip).
 
+# VASF-3 extensions (optional — `version: 3`, engine features)
+
+Heavy engine features, delivered in v0.15. All fields are optional; a file
+that uses none of them exports as v1/v2. Mixing v2 and v3 fields in one file
+is fine — the importer accepts versions 1, 2 and 3, and the app's own export
+writes `version: 3` when ANY v3 feature is used.
+
+## Animated color — `color` / `colors` in a shape keyframe
+
+A shape keyframe may carry a color for each layer; the app interpolates it
+between color keyframes (hold outside the posed range, same easing as the
+numeric properties):
+
+- **Single-layer shape** (flat file): keyframes carry a scalar `color`:
+
+  ```json
+  {"t": 0, "color": "#5B8DEF"}, {"t": 2, "easing": "linear", "color": "#FF5C5C"}
+  ```
+
+- **layers[] shape**: keyframes carry a map keyed by LAYER NAME:
+
+  ```json
+  {"t": 0, "colors": {"Langue": "#FF5C5C"}}, {"t": 2, "colors": {"Langue": "#F2C94C"}}
+  ```
+
+- A missing `color`/`colors` in a later keyframe keeps the last posed color
+  (carry), exactly like the numeric properties; the first keyframe of the
+  shape defines the starting color (put the base color at `t: 0`).
+- `color` is rejected on a layers[] shape, and `colors` on a flat shape —
+  explicit error, use the right one.
+- Colors accept `"$alias"` palette references like everywhere else.
+- In-app: the shape's ⚙ sheet shows one color row per layer (palette swatches
+  + a diamond that poses/removes the color of the pose at the playhead).
+
+## Point morph — `points` / `layerPoints` in a shape keyframe
+
+A `path` layer's points can be keyframed (faces, expressions, flames): each
+keyframe may redefine the full point list, and the app interpolates the path
+point by point. If the two clouds have different counts, the shorter one is
+padded by repeating its last point (new segments grow out of it).
+
+- **Single-layer shape** (flat file): keyframes carry `points` (same
+  convention as the shape's own `points`: any canvas coords, the importer
+  converts them).
+- **layers[] shape**: keyframes carry `"layerPoints": {"Langue": [[x, y], ...]}`
+  keyed by LAYER NAME.
+- **Coordinate frame (important)**: the morph keyframes share the frame of
+  the BASE `points` list — i.e. the same canvas coords the shape was drawn
+  with (the importer uses the base cloud's bbox center, not each keyframe's).
+  A keyframe that translates every point by +[200, 0] visibly slides the
+  whole path by 200 units.
+- As for colors, the FIRST keyframe must define the starting cloud (put the
+  base `points` copy at `t: 0`), and a missing `points` in a later keyframe
+  carries the last posed cloud.
+- In-app: morphs come from imports only (no point editor yet).
+
+## Bone translation — `move` in a bone keyframe
+
+```json
+{"bone": "Poignet", "t": 1, "angle": -90, "move": [0, -20]}
+```
+
+- `move` = `[dx, dy]` in WORLD (project) coordinates: the joint's offset from
+  its rest position at that time. Children and bound pieces follow rigidly;
+  the rest pose stays untouched (a bone with keyframes animates — a bone
+  without keyframes keeps its rest-offset behavior when dragged).
+- Combines freely with `angle` on the same keyframe; interpolated with the
+  keyframe's easing, held outside the posed range like every other property.
+- In-app: drag the ✥ handle of an ANIMATED bone → writes the translation at
+  the playhead (auto-key). On an unanimated bone the ✥ drag keeps the
+  historical rest-move behavior.
+
 # Limitations
 
 - VASF-2 layer pose is static: a layer's x/y/rotation/scale/opacity cannot be
@@ -340,7 +420,17 @@ of a shape to a bone; a plain key keeps binding the whole shape.
 - No nested project instances.
 - `pivot` is static (not keyframable); `scaleX`/`scaleY` ARE animatable.
 - Layer bindings ARE supported (`"Forme/Couche"` keys, vasf-2).
-- The export writes `version: 2` when a shape has several layers OR uses an
-  axis factor ≠ 1, a pivot ≠ 0, a `cubic-bezier` easing, or a layer binding;
-  single-layer shapes without those export flat (v1), and the palette/defs
-  are never exported (colors are expanded).
+- VASF-3 morphs a full point LIST only: no per-point keys, no bezier handles
+  in the morph (straight polyline interpolation between clouds); morph
+  keyframes are authored in imports (no in-app point editor yet).
+- VASF-3 bone `move` ignores the parent's stretch/squash when converting the
+  world delta (tiny drift on stretched parents — the drag-✥ path converts
+  against the parent's CURRENT world angle, not its stretch).
+- VASF-3 chains of ≥ 3 bones solve with CCD: the end effector lands on the
+  target but the elbow side is not guaranteed (`bend` only controls the
+  2-bone analytic solver).
+- The export writes `version: 3` when a shape keyframe carries colors or
+  morph points or a bone keyframe carries `move`; `version: 2` for the other
+  v2 extensions (several layers, axis factor ≠ 1, pivot ≠ 0, `cubic-bezier`,
+  layer binding); single-layer shapes without those export flat (v1), and the
+  palette/defs are never exported (colors are expanded).

@@ -59,8 +59,9 @@ class RigOverlayPainter extends CustomPainter {
     return (canvasPoint - handle).distance <= rotationHandleTouchSlop;
   }
 
-  /// Le point canvas touche-t-il l'effecteur IK (extrémité de l'enfant
-  /// unique) de l'os [boneId] ? (v0.10)
+  /// Le point canvas touche-t-il l'effecteur IK (extrémité du DERNIER os de
+  /// la chaîne — v0.15 : chaînes N os, l'ancien enfant unique est le cas
+  /// longueur 2) de l'os racine [boneId] ?
   static bool hitIkEndEffector(
     SkeletonPose pose,
     SkeletonRig rig,
@@ -68,9 +69,13 @@ class RigOverlayPainter extends CustomPainter {
     String boneId,
     Offset canvasPoint,
   ) {
-    final child = rig.onlyChildOf(boneId);
-    if (child == null) return false;
-    final frame = pose.frameOf(child.id);
+    final end = rig.ikEffectorOf(boneId);
+    if (end == null || end.id == boneId) {
+      // Chaîne d'un seul os : l'effecteur est la poignée de rotation de
+      // l'os lui-même — pas de losange dédié (évite le recouvrement).
+      return false;
+    }
+    final frame = pose.frameOf(end.id);
     if (frame == null) return false;
     final tip = geo.sceneToCanvas(frame.tip);
     return (canvasPoint - tip).distance <= tipTouchSlop;
@@ -150,12 +155,15 @@ class RigOverlayPainter extends CustomPainter {
         painter.paint(canvas, tip + const Offset(10, -16));
       }
       // Marqueur IK (v0.10) : losange vert sur l'effecteur — glisser cette
-      // extrémité résout la chaîne 2 os (au lieu de sélectionner/pivoter).
+      // extrémité résout la CHAÎNE (v0.15 : N os, l'enfant unique = cas 2 os)
+      // au lieu de sélectionner/pivoter.
       if (bone.ikEnabled) {
-        final child = rig.onlyChildOf(bone.id);
-        final childFrame = child == null ? null : pose.frameOf(child.id);
-        if (childFrame != null) {
-          final effector = geo.sceneToCanvas(childFrame.tip);
+        final end = rig.ikEffectorOf(bone.id);
+        final endFrame = end == null || end.id == bone.id
+            ? null
+            : pose.frameOf(end.id);
+        if (endFrame != null) {
+          final effector = geo.sceneToCanvas(endFrame.tip);
           final path = Path()
             ..moveTo(effector.dx, effector.dy - 9)
             ..lineTo(effector.dx + 9, effector.dy)

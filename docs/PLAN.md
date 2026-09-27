@@ -161,17 +161,43 @@ IMPLÉMENTÉ + VALIDÉ APPAREIL v0.12.0 (26/09) :**
 - **Liaison de couche** exposée dans `bind` (la structure
   `BoneBinding.layerId` existe déjà, le format l'ignore).
 
-**Groupe 3 — gros morceaux moteur :**
-- **Morph de points** : animer `points` d'un path entre keyframes (visages,
-  expressions, flammes) — interpolation point par point à ajouter au moteur.
-- **Couleur animée** par keyframe de forme (coucher de soleil, rougeur,
-  pulsation).
-- **Translation d'os** (`dx`/`dy`) et **IK à plus de 2 os** (chaînes).
+**Groupe 3 — gros morceaux moteur — IMPLÉMENTÉ + VALIDÉ (rendu/tests) v0.15.0 (27/09) :**
+- **Couleur animée** : `ShapeKeyframe.layerColors` (id de couche → ARGB),
+  sampler `colorAtLayer` (carry résolu par pose, tenue hors plage), painter
+  interpolé, UI : une ligne couleur par couche dans la sheet ⚙ (palette +
+  losange auto-key) ; vasf : `color` (à plat) / `colors` (par nom, layers[]).
+- **Morph de points** : `ShapeKeyframe.layerPoints`, sampler `pointsAtLayer`
+  (point par point, nuage court bourré par son dernier point), painter sur
+  les couches path ; vasf : `points` (à plat) / `layerPoints` (par nom) ;
+  repère = celui des `points` de base (centre bbox de la base, pas de la
+  keyframe). Import only (pas d'éditeur de points in-app).
+- **Translation d'os** : `BoneKeyframe.tx/ty` (repère de repos du PARENT),
+  sampler `translationAt`, FK (joint animé + enfants suivent, repos intact) ;
+  vasf : `move` [dx, dy] MONDE ; in-app : ✥ sur os animé → translation
+  keyframée au curseur (auto-key).
+- **IK chaînes** : `ikChain`/`ikEffectorOf` (descendance en enfants uniques),
+  solveur CCD `solveChainIk` pour ≥ 3 os (analytique conservé à 2) ; le
+  losange vert vise l'effecteur de la CHAÎNE ; pose des angles via
+  `_poseChainAnglesTo` (auto-key par os, mid-évaluations).
+- **Bug v0.11 corrigé au passage** : le bookkeeping d'import
+  `worldRestDeg[os] = somme(parent) + angle` doublait l'angle du parent —
+  les chaînes ≥ 3 os se posaient fausses dès le 3e niveau (auto-cohérent en
+  round-trip, invisible avant). Fix : `worldRestDeg[os] = angle` (monde
+  déclaré). Les projets DÉJÀ importés (persistés) restent inchangés ; un
+  re-import d'un JSON ≥ 3 os peut donc légèrement changer le rendu (vers le
+  conforme).
+- **Bonus upsertKeyframe** : l'écriture sur une pose existante préserve
+  désormais sa courbe custom-bezier (et couleurs/morph) — v0.13 la
+  remplaçait par easeInOut (overshoot mort après édition).
+- Persistance : schéma v6 (colonnes `layer_colors`/`layer_points` sur
+  `shape_keyframes`, additif) + round-trip DB testé (leçon v0.13.2).
 
 Compatibilité : tout en champs optionnels — un vasf-1 reste importable ;
-`version: 2` marque les fichiers qui dépendent des extensions. Côté agent :
-skill `generer-animation-json` (workspace nanobot) — génère le vasf-1 et le
-valide (`scripts/validate_vasf.py`) ; à étendre à la v2 le moment venu.
+`version: 3` marque les fichiers qui dépendent des extensions v3. Côté
+agent : skill `generer-animation-json` (workspace nanobot) — génère le vasf
+et le valide (`scripts/validate_vasf.py`, v1/v2/v3) ; exemples :
+`docs/vasf-3-example.json` (ciel couchant + flamme morphée + bras 3 os en
+IK avec `move`), import + rendu vérifiés par `test/vasf_g3_example_test.dart`.
 
 ## 6. Interface
 

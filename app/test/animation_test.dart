@@ -534,4 +534,188 @@ void main() {
       expect(TimelineLayout.packLanes(project.shapes).length, 1);
     });
   });
+
+  group('couleur animée + morph (v0.15)', () {
+    ShapeLayer layerOf(VectorShape shape) => shape.layers.first;
+
+    test('colorAtLayer interpole, tient hors plage et retombe sur la base', () {
+      final shape = VectorShape(name: 'A', startMs: 0, endMs: 3000);
+      shape.layers.add(ShapeLayer(name: 'L', kind: ShapeKind.rect));
+      final layer = layerOf(shape);
+      shape.upsertKeyframe(
+        0,
+        shape.poseAt(0),
+        layerColors: {layer.id: 0xFF0000FF},
+      );
+      shape.upsertKeyframe(
+        2000,
+        shape.poseAt(2000),
+        easing: EasingKind.linear,
+        layerColors: {layer.id: 0xFFFF0000},
+      );
+      // Tenue avant/après la plage colorée.
+      expect(shape.colorAtLayer(layer.id, -1, 0xFF123456), 0xFF0000FF);
+      expect(shape.colorAtLayer(layer.id, 5000, 0xFF123456), 0xFFFF0000);
+      // Interpolation à mi-parcours (linéaire).
+      expect(
+        shape.colorAtLayer(layer.id, 1000, 0xFF123456),
+        lerpArgb(0xFF0000FF, 0xFFFF0000, 0.5),
+      );
+      // Couche sans entrée posée → couleur de base (fallback).
+      final other = ShapeLayer(name: 'Autre', kind: ShapeKind.circle);
+      shape.layers.add(other);
+      expect(shape.colorAtLayer(other.id, 1000, 0xFFABCDEF), 0xFFABCDEF);
+      expect(shape.layerColorAnimated(layer.id), isTrue);
+      expect(shape.layerColorAnimated(other.id), isFalse);
+    });
+
+    test('les poses sans couleur ne coupent pas l\'animation (carry)', () {
+      final shape = VectorShape(name: 'A', startMs: 0, endMs: 4000);
+      final layer = ShapeLayer(name: 'L', kind: ShapeKind.rect);
+      shape.layers.add(layer);
+      shape.upsertKeyframe(
+        0,
+        shape.poseAt(0),
+        layerColors: {layer.id: 0xFF0000FF},
+      );
+      shape.upsertKeyframe(
+        2000,
+        shape.poseAt(2000),
+        easing: EasingKind.linear,
+        layerColors: {layer.id: 0xFFFFFFFF},
+      );
+      // Pose intermédiaire SANS couleur : le blanc porté tient jusqu'ici.
+      shape.upsertKeyframe(3000, shape.poseAt(3000), easing: EasingKind.linear);
+      expect(shape.colorAtLayer(layer.id, 2500, 0), 0xFFFFFFFF);
+      expect(shape.colorAtLayer(layer.id, 3500, 0), 0xFFFFFFFF);
+    });
+
+    test('pointsAtLayer lerpe point par point et bourre le nuage court', () {
+      final shape = VectorShape(name: 'A', startMs: 0, endMs: 2000);
+      final layer = ShapeLayer(
+        name: 'L',
+        kind: ShapeKind.path,
+        points: const <Offset>[Offset(0, 0), Offset(100, 0), Offset(100, 100)],
+      );
+      shape.layers.add(layer);
+      shape.upsertKeyframe(
+        0,
+        shape.poseAt(0),
+        layerPoints: {layer.id: layer.points},
+      );
+      shape.upsertKeyframe(
+        2000,
+        shape.poseAt(2000),
+        easing: EasingKind.linear,
+        layerPoints: {
+          layer.id: const <Offset>[Offset(200, 50), Offset(300, 50)],
+        },
+      );
+      final mid = shape.pointsAtLayer(layer.id, const [], 1000);
+      expect(mid.length, 3); // bourré avec le dernier point du nuage court
+      expect(
+        mid[0],
+        Offset.lerp(const Offset(0, 0), const Offset(200, 50), 0.5),
+      );
+      expect(
+        mid[1],
+        Offset.lerp(const Offset(100, 0), const Offset(300, 50), 0.5),
+      );
+      expect(
+        mid[2],
+        Offset.lerp(const Offset(100, 100), const Offset(300, 50), 0.5),
+      );
+      expect(shape.pointsAtLayer(layer.id, const [], 3000), const <Offset>[
+        Offset(200, 50),
+        Offset(300, 50),
+      ]);
+    });
+
+    test('applyLayerColor écrit la base sans keyframe, la pose ensuite', () {
+      final shape = VectorShape(name: 'A', startMs: 0, endMs: 2000);
+      final layer = ShapeLayer(name: 'L', kind: ShapeKind.rect);
+      shape.layers.add(layer);
+      shape.applyLayerColor(layer, 0xFF112233, 500, autoKey: true);
+      expect(layer.colorValue, 0xFF112233);
+      expect(shape.keyframes, isEmpty);
+
+      shape.upsertKeyframe(0, shape.poseAt(0));
+      shape.upsertKeyframe(2000, shape.poseAt(2000));
+      shape.applyLayerColor(
+        layer,
+        0xFF445566,
+        1000,
+        autoKey: true,
+        toleranceMs: 0,
+      );
+      // Une NOUVELLE pose est créée au curseur, avec l'entrée de couleur.
+      expect(shape.keyframes.length, 3);
+      expect(shape.keyframes[1].timeMs, 1000);
+      expect(shape.keyframes[1].layerColors[layer.id], 0xFF445566);
+      // Écrire SUR une pose existante fusionne (la pose numérique tient).
+      shape.applyLayerColor(
+        layer,
+        0xFFAABBCC,
+        2000,
+        autoKey: true,
+        toleranceMs: 0,
+      );
+      expect(shape.keyframes.length, 3);
+      expect(shape.keyframes.last.layerColors[layer.id], 0xFFAABBCC);
+      expect(shape.keyframes.last.valueOf(AnimatableProperty.x), isNotNull);
+    });
+
+    test(
+      'upsertKeyframe préserve la bézier d\'une pose existante (bug v0.13)',
+      () {
+        final shape = VectorShape(name: 'A', startMs: 0, endMs: 2000);
+        shape.layers.add(ShapeLayer(name: 'L', kind: ShapeKind.rect));
+        shape.upsertKeyframe(0, shape.poseAt(0));
+        shape.upsertKeyframe(
+          2000,
+          shape.poseAt(2000),
+          easing: EasingKind.customBezier,
+          bezier: const [0.34, 1.56, 0.64, 1.0],
+          layerColors: {shape.layers.first.id: 0xFFFF0000},
+        );
+        // Écriture d'une position sur cette pose : la courbe et la couleur
+        // doivent survivre (v0.13 les perdait → overshoot mort).
+        shape.applyValue(AnimatableProperty.x, 42, 2000, autoKey: true);
+        final pose = shape.keyframes.last;
+        expect(pose.timeMs, 2000);
+        expect(pose.easing, EasingKind.customBezier);
+        expect(pose.bezier, const <double>[0.34, 1.56, 0.64, 1.0]);
+        expect(pose.layerColors[shape.layers.first.id], 0xFFFF0000);
+        expect(pose.valueOf(AnimatableProperty.x), 42);
+      },
+    );
+
+    test('aller-retour JSON des cartes couleur/morph', () {
+      final shape = VectorShape(name: 'A', startMs: 0, endMs: 2000);
+      final layer = ShapeLayer(
+        name: 'L',
+        kind: ShapeKind.path,
+        points: const <Offset>[Offset(0, 0), Offset(40, 0), Offset(40, 40)],
+      );
+      shape.layers.add(layer);
+      shape.upsertKeyframe(
+        0,
+        shape.poseAt(0),
+        layerColors: {layer.id: 0xFFFF5C5C},
+        layerPoints: {
+          layer.id: const <Offset>[Offset(9, 9), Offset(31, 9), Offset(31, 31)],
+        },
+      );
+      final decoded = VectorShape.fromJson(
+        (shape.toJson() as Map).cast<String, Object?>(),
+      );
+      final key = decoded.keyframes.single;
+      expect(key.layerColors[decoded.layers.first.id], 0xFFFF5C5C);
+      expect(key.layerPoints[decoded.layers.first.id], const <Offset>[
+        Offset(9, 9),
+        Offset(31, 9),
+        Offset(31, 31),
+      ]);
+    });
+  });
 }

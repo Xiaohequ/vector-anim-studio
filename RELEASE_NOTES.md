@@ -1,31 +1,60 @@
-# Vector Anim Studio 0.14.0
+# Vector Anim Studio 0.15.0
 
-## Nouveautés (option C — petits ajouts rapides)
+## Nouveautés (vasf-3 / Groupe 3 — le moteur lourd)
 
-- **Import par fichier** : « Export ▸ Importer un fichier JSON… » ouvre le
-  sélecteur système (SAF sous Android, aucune permission à déclarer) —
-  fini le collage dans le presse-papiers. Un JSON vasf (agents IA) ou un
-  projet complet est accepté ; un fichier refusé affiche la liste des
-  problèmes dans un dialogue défilant, et aucun projet n'est créé.
+- **Couleur animée** : la couleur d'une couche devient une propriété de pose.
+  Dans la sheet ⚙ d'une forme, une section « Couleurs des couches » donne
+  une ligne par couche (palette de 8 pastilles + losange) : sans keyframe le
+  choix écrit la couleur de base ; avec keyframes, chaque choix pose la
+  couleur AU CURSEUR (auto-key) et l'app interpole entre les poses colorées
+  (tenue hors plage, courbe de la pose d'arrivée). Coucher de soleil,
+  rougeur, pulsation — sans changer la géométrie.
 
-- **Reciblage « sans saut »** : re-lier une pièce (ou une couche) déjà
-  liée à un autre os réécrit ses poses pour que sa position MONDE reste
-  identique au moment du changement — la pièce ne saute pas, elle passe
-  juste sous le nouvel os. La pose de base est recalée au curseur ; les
-  keyframes existantes sont recalées à leur propre instant. Exact tant
-  que les os ne sont pas étirés (stretch 1).
+- **Morph de points** : les points d'un chemin (`path`) s'animent entre les
+  keyframes, point par point — visages, expressions, flammes. Un nuage plus
+  court est bourré par répétition de son dernier point (les nouveaux
+  segments poussent depuis lui). Le morph se définit dans le JSON vasf-3
+  (`points` / `layerPoints` par couche) ; il suit le repère des points de
+  base. Pas encore d'éditeur de points dans l'app : import uniquement.
 
-- **Tests de rendu permanents en CI** : la sonde v0.13.1 devient une
-  suite de régression exécutée à chaque build — chaque scène de référence
-  est rendue en headless et vérifiée par mesure pixel (centroid d'un
-  masque couleur) : pièce liée suit l'os animé, couche liée suit son os,
-  reciblage sans saut (rendu avant/après identique), pivot de la porte
-  (test existant conservé). 165/165 tests, analyze 0 problème.
+- **Translation d'os** : `move: [dx, dy]` (monde) sur une keyframe d'os —
+  l'articulation glisse, les enfants et les pièces liées suivent
+  rigidement, la pose de repos reste intacte. Dans l'app : glisser la
+  poignée ✥ d'un os ANIMÉ écrit une translation au curseur (auto-key) ; sur
+  un os au repos, ✥ garde le comportement historique (pose du rig + emport
+  des pièces).
 
-<!--
-Ce fichier est utilisé tel quel comme description de chaque release GitHub.
-Il est lu par le workflow .github/workflows/android.yml (body_path), puis complété
-d'un pied de page (version · build · commit). Le mettre à jour AVANT chaque push,
-en le REMPLAÇANT entièrement : uniquement les modifications de la version courante,
-jamais un rappel des versions précédentes.
--->
+- **IK à chaînes de N os** : `ik: true` fait maintenant d'un os la racine
+  d'une chaîne — le losange vert se pose sur l'extrémité du DERNIER os de
+  la chaîne (descendance d'enfants uniques) et son glisser résout toute la
+  chaîne : 2 os = solveur analytique exact (coude contrôlé par `bend`),
+  3 os et plus = solveur itératif CCD.
+
+- **Compatibilité format** : l'import accepte les vasf 1, 2 ET 3 ; les
+  nouveaux champs (`color`/`colors`, `points`/`layerPoints`, `move`) sont
+  tous optionnels — un fichier v1 reste valide. L'export écrit `version: 3`
+  quand une extension v3 est utilisée. Spec : `docs/vasf-1-format.md`
+  (section « VASF-3 extensions »), exemple complet :
+  `docs/vasf-3-example.json`.
+
+## Corrections
+
+- **Import vasf des chaînes ≥ 3 os (bug v0.11)** : l'angle de repos d'un
+  3e niveau (et plus) était calculé contre un faux angle monde du parent
+  (double comptage) — l'os se posait décalé/faux. Corrigé : les joints et
+  angles MONDE déclarés sont honorés à tous les niveaux. Les projets déjà
+  importés ne bougent pas (persistance interne) ; re-importer un JSON de
+  chaîne ≥ 3 os peut légèrement modifier son rendu — vers le conforme.
+- **Édition d'une pose custom-bezier** : écrire une propriété sur une pose
+  existante préservait mal sa courbe (retour en easeInOut, overshoot mort).
+  La pose garde désormais sa bézier, ses couleurs et son morph.
+
+## Technique
+
+- Schéma SQLite **v6** : les couleurs et points de morph par keyframe
+  sont persistés (`layer_colors` / `layer_points`, migration additive) —
+  round-trip save/load testé (leçon v0.13.2 : tout nouveau champ passe par
+  la DB).
+- 188/188 tests (dont 2 nouvelles sondes de rendu mesurées : interpolation
+  couleur au pixel et morph par centroid ; import + rendu du fichier
+  d'exemple v3 vérifiés en CI).

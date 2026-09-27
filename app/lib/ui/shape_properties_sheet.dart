@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../engine/timeline_controller.dart';
 import '../models/animation.dart';
 import '../models/skeleton.dart';
+import 'palette.dart';
 
 /// Bottom sheet « Propriétés de la forme » : tous les réglages de la forme
 /// sélectionnée (sliders, keyframe au curseur, interpolation), en suivant la
@@ -20,6 +21,8 @@ class ShapePropertiesSheet extends StatefulWidget {
     required this.onEditLayers,
     this.onOpenSource,
     this.onPivotChanged,
+    this.onLayerColorChanged,
+    this.onToggleLayerColor,
     this.skeletonPiece = false,
     this.skeletonNote,
     this.skeletonRig,
@@ -61,6 +64,14 @@ class ShapePropertiesSheet extends StatefulWidget {
   /// Écrit le pivot de rotation (offset dx/dy depuis le centre, unités
   /// scène) — v0.13. Statique (non animable) : pas d'auto-key.
   final void Function(double dx, double dy)? onPivotChanged;
+
+  /// Couleur d'une couche (v0.15, couleur animée) : base si la forme n'est
+  /// pas animée, sinon entrée de couleur dans la pose au curseur.
+  final void Function(ShapeLayer layer, int color)? onLayerColorChanged;
+
+  /// Losange de couleur d'une couche : pose/retire l'entrée de couleur de
+  /// la pose au curseur.
+  final void Function(ShapeLayer layer)? onToggleLayerColor;
 
   @override
   State<ShapePropertiesSheet> createState() => _ShapePropertiesSheetState();
@@ -151,6 +162,10 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                   if (property != AnimatableProperty.strokeWidth ||
                       !shape.isInstance)
                     _buildPropertyRow(shape, property, controller),
+                // Couleurs par couche (v0.15, couleur animée) : palette +
+                // losange auto-key. Les instances n'ont pas de couches.
+                if (!shape.isInstance && shape.layers.isNotEmpty)
+                  ..._buildLayerColorRows(shape, controller),
                 // Pivot (v0.13.1) : visible dans TOUS les projets — le pivot
                 // est un réglage de forme qui s'applique aussi aux pièces
                 // d'un projet squelette (ex. porte non liée de l'exemple G2).
@@ -213,6 +228,103 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
         );
       },
     );
+  }
+
+  /// Lignes « Couleur » par couche (v0.15, couleur animée) : la couleur
+  /// AFFICHÉE est la valeur interpolée au curseur (contour blanc = palette
+  /// courante). Sans keyframe sur la forme, un choix écrit la base de la
+  /// couche ; avec keyframes, une entrée de couleur dans la pose au curseur
+  /// (auto-key). Le losange pose/retire l'entrée de la pose au curseur.
+  List<Widget> _buildLayerColorRows(
+    VectorShape shape,
+    TimelineController controller,
+  ) {
+    final rows = <Widget>[
+      const Padding(
+        padding: EdgeInsets.only(top: 6, bottom: 2),
+        child: Text(
+          'Couleurs des couches',
+          style: TextStyle(fontSize: 11, color: Colors.white70),
+        ),
+      ),
+    ];
+    for (final layer in shape.layers) {
+      final current = shape.colorAtLayer(
+        layer.id,
+        controller.timeMs,
+        layer.colorValue,
+      );
+      final nearest = shape.keyframeNear(
+        controller.timeMs,
+        controller.snapToleranceMs,
+      );
+      final hasColorKey = nearest?.layerColors.containsKey(layer.id) ?? false;
+      rows.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 2),
+          child: Row(
+            children: <Widget>[
+              SizedBox(
+                width: 92,
+                child: Text(
+                  layer.name,
+                  style: const TextStyle(fontSize: 12),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Expanded(
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: <Widget>[
+                    for (final color in kColorPalette)
+                      GestureDetector(
+                        onTap: () {
+                          widget.onLayerColorChanged?.call(layer, color);
+                          _refresh();
+                        },
+                        child: Container(
+                          width: 20,
+                          height: 20,
+                          decoration: BoxDecoration(
+                            color: Color(color),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: current == color
+                                  ? Colors.white
+                                  : Colors.white24,
+                              width: 2,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: hasColorKey
+                    ? 'Retirer la couleur de la pose au curseur'
+                    : 'Poser la couleur au curseur',
+                iconSize: 18,
+                visualDensity: VisualDensity.compact,
+                icon: Icon(
+                  hasColorKey ? Icons.diamond : Icons.diamond_outlined,
+                  color: shape.layerColorAnimated(layer.id)
+                      ? const Color(0xFFF2C94C)
+                      : null,
+                ),
+                onPressed: () {
+                  widget.onToggleLayerColor?.call(layer);
+                  _refresh();
+                },
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    return rows;
   }
 
   /// Section « Couches liées au rig » (projet squelette) : une ligne par

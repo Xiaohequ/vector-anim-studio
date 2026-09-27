@@ -105,6 +105,8 @@ class BoneKeyframe {
     this.opacity = 1,
     this.stretch = 1,
     this.squash = 1,
+    this.tx = 0,
+    this.ty = 0,
   }) : bezier = (bezier != null && bezier.length == 4)
            ? List<double>.from(bezier)
            : null;
@@ -127,6 +129,12 @@ class BoneKeyframe {
   /// Écrasement perpendiculaire à l'os (v0.10) : 1 = neutre.
   double squash;
 
+  /// Translation animée de l'articulation (v0.15) : dans le repère de repos
+  /// du PARENT (même convention que `RigBone.offsetX/offsetY` — projet pour
+  /// une racine). La pose de repos reste intacte ; les enfants suivent.
+  double tx;
+  double ty;
+
   BoneKeyframe copy() => BoneKeyframe(
     timeMs: timeMs,
     easing: easing,
@@ -135,6 +143,8 @@ class BoneKeyframe {
     opacity: opacity,
     stretch: stretch,
     squash: squash,
+    tx: tx,
+    ty: ty,
   );
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -145,6 +155,7 @@ class BoneKeyframe {
     'opacity': opacity,
     'stretch': stretch,
     'squash': squash,
+    if (tx != 0 || ty != 0) ...<String, Object?>{'tx': tx, 'ty': ty},
   };
 
   factory BoneKeyframe.fromJson(Map<String, Object?> json) => BoneKeyframe(
@@ -160,6 +171,8 @@ class BoneKeyframe {
     opacity: (json['opacity'] as num?)?.toDouble() ?? 1,
     stretch: (json['stretch'] as num?)?.toDouble() ?? 1,
     squash: (json['squash'] as num?)?.toDouble() ?? 1,
+    tx: (json['tx'] as num?)?.toDouble() ?? 0,
+    ty: (json['ty'] as num?)?.toDouble() ?? 0,
   );
 }
 
@@ -383,6 +396,37 @@ class SkeletonRig {
   double squashAt(String boneId, int timeMs) =>
       _numAt(boneId, timeMs, (k) => k.squash);
 
+  /// Translation animée de l'articulation à [timeMs] (v0.15) — zéro sans
+  /// piste, dans le repère de repos du parent (mêmes règles d'échantillonnage
+  /// que l'angle).
+  Offset translationAt(String boneId, int timeMs) {
+    final track = tracks[boneId];
+    if (track == null || track.isEmpty) return Offset.zero;
+    if (timeMs <= track.first.timeMs) {
+      return Offset(track.first.tx, track.first.ty);
+    }
+    if (timeMs >= track.last.timeMs) {
+      return Offset(track.last.tx, track.last.ty);
+    }
+    for (var i = 0; i < track.length - 1; i++) {
+      final a = track[i];
+      final b = track[i + 1];
+      if (timeMs >= a.timeMs && timeMs <= b.timeMs) {
+        final span = math.max(1, b.timeMs - a.timeMs);
+        final progress = easingProgress(
+          b.easing,
+          b.bezier,
+          (timeMs - a.timeMs) / span,
+        );
+        return Offset(
+          a.tx + (b.tx - a.tx) * progress,
+          a.ty + (b.ty - a.ty) * progress,
+        );
+      }
+    }
+    return Offset(track.last.tx, track.last.ty);
+  }
+
   /// z de dessin des pièces d'une forme : os porteur (liaison forme
   /// entière), sinon le plus petit z des os portant ses couches, sinon 0.
   int zForShape(String? shapeId) {
@@ -417,6 +461,27 @@ class SkeletonRig {
     return child;
   }
 
+  /// Chaîne IK d'un os racine (v0.15) : l'os lui-même + sa descendance en
+  /// enfants UNIQUES (un os à 2+ enfants termine la chaîne — ses enfants
+  /// suivent rigidement). L'effecteur = extrémité du dernier os.
+  List<RigBone> ikChain(String rootBoneId) {
+    final root = boneById(rootBoneId);
+    if (root == null) return const <RigBone>[];
+    final chain = <RigBone>[root];
+    while (true) {
+      final child = onlyChildOf(chain.last.id);
+      if (child == null) break;
+      chain.add(child);
+    }
+    return chain;
+  }
+
+  /// Effecteur (dernier os) de la chaîne IK d'un os racine, ou null.
+  RigBone? ikEffectorOf(String rootBoneId) {
+    final chain = ikChain(rootBoneId);
+    return chain.isEmpty ? null : chain.last;
+  }
+
   /// Keyframe la plus proche du curseur dans la tolérance, ou null.
   BoneKeyframe? keyframeNear(String boneId, int timeMs, int toleranceMs) {
     BoneKeyframe? best;
@@ -444,6 +509,8 @@ class SkeletonRig {
     double? opacity,
     double? stretch,
     double? squash,
+    double? tx,
+    double? ty,
   }) {
     final track = tracks.putIfAbsent(boneId, () => <BoneKeyframe>[]);
     BoneKeyframe? existing;
@@ -463,6 +530,8 @@ class SkeletonRig {
         opacity: opacity ?? existing?.opacity ?? 1,
         stretch: stretch ?? existing?.stretch ?? 1,
         squash: squash ?? existing?.squash ?? 1,
+        tx: tx ?? existing?.tx ?? 0,
+        ty: ty ?? existing?.ty ?? 0,
       ),
     );
     track.sort((a, b) => a.timeMs.compareTo(b.timeMs));
@@ -716,6 +785,10 @@ class SkeletonPose {
       }
 
       // Animation : le mouvement du parent se propage, + le delta propre.
+      // Translation animée (v0.15) : ajoutée à l'offset DANS le repère de
+      // repos du parent — la pose de repos (jointRest) reste intacte, les
+      // enfants suivent via parentDeltaPos (le joint animé bouge).
+      final translation = rig.translationAt(bone.id, timeMs);
       final double parentDelta;
       final Offset parentDeltaPos;
       if (parentFrame == null) {
@@ -726,13 +799,13 @@ class SkeletonPose {
         parentDeltaPos = parentFrame.joint - parentFrame.jointRest;
       }
       final joint = parentFrame == null
-          ? Offset(bone.offsetX, bone.offsetY)
+          ? Offset(bone.offsetX + translation.dx, bone.offsetY + translation.dy)
           : parentFrame.jointRest +
                 parentDeltaPos +
                 rotateVector(
                   Offset(
-                    bone.offsetX * (parentFrame.stretchX),
-                    bone.offsetY * (parentFrame.stretchY),
+                    (bone.offsetX + translation.dx) * (parentFrame.stretchX),
+                    (bone.offsetY + translation.dy) * (parentFrame.stretchY),
                   ),
                   parentFrame.worldAngleRest + parentDelta,
                 );
@@ -781,6 +854,46 @@ class SkeletonPose {
   final gamma = math.acos(cosG.clamp(-1.0, 1.0));
   final childAngle = parentAngle - bend * (math.pi - gamma);
   return (parentAngle, childAngle);
+}
+
+/// Résout l'IK d'une chaîne de N os (v0.15, ≥ 1 os) par CCD : remonte de
+/// l'effecteur vers la racine, fait pivoter chaque os pour rapprocher
+/// l'extrémité de la cible, répète [iterations] fois. Renvoie les angles
+/// MONDE désirés de chaque os (ordre racine → extrémité). Cible hors de
+/// portée : la chaîne se tend au maximum vers la cible.
+List<double> solveChainIk({
+  required Offset rootJoint,
+  required List<double> lengths,
+  required List<double> angles,
+  required Offset target,
+  int iterations = 16,
+}) {
+  assert(lengths.length == angles.length);
+  final out = List<double>.from(angles);
+  if (out.isEmpty) return out;
+
+  Offset effectorAt() {
+    var point = rootJoint;
+    for (var i = 0; i < out.length; i++) {
+      point += rotateVector(Offset(lengths[i], 0), out[i]);
+    }
+    return point;
+  }
+
+  for (var iteration = 0; iteration < iterations; iteration++) {
+    for (var i = out.length - 1; i >= 0; i--) {
+      var joint = rootJoint;
+      for (var k = 0; k < i; k++) {
+        joint += rotateVector(Offset(lengths[k], 0), out[k]);
+      }
+      final effector = effectorAt();
+      final alpha = (target - joint).direction - (effector - joint).direction;
+      if (alpha.abs() < 1e-9) continue;
+      out[i] += alpha;
+    }
+    if ((effectorAt() - target).distance < 0.5) break;
+  }
+  return out;
 }
 
 /// Tourne un vecteur de [angle] radians (repère écran : y vers le bas).

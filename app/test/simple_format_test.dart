@@ -476,7 +476,7 @@ void main() {
   });
 
   group('vasf-2', () {
-    test('version 2 acceptée, version 3 rejetée', () {
+    test('versions 1/2/3 acceptées, version 4 rejetée (v0.15)', () {
       final imported = SimpleAnimationFormat.fromJson(<String, Object?>{
         'version': 2,
         'shapes': <Object?>[
@@ -484,9 +484,18 @@ void main() {
         ],
       });
       expect(imported.shapes, hasLength(1));
+      // v0.15 : la version 3 (couleur animée, morph, translation d'os) est
+      // acceptée — même sans champ v3.
+      final v3 = SimpleAnimationFormat.fromJson(<String, Object?>{
+        'version': 3,
+        'shapes': <Object?>[
+          <String, Object?>{'name': 'Bloc', 'type': 'rect', 'end': 1},
+        ],
+      });
+      expect(v3.shapes, hasLength(1));
       expect(
         () => SimpleAnimationFormat.fromJson(<String, Object?>{
-          'version': 3,
+          'version': 4,
           'shapes': <Object?>[
             <String, Object?>{'name': 'Bloc', 'type': 'rect'},
           ],
@@ -495,14 +504,14 @@ void main() {
       );
       try {
         SimpleAnimationFormat.fromJson(<String, Object?>{
-          'version': 3,
+          'version': 4,
           'shapes': <Object?>[
             <String, Object?>{'name': 'Bloc', 'type': 'rect'},
           ],
         });
         fail('SimpleFormatException attendu');
       } on SimpleFormatException catch (error) {
-        expect(error.toString(), contains('version : 1 ou 2 attendu'));
+        expect(error.toString(), contains('version : 1, 2 ou 3 attendu'));
       }
     });
 
@@ -1103,5 +1112,360 @@ void main() {
       );
       expect(easingProgress(EasingKind.easeIn, null, 0.5), closeTo(0.25, 1e-9));
     });
+  });
+
+  group('vasf-3 (v0.15 : couleur animée, morph, translation d\'os)', () {
+    test(
+      'couleur animée à plat : « color » par keyframe, carry, round trip',
+      () {
+        final imported = SimpleAnimationFormat.fromJson(<String, Object?>{
+          'version': 3,
+          'shapes': <Object?>[
+            <String, Object?>{
+              'name': 'Ciel',
+              'type': 'rect',
+              'width': 720,
+              'height': 1280,
+              'end': 4,
+              'color': '#0000FF',
+              'keyframes': <Object?>[
+                <String, Object?>{'t': 0, 'color': '#0000FF'},
+                <String, Object?>{
+                  't': 2,
+                  'easing': 'linear',
+                  'color': '#FF0000',
+                },
+                <String, Object?>{
+                  't': 3,
+                }, // sans couleur : le rouge porté tient
+              ],
+            },
+          ],
+        });
+        final shape = imported.shapes.first;
+        final layer = shape.layers.first;
+        expect(shape.layerColorAnimated(layer.id), isTrue);
+        expect(shape.colorAtLayer(layer.id, 0, 0), 0xFF0000FF);
+        expect(
+          shape.colorAtLayer(layer.id, 1000, 0),
+          lerpArgb(0xFF0000FF, 0xFFFF0000, 0.5),
+        );
+        expect(shape.colorAtLayer(layer.id, 3500, 0), 0xFFFF0000);
+        // Round trip : version 3 + couleurs émises (sparse numériques sinon).
+        final exported = SimpleAnimationFormat.toJson(imported);
+        expect(exported['version'], 3);
+        final keys =
+            ((exported['shapes'] as List<Object?>).first
+                    as Map<String, Object?>)['keyframes']!
+                as List<Object?>;
+        expect((keys[0] as Map<String, Object?>)['color'], '#0000FF');
+        expect((keys[1] as Map<String, Object?>)['color'], '#FF0000');
+        expect((keys[2] as Map<String, Object?>)['color'], '#FF0000');
+      },
+    );
+
+    test('morph de points à plat : « points » par keyframe, lerp mesuré', () {
+      final imported = SimpleAnimationFormat.fromJson(<String, Object?>{
+        'version': 3,
+        'shapes': <Object?>[
+          <String, Object?>{
+            'name': 'Flamme',
+            'type': 'path',
+            'end': 3,
+            'points': <Object?>[
+              <Object?>[0, 0],
+              <Object?>[100, 0],
+              <Object?>[100, 100],
+            ],
+            'keyframes': <Object?>[
+              <String, Object?>{
+                't': 0,
+                'points': <Object?>[
+                  <Object?>[0, 0],
+                  <Object?>[100, 0],
+                  <Object?>[100, 100],
+                ],
+              },
+              <String, Object?>{
+                't': 2,
+                'easing': 'linear',
+                'points': <Object?>[
+                  <Object?>[200, 0],
+                  <Object?>[300, 0],
+                  <Object?>[300, 100],
+                ],
+              },
+            ],
+          },
+        ],
+      });
+      final shape = imported.shapes.first;
+      final layer = shape.layers.first;
+      expect(shape.layerPointsAnimated(layer.id), isTrue);
+      // La base : bbox 100×100, points recentrés (json − (50,50) + (50,50)).
+      expect(layer.width, closeTo(100, 0.001));
+      expect(layer.height, closeTo(100, 0.001));
+      final base = shape.pointsAtLayer(layer.id, const [], 0);
+      expect(base, const <Offset>[
+        Offset(0, 0),
+        Offset(100, 0),
+        Offset(100, 100),
+      ]);
+      // À mi-course : chaque point a glissé de +100 en X (repère cohérent).
+      final mid = shape.pointsAtLayer(layer.id, const [], 1000);
+      expect(mid, const <Offset>[
+        Offset(100, 0),
+        Offset(200, 0),
+        Offset(200, 100),
+      ]);
+      // Round trip : l'export émet les points de morph dans le repère de base.
+      final exported = SimpleAnimationFormat.toJson(imported);
+      expect(exported['version'], 3);
+      final keys =
+          ((exported['shapes'] as List<Object?>).first
+                  as Map<String, Object?>)['keyframes']!
+              as List<Object?>;
+      final kf2 = keys[1] as Map<String, Object?>;
+      final points = (kf2['points'] as List<Object?>)
+          .map(
+            (p) => <double>[(p as List<Object?>)[0] as double, p[1] as double],
+          )
+          .toList();
+      expect(points[0][0], closeTo(200, 0.01));
+      expect(points[1][0], closeTo(300, 0.01));
+      expect(points[2][1], closeTo(100, 0.01));
+    });
+
+    test('couleurs + morph par couche (layers[]), round trip', () {
+      final imported = SimpleAnimationFormat.fromJson(<String, Object?>{
+        'version': 3,
+        'shapes': <Object?>[
+          <String, Object?>{
+            'name': 'Feu',
+            'layers': <Object?>[
+              <String, Object?>{'name': 'Braise', 'type': 'rect'},
+              <String, Object?>{
+                'name': 'Langue',
+                'type': 'path',
+                'points': <Object?>[
+                  <Object?>[0, 0],
+                  <Object?>[50, 0],
+                  <Object?>[25, 60],
+                ],
+              },
+            ],
+            'end': 3,
+            'keyframes': <Object?>[
+              <String, Object?>{
+                't': 0,
+                'colors': <String, Object?>{'Langue': '#FF5C5C'},
+                'layerPoints': <String, Object?>{
+                  'Langue': <Object?>[
+                    <Object?>[0, 0],
+                    <Object?>[50, 0],
+                    <Object?>[25, 60],
+                  ],
+                },
+              },
+              <String, Object?>{
+                't': 2,
+                'easing': 'linear',
+                'colors': <String, Object?>{'Langue': '#F2C94C'},
+                'layerPoints': <String, Object?>{
+                  'Langue': <Object?>[
+                    <Object?>[30, 10],
+                    <Object?>[80, 10],
+                    <Object?>[55, 70],
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      });
+      final shape = imported.shapes.first;
+      final langue = shape.layers.where((l) => l.name == 'Langue').firstOrNull!;
+      expect(shape.layerColorAnimated(langue.id), isTrue);
+      // Base : bbox 50×60 → centre (25,30), stocké = json − (25,30) + (25,30).
+      final mid = shape.pointsAtLayer(langue.id, const [], 1000);
+      expect(mid.length, 3);
+      expect(mid[0].dx, closeTo(15, 0.01));
+      expect(mid[0].dy, closeTo(5, 0.01));
+      // Couleur interpolée (linéaire à mi-course).
+      expect(
+        shape.colorAtLayer(langue.id, 1000, 0),
+        lerpArgb(0xFFFF5C5C, 0xFFF2C94C, 0.5),
+      );
+      // Round trip : maps par NOM de couche.
+      final exported = SimpleAnimationFormat.toJson(imported);
+      expect(exported['version'], 3);
+      final keys =
+          ((exported['shapes'] as List<Object?>).first
+                  as Map<String, Object?>)['keyframes']!
+              as List<Object?>;
+      final kf0 = keys[0] as Map<String, Object?>;
+      expect(((kf0['colors'] as Map<String, Object?>)['Langue']), '#FF5C5C');
+      final kf2 = keys[1] as Map<String, Object?>;
+      expect(
+        ((kf2['layerPoints'] as Map<String, Object?>)['Langue'] as List).length,
+        3,
+      );
+      // Les poses numériques sont restées complètes (pas de perte).
+      expect(kf2.containsKey('x'), isFalse); // inchangé → omis (sparse)
+      expect((kf2['colors'] as Map)['Langue'], '#F2C94C');
+    });
+
+    test('erreurs : color/colors et points/layerPoints hors contexte', () {
+      Map<String, Object?> shapeJson(Map<String, Object?> kf) =>
+          <String, Object?>{
+            'name': 'A',
+            'layers': <Object?>[
+              <String, Object?>{'name': 'L', 'type': 'rect'},
+            ],
+            'end': 1,
+            'keyframes': <Object?>[kf],
+          };
+      // `color` (scalaire) sur une forme en layers[] → refus explicite.
+      try {
+        SimpleAnimationFormat.fromJson(<String, Object?>{
+          'version': 3,
+          'shapes': <Object?>[
+            shapeJson(<String, Object?>{'t': 0, 'color': '#FF0000'}),
+          ],
+        });
+        fail('SimpleFormatException attendu');
+      } on SimpleFormatException catch (error) {
+        expect(
+          error.toString(),
+          contains('keyframes[0].color : réservé aux formes à UNE couche'),
+        );
+      }
+      // `colors` (map) sur une forme à plat → refus explicite.
+      try {
+        SimpleAnimationFormat.fromJson(<String, Object?>{
+          'version': 3,
+          'shapes': <Object?>[
+            <String, Object?>{
+              'name': 'B',
+              'type': 'rect',
+              'end': 1,
+              'keyframes': <Object?>[
+                <String, Object?>{
+                  't': 0,
+                  'colors': <String, Object?>{'L': '#FF0000'},
+                },
+              ],
+            },
+          ],
+        });
+        fail('SimpleFormatException attendu');
+      } on SimpleFormatException catch (error) {
+        expect(
+          error.toString(),
+          contains('keyframes[0].colors : réservé aux formes en layers[]'),
+        );
+      }
+      // Couche inconnue dans `colors` → erreur avec chemin.
+      try {
+        SimpleAnimationFormat.fromJson(<String, Object?>{
+          'version': 3,
+          'shapes': <Object?>[
+            shapeJson(<String, Object?>{
+              't': 0,
+              'colors': <String, Object?>{'Inconnue': '#FF0000'},
+            }),
+          ],
+        });
+        fail('SimpleFormatException attendu');
+      } on SimpleFormatException catch (error) {
+        expect(
+          error.toString(),
+          contains('keyframes[0].colors.Inconnue : couche inconnue'),
+        );
+      }
+    });
+
+    test(
+      'translation d\'os : « move » monde → interne → monde (round trip)',
+      () {
+        final imported = SimpleAnimationFormat.fromJson(<String, Object?>{
+          'version': 3,
+          'shapes': <Object?>[
+            <String, Object?>{
+              'name': 'Pièce',
+              'type': 'rect',
+              'end': 2,
+              'x': 100,
+              'y': 100,
+            },
+          ],
+          'skeleton': <String, Object?>{
+            'name': 'Bras',
+            'bones': <Object?>[
+              <String, Object?>{
+                'name': 'Épaule',
+                'joint': <Object?>[100, 100],
+                'angle': -90,
+                'length': 80,
+                'ik': true,
+              },
+              <String, Object?>{
+                'name': 'Coude',
+                'parent': 'Épaule',
+                'joint': <Object?>[100, 20],
+                'angle': -90,
+                'length': 60,
+              },
+              <String, Object?>{
+                'name': 'Poignet',
+                'parent': 'Coude',
+                'joint': <Object?>[100, -40],
+                'angle': -90,
+                'length': 40,
+              },
+            ],
+            'bind': <String, Object?>{'Pièce': 'Épaule'},
+            'keyframes': <Object?>[
+              <String, Object?>{
+                'bone': 'Poignet',
+                't': 1,
+                'angle': -90,
+                'move': <Object?>[0, -20],
+              },
+            ],
+          },
+        });
+        expect(imported.isSkeleton, isTrue);
+        final rig = imported.skeleton!;
+        final poignet = rig.bones
+            .where((b) => b.name == 'Poignet')
+            .firstOrNull!;
+        // Stockage dans le repère de repos du parent : (0,−20) monde avec
+        // parent à −90° → (20, 0) local (ε du cos(π/2) toléré).
+        final stored = rig.translationAt(poignet.id, 1000);
+        expect(stored.dx, closeTo(20, 1e-9));
+        expect(stored.dy, closeTo(0, 1e-9));
+        // FK : le poignet glisse de 20 unités le long du bras (vers le haut).
+        final animated = SkeletonPose.evaluate(rig, 1000);
+        final joint = animated.frameOf(poignet.id)!.joint;
+        expect(joint.dx, closeTo(100, 1e-6));
+        expect(joint.dy, closeTo(-60, 1e-6));
+        // L'angle du poignet est inchangé (move ≠ angle).
+        expect(
+          animated.frameOf(poignet.id)!.worldAngle,
+          closeTo(-math.pi / 2, 1e-6),
+        );
+        // Round trip : l'export ré-émet le delta en MONDE.
+        final exported = SimpleAnimationFormat.toJson(imported);
+        expect(exported['version'], 3);
+        final keys =
+            ((exported['skeleton'] as Map<String, Object?>)['keyframes']!
+                as List<Object?>);
+        final move =
+            (keys.single as Map<String, Object?>)['move'] as List<Object?>;
+        expect((move[0] as num).toDouble(), closeTo(0, 1e-6));
+        expect((move[1] as num).toDouble(), closeTo(-20, 1e-6));
+      },
+    );
   });
 }

@@ -26,6 +26,10 @@ class SimpleAnimationFormat {
   /// Version des fichiers qui utilisent les extensions v2 (multi-couches).
   static const int version2 = 2;
 
+  /// Version des fichiers qui utilisent les extensions v3 (v0.15, moteur
+  /// lourd) : couleur animée, morph de points, translation d'os.
+  static const int version3 = 3;
+
   // Défauts (canvas validé utilisateur : 720×1280, 25 fps).
   static const double defaultWidth = 720;
   static const double defaultHeight = 1280;
@@ -45,6 +49,7 @@ class SimpleAnimationFormat {
   static Map<String, Object?> toJson(AnimationProject project) {
     final shapes = <Map<String, Object?>>[];
     var usesV2 = false;
+    var usesV3 = false;
     // Une forme avec une liaison de COUCHE est exportée en layers[] (avec
     // une seule couche si besoin) : le nom de couche doit survivre au
     // round-trip pour que « Forme/Couche » reste importable.
@@ -60,6 +65,7 @@ class SimpleAnimationFormat {
       if (shape.layers.length > 1 || forceLayers || _shapeExtrasUseV2(shape)) {
         usesV2 = true;
       }
+      if (_shapeUsesV3(shape)) usesV3 = true;
       shapes.add(_shapeToJson(shape, forceLayers: forceLayers));
     }
     final rig = project.skeleton;
@@ -68,11 +74,16 @@ class SimpleAnimationFormat {
         if (track.any((k) => k.easing == EasingKind.customBezier)) {
           usesV2 = true;
         }
+        if (track.any((k) => k.tx != 0 || k.ty != 0)) usesV3 = true;
       }
       if (rig.bindings.any((b) => b.layerId != null)) usesV2 = true;
     }
     final json = <String, Object?>{
-      'version': usesV2 ? version2 : version,
+      'version': usesV3
+          ? version3
+          : usesV2
+          ? version2
+          : version,
       'name': project.name,
       'canvas': <String, Object?>{
         'width': project.width,
@@ -118,12 +129,9 @@ class SimpleAnimationFormat {
       json['points'] = _pointsToJson(layer);
     }
     _addShapeLevelExtras(json, shape);
-    _addShapeKeyframes(json, shape);
+    _addShapeKeyframes(json, shape, multiLayer: false);
     return json;
   }
-
-  /// La forme utilise-t-elle une extension v2 ? Déterminé directement dans
-  /// `toJson` (couches multiples ou liaison de couche).
 
   /// Les champs extras de la forme (axes, pivot, bezier) forcent-ils la v2 ?
   static bool _shapeExtrasUseV2(VectorShape shape) {
@@ -131,6 +139,15 @@ class SimpleAnimationFormat {
     if (shape.pivotDx != 0 || shape.pivotDy != 0) return true;
     for (final key in shape.keyframes) {
       if (key.easing == EasingKind.customBezier) return true;
+    }
+    return false;
+  }
+
+  /// La forme utilise-t-elle une extension v3 (couleur animée, morph) ?
+  static bool _shapeUsesV3(VectorShape shape) {
+    for (final key in shape.keyframes) {
+      if (key.layerColors.isNotEmpty) return true;
+      if (key.layerPoints.isNotEmpty) return true;
     }
     return false;
   }
@@ -162,7 +179,7 @@ class SimpleAnimationFormat {
       'opacity': shape.opacity,
     };
     _addShapeLevelExtras(json, shape);
-    _addShapeKeyframes(json, shape);
+    _addShapeKeyframes(json, shape, multiLayer: true);
     return json;
   }
 
@@ -187,7 +204,11 @@ class SimpleAnimationFormat {
     return json;
   }
 
-  static void _addShapeKeyframes(Map<String, Object?> json, VectorShape shape) {
+  static void _addShapeKeyframes(
+    Map<String, Object?> json,
+    VectorShape shape, {
+    required bool multiLayer,
+  }) {
     if (!shape.hasKeyframes) return;
     // Export sparse : une propriété égale à la keyframe précédente (ou à
     // la base pour la première) est omise.
@@ -195,31 +216,67 @@ class SimpleAnimationFormat {
       for (final property in AnimatableProperty.values)
         property: shape.baseOf(property),
     };
+    // Mode à plat : la (seule) couche porte la couleur/le morph dans la
+    // keyframe (`color` / `points`). Mode layers[] : maps par NOM de couche
+    // (`colors` / `layerPoints`).
+    final flatLayer = multiLayer
+        ? null
+        : (shape.layers.isEmpty ? null : shape.layers.first);
+    final layersByName = multiLayer
+        ? <String, ShapeLayer>{
+            for (final layer in shape.layers) layer.name: layer,
+          }
+        : null;
     json['keyframes'] = [
-      for (final key in shape.keyframes) _shapeKeyframeToJson(key, previous),
+      for (final key in shape.keyframes)
+        _shapeKeyframeToJson(
+          key,
+          previous,
+          flatLayer: flatLayer,
+          layersByName: layersByName,
+        ),
     ];
   }
 
-  /// Points exportés « autour du centre » (conversion inverse de l'import).
-  static List<Object?> _pointsToJson(ShapeLayer layer) {
-    final points = layer.points;
-    final minx = points.map((p) => p.dx).reduce(math.min);
-    final maxx = points.map((p) => p.dx).reduce(math.max);
-    final miny = points.map((p) => p.dy).reduce(math.min);
-    final maxy = points.map((p) => p.dy).reduce(math.max);
-    return [
-      for (final p in points)
-        [
-          p.dx - layer.width / 2 + (minx + maxx) / 2,
-          p.dy - layer.height / 2 + (miny + maxy) / 2,
-        ],
-    ];
+  /// Centre du nuage de points STOCKÉS d'une couche (repère boîte) — la
+  /// même constante que l'export des points de base : keyframes et base
+  /// partagent un repère cohérent (morph, v0.15).
+  static Offset _storedPointsCenter(ShapeLayer layer) {
+    if (layer.points.isEmpty) return Offset(layer.width / 2, layer.height / 2);
+    final minx = layer.points.map((p) => p.dx).reduce(math.min);
+    final maxx = layer.points.map((p) => p.dx).reduce(math.max);
+    final miny = layer.points.map((p) => p.dy).reduce(math.min);
+    final maxy = layer.points.map((p) => p.dy).reduce(math.max);
+    return Offset((minx + maxx) / 2, (miny + maxy) / 2);
   }
+
+  static List<Object?> _pointsToJson(ShapeLayer layer) => [
+    for (final p in layer.points)
+      [
+        p.dx - layer.width / 2 + _storedPointsCenter(layer).dx,
+        p.dy - layer.height / 2 + _storedPointsCenter(layer).dy,
+      ],
+  ];
+
+  /// Points exportés avec un centre DONNÉ (keyframes de morph : le centre
+  /// de la BASE — recentrer chaque keyframe indépendamment briserait le
+  /// morph).
+  static List<Object?> _pointsToCenteredJson(
+    List<Offset> points,
+    double width,
+    double height,
+    Offset center,
+  ) => [
+    for (final p in points)
+      [p.dx - width / 2 + center.dx, p.dy - height / 2 + center.dy],
+  ];
 
   static Map<String, Object?> _shapeKeyframeToJson(
     ShapeKeyframe key,
-    Map<AnimatableProperty, double> previous,
-  ) {
+    Map<AnimatableProperty, double> previous, {
+    ShapeLayer? flatLayer,
+    Map<String, ShapeLayer>? layersByName,
+  }) {
     final json = <String, Object?>{
       't': key.timeMs / 1000,
       'easing': key.easing == EasingKind.customBezier
@@ -234,6 +291,49 @@ class SimpleAnimationFormat {
           ? _radToDeg(value)
           : value;
       previous[property] = value;
+    }
+    // Couleur animée (v0.15) : `color` (à plat) ou `colors` par nom (couches).
+    if (flatLayer != null) {
+      final color = key.layerColors[flatLayer.id];
+      if (color != null) json['color'] = _colorToHex(color);
+    } else if (layersByName != null && key.layerColors.isNotEmpty) {
+      final colors = <String, Object?>{};
+      for (final entry in key.layerColors.entries) {
+        final layer = layersByName.values
+            .where((l) => l.id == entry.key)
+            .firstOrNull;
+        if (layer != null) colors[layer.name] = _colorToHex(entry.value);
+      }
+      if (colors.isNotEmpty) json['colors'] = colors;
+    }
+    // Morph de points (v0.15) : `points` (à plat) ou `layerPoints` par nom.
+    if (flatLayer != null) {
+      final points = key.layerPoints[flatLayer.id];
+      if (points != null && points.isNotEmpty && flatLayer.points.isNotEmpty) {
+        json['points'] = _pointsToCenteredJson(
+          points,
+          flatLayer.width,
+          flatLayer.height,
+          _storedPointsCenter(flatLayer),
+        );
+      }
+    } else if (layersByName != null && key.layerPoints.isNotEmpty) {
+      final byName = <String, Object?>{};
+      for (final entry in key.layerPoints.entries) {
+        final layer = layersByName.values
+            .where((l) => l.id == entry.key)
+            .firstOrNull;
+        if (layer == null || entry.value.isEmpty || layer.points.isEmpty) {
+          continue;
+        }
+        byName[layer.name] = _pointsToCenteredJson(
+          entry.value,
+          layer.width,
+          layer.height,
+          _storedPointsCenter(layer),
+        );
+      }
+      if (byName.isNotEmpty) json['layerPoints'] = byName;
     }
     return json;
   }
@@ -301,6 +401,16 @@ class SimpleAnimationFormat {
         if (key.opacity != 1) json['opacity'] = key.opacity;
         if (key.stretch != 1) json['stretch'] = key.stretch;
         if (key.squash != 1) json['squash'] = key.squash;
+        // Translation d'os (v0.15) : stockée dans le repère de repos du
+        // PARENT → émise en MONDE (delta depuis la position de repos),
+        // symétrique de l'import.
+        if (key.tx != 0 || key.ty != 0) {
+          final move = rotateVector(
+            Offset(key.tx, key.ty),
+            _restWorldAngleRad(rig, rig.boneById(bone.parentId)),
+          );
+          json['move'] = [move.dx, move.dy];
+        }
         keyframes.add(json);
       }
     }
@@ -310,6 +420,20 @@ class SimpleAnimationFormat {
       if (bindings.isNotEmpty) 'bind': bindings,
       if (keyframes.isNotEmpty) 'keyframes': keyframes,
     };
+  }
+
+  /// Angle de repos MONDE (radians) d'un os — somme des restAngle de la
+  /// chaîne (os null → 0). Sert à convertir les translations `move` (v0.15).
+  static double _restWorldAngleRad(SkeletonRig rig, RigBone? bone) {
+    var angle = 0.0;
+    String? current = bone?.id;
+    while (current != null) {
+      final b = rig.boneById(current);
+      if (b == null) break;
+      angle += b.restAngle;
+      current = b.parentId;
+    }
+    return angle;
   }
 
   /// Easing sérialisé : courbes nommées telles quelles, cubic-bezier en
@@ -359,8 +483,10 @@ class _PendingBoneKey {
     this.bezier,
     this.opacity,
     this.stretch,
-    this.squash,
-  );
+    this.squash, {
+    this.tx = 0,
+    this.ty = 0,
+  });
 
   final String boneId;
   int timeMs;
@@ -371,6 +497,10 @@ class _PendingBoneKey {
   final double stretch;
   final double squash;
 
+  /// Translation animée (v0.15), repère de repos du parent.
+  final double tx;
+  final double ty;
+
   _PendingBoneKey withTime(int timeMs) => _PendingBoneKey(
     boneId,
     timeMs,
@@ -380,6 +510,8 @@ class _PendingBoneKey {
     opacity,
     stretch,
     squash,
+    tx: tx,
+    ty: ty,
   );
 }
 
@@ -574,8 +706,9 @@ class _Parse {
   AnimationProject parse(Map<String, Object?> json) {
     final version = intAt('version', json['version'], fallback: 0);
     if (version != SimpleAnimationFormat.version &&
-        version != SimpleAnimationFormat.version2) {
-      problem('version : 1 ou 2 attendu (trouvé $version)');
+        version != SimpleAnimationFormat.version2 &&
+        version != SimpleAnimationFormat.version3) {
+      problem('version : 1, 2 ou 3 attendu (trouvé $version)');
     }
     _parseTheme(json['theme']);
     _parseDefs(json['defs']);
@@ -678,18 +811,28 @@ class _Parse {
     }
     final layers = <ShapeLayer>[];
     final rawLayers = listOf('$path.layers', effective['layers']);
+    // Couleurs/morph de keyframes (v0.15) : centre bbox de la liste points
+    // de BASE (json) de chaque couche — les points de morph des keyframes
+    // partagent son repère (recentrer chaque keyframe briserait le morph).
+    final basePointsCenter = <String, (double, double)>{}; // layerId → (cx, cy)
     if (rawLayers != null) {
       for (var i = 0; i < rawLayers.length; i++) {
         final layerPath = '$path.layers[$i]';
         final layerJson = mapOf(layerPath, rawLayers[i]);
         if (layerJson == null) continue;
-        layers.add(_parseLayer(layerPath, layerJson, localPose: true));
+        final layer = _parseLayer(layerPath, layerJson, localPose: true);
+        final center = _jsonPointsCenter(layerJson['points']);
+        if (center != null) basePointsCenter[layer.id] = center;
+        layers.add(layer);
       }
       if (layers.isEmpty) {
         problem('$path.layers : au moins une couche attendue');
       }
     } else {
-      layers.add(_parseLayer(path, effective, localPose: false));
+      final layer = _parseLayer(path, effective, localPose: false);
+      final center = _jsonPointsCenter(effective['points']);
+      if (center != null) basePointsCenter[layer.id] = center;
+      layers.add(layer);
     }
     final shape = VectorShape(name: name, layers: layers);
     // Pose de base de la forme (centre du groupe) : la seule géométrie de
@@ -708,9 +851,40 @@ class _Parse {
     shape.pivotDy = numAt('$path.pivot[1]', _at(pivotPair, 1), fallback: 0);
     shape.opacity = numAt('$path.opacity', json['opacity'], fallback: 1);
     _parseShapeTime(path, json, shape);
-    _parseShapeKeyframes('$path.keyframes', json['keyframes'], shape);
+    _parseShapeKeyframes(
+      '$path.keyframes',
+      json['keyframes'],
+      shape,
+      isMultiLayer: rawLayers != null,
+      basePointsCenter: basePointsCenter,
+    );
     _applyShapeCycle(path, json, shape);
     project.shapes.add(shape);
+  }
+
+  /// Centre (bbox) d'une liste de points json — sert de repère commun aux
+  /// points de morph des keyframes (v0.15).
+  (double, double)? _jsonPointsCenter(Object? rawPoints) {
+    final list = rawPoints is List ? rawPoints : null;
+    if (list == null || list.isEmpty) return null;
+    double? minx;
+    double? maxx;
+    double? miny;
+    double? maxy;
+    for (final raw in list) {
+      if (raw is! List || raw.length < 2) continue;
+      final x = (raw[0] as num?)?.toDouble();
+      final y = (raw[1] as num?)?.toDouble();
+      if (x == null || y == null) continue;
+      minx = minx == null ? x : math.min(minx, x);
+      maxx = maxx == null ? x : math.max(maxx, x);
+      miny = miny == null ? y : math.min(miny, y);
+      maxy = maxy == null ? y : math.max(maxy, y);
+    }
+    if (minx == null || maxx == null || miny == null || maxy == null) {
+      return null;
+    }
+    return ((minx + maxx) / 2, (miny + maxy) / 2);
   }
 
   /// Une couche : primitive locale à la forme. En mode `layers[]` (localPose)
@@ -837,10 +1011,17 @@ class _Parse {
     }
   }
 
-  void _parseShapeKeyframes(String path, Object? raw, VectorShape shape) {
+  void _parseShapeKeyframes(
+    String path,
+    Object? raw,
+    VectorShape shape, {
+    required bool isMultiLayer,
+    required Map<String, (double, double)> basePointsCenter,
+  }) {
     final list = listOf(path, raw) ?? const <Object?>[];
     if (list.isEmpty) return;
-    // Porter les valeurs d'une keyframe à la suivante (poses complètes).
+    // Porter les valeurs d'une keyframe à la suivante (poses complètes) —
+    // y compris couleurs et points de morph (v0.15).
     final carried = <AnimatableProperty, double>{
       AnimatableProperty.x: shape.x,
       AnimatableProperty.y: shape.y,
@@ -851,6 +1032,8 @@ class _Parse {
       AnimatableProperty.opacity: shape.opacity,
       AnimatableProperty.strokeWidth: shape.strokeWidth,
     };
+    var carriedColors = <String, int>{}; // layerId → ARGB
+    var carriedPoints = <String, List<Offset>>{}; // layerId → points stockés
     for (var i = 0; i < list.length; i++) {
       final keyPath = '$path[$i]';
       final json = mapOf(keyPath, list[i]);
@@ -878,12 +1061,113 @@ class _Parse {
         carried[property] = value;
         values[property] = value;
       }
+
+      // Couleur animée (v0.15) : `color` (forme à plat) ou `colors` (map
+      // nom de couche → hex, couches multiples). Portés en carry.
+      final colors = Map<String, int>.from(carriedColors);
+      final flatColor = json['color'];
+      if (flatColor != null) {
+        if (isMultiLayer) {
+          problem(
+            '$keyPath.color : réservé aux formes à UNE couche — pour une '
+            'forme en layers[], utiliser « colors » (nom de couche → hex)',
+          );
+        } else {
+          final resolved = colorRef('$keyPath.color', flatColor, fallback: 0);
+          if (resolved != 0) colors[shape.layers.first.id] = resolved;
+        }
+      }
+      final colorsMap = mapOf('$keyPath.colors', json['colors']);
+      if (colorsMap != null) {
+        if (!isMultiLayer) {
+          problem(
+            '$keyPath.colors : réservé aux formes en layers[] — pour une '
+            'forme à une couche, utiliser « color »',
+          );
+        } else {
+          for (final entry in colorsMap.entries) {
+            final layer = shape.layers
+                .where((l) => l.name == entry.key)
+                .firstOrNull;
+            if (layer == null) {
+              problem('$keyPath.colors.${entry.key} : couche inconnue');
+              continue;
+            }
+            final resolved = colorRef(
+              '$keyPath.colors.${entry.key}',
+              entry.value,
+              fallback: 0,
+            );
+            if (resolved != 0) colors[layer.id] = resolved;
+          }
+        }
+      }
+      carriedColors = colors;
+
+      // Morph de points (v0.15) : `points` (à plat) ou `layerPoints` (map
+      // nom de couche → points, même repère que la liste points de base).
+      final points = <String, List<Offset>>{};
+      for (final entry in carriedPoints.entries) {
+        points[entry.key] = List<Offset>.from(entry.value);
+      }
+      final flatPoints = listOf('$keyPath.points', json['points']);
+      if (flatPoints != null) {
+        if (isMultiLayer) {
+          problem(
+            '$keyPath.points : réservé aux formes à UNE couche — pour une '
+            'forme en layers[], utiliser « layerPoints »',
+          );
+        } else {
+          final stored = _morphPointsStored(
+            '$keyPath.points',
+            flatPoints,
+            basePointsCenter[shape.layers.first.id],
+            shape.layers.first,
+          );
+          if (stored.isNotEmpty) points[shape.layers.first.id] = stored;
+        }
+      }
+      final pointsMap = mapOf('$keyPath.layerPoints', json['layerPoints']);
+      if (pointsMap != null) {
+        if (!isMultiLayer) {
+          problem(
+            '$keyPath.layerPoints : réservé aux formes en layers[] — pour '
+            'une forme à une couche, utiliser « points »',
+          );
+        } else {
+          for (final entry in pointsMap.entries) {
+            final layer = shape.layers
+                .where((l) => l.name == entry.key)
+                .firstOrNull;
+            if (layer == null) {
+              problem('$keyPath.layerPoints.${entry.key} : couche inconnue');
+              continue;
+            }
+            final rawPoints = listOf(
+              '$keyPath.layerPoints.${entry.key}',
+              entry.value,
+            );
+            if (rawPoints == null) continue;
+            final stored = _morphPointsStored(
+              '$keyPath.layerPoints.${entry.key}',
+              rawPoints,
+              basePointsCenter[layer.id],
+              layer,
+            );
+            if (stored.isNotEmpty) points[layer.id] = stored;
+          }
+        }
+      }
+      carriedPoints = points;
+
       shape.keyframes.add(
         ShapeKeyframe(
           timeMs: (t * 1000).round(),
           values: values,
           easing: spec.easing,
           bezier: spec.bezier,
+          layerColors: colors.isEmpty ? null : Map<String, int>.from(colors),
+          layerPoints: points.isEmpty ? null : points,
         ),
       );
     }
@@ -892,6 +1176,40 @@ class _Parse {
     for (final key in shape.keyframes) {
       if (key.timeMs > shape.endMs) shape.endMs = key.timeMs;
     }
+  }
+
+  /// Points d'une keyframe de morph (json « autour du centre », MÊME repère
+  /// que la liste points de la base) → points stockés (repère boîte de la
+  /// couche, rendus à `point − (w/2, h/2)`).
+  List<Offset> _morphPointsStored(
+    String path,
+    List<Object?> rawPoints,
+    (double, double)? baseCenter,
+    ShapeLayer layer,
+  ) {
+    final points = <Offset>[];
+    for (var i = 0; i < rawPoints.length; i++) {
+      final pair = listOf('$path[$i]', rawPoints[i]) ?? const <Object?>[];
+      if (pair.length < 2) {
+        problem('$path[$i] : [x, y] attendu');
+        continue;
+      }
+      points.add(
+        Offset(
+          numAt('$path[$i][0]', _at(pair, 0), fallback: 0),
+          numAt('$path[$i][1]', _at(pair, 1), fallback: 0),
+        ),
+      );
+    }
+    if (points.length < 2) {
+      problem('$path : au moins 2 points attendus');
+      return const <Offset>[];
+    }
+    final (cx, cy) = baseCenter ?? (layer.width / 2, layer.height / 2);
+    return [
+      for (final p in points)
+        Offset(p.dx - cx + layer.width / 2, p.dy - cy + layer.height / 2),
+    ];
   }
 
   /// `cycle.repeat` (vasf-2) : le motif de keyframes est répété N fois de plus
@@ -1009,8 +1327,13 @@ class _Parse {
       }
       rig.addBone(bone);
       byName[name] = bone;
-      worldRestDeg[bone.id] =
-          (parent == null ? 0.0 : worldRestDeg[parent.id]!) + angleWorldDeg;
+      // L'angle déclaré est MONDE : le bookkeeping pour les ENFANTS de cet
+      // os doit le reprendre tel quel. (v0.11 additionnait le résumé du
+      // parent — les chaînes ≥ 3 os se posaient fausses dès le 3e niveau,
+      // auto-cohérent en round-trip donc invisible jusqu'au test `move`
+      // v0.15 : l'angle et l'offset d'un 3e os étaient calculés contre un
+      // faux angle monde du parent.)
+      worldRestDeg[bone.id] = angleWorldDeg;
       worldRestJoint[bone.id] = joint;
     }
     // Liaisons pièces → os (par noms). Une clé « Forme/Couche » (vasf-2)
@@ -1079,6 +1402,30 @@ class _Parse {
         fallback: restDeg,
       );
       final spec = easingSpecAt('$path.easing', keyJson['easing']);
+      // Translation d'os (v0.15) : `move` = [dx, dy] MONDE (delta depuis la
+      // position de repos de l'articulation) → ramené dans le repère de
+      // repos du parent (même convention que offsetX/offsetY).
+      var tx = 0.0;
+      var ty = 0.0;
+      final movePair =
+          listOf('$path.move', keyJson['move']) ?? const <Object?>[];
+      if (movePair.isNotEmpty) {
+        if (movePair.length < 2) {
+          problem('$path.move : [dx, dy] attendu');
+        } else {
+          final world = Offset(
+            numAt('$path.move[0]', _at(movePair, 0), fallback: 0),
+            numAt('$path.move[1]', _at(movePair, 1), fallback: 0),
+          );
+          final parent = rig.boneById(bone.parentId);
+          final local = rotateVector(
+            world,
+            -SimpleAnimationFormat._restWorldAngleRad(rig, parent),
+          );
+          tx = local.dx;
+          ty = local.dy;
+        }
+      }
       pending.add(
         _PendingBoneKey(
           bone.id,
@@ -1089,6 +1436,8 @@ class _Parse {
           numAt('$path.opacity', keyJson['opacity'], fallback: 1),
           numAt('$path.stretch', keyJson['stretch'], fallback: 1),
           numAt('$path.squash', keyJson['squash'], fallback: 1),
+          tx: tx,
+          ty: ty,
         ),
       );
     }
@@ -1103,6 +1452,8 @@ class _Parse {
         opacity: key.opacity,
         stretch: key.stretch,
         squash: key.squash,
+        tx: key.tx == 0 ? null : key.tx,
+        ty: key.ty == 0 ? null : key.ty,
       );
     }
   }

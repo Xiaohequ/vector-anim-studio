@@ -809,6 +809,166 @@ void main() {
       },
     );
   });
+
+  group('translation d\'os + chaînes IK (v0.15)', () {
+    test('translationAt échantillonne la piste (tenue + interpolation)', () {
+      final rig = SkeletonRig();
+      final bone = RigBone(name: 'B', length: 10);
+      rig.addBone(bone);
+      expect(rig.translationAt(bone.id, 0), Offset.zero);
+      rig.upsertKeyframe(bone.id, 0, 0, tx: 10, ty: 0);
+      rig.upsertKeyframe(
+        bone.id,
+        1000,
+        0,
+        easing: EasingKind.linear,
+        tx: 30,
+        ty: 20,
+      );
+      expect(rig.translationAt(bone.id, -5), const Offset(10, 0));
+      expect(rig.translationAt(bone.id, 500), const Offset(20, 10));
+      expect(rig.translationAt(bone.id, 5000), const Offset(30, 20));
+    });
+
+    test('FK : la translation bouge le joint animé, PAS la pose de repos', () {
+      final rig = SkeletonRig();
+      final root = RigBone(name: 'R', offsetX: 100, offsetY: 100, length: 100);
+      final child = RigBone(
+        name: 'C',
+        parentId: root.id,
+        offsetX: 100,
+        offsetY: 0,
+        restAngle: math.pi / 2,
+        length: 50,
+      );
+      rig.addBone(root);
+      rig.addBone(child);
+      // La racine glisse de +30 en X au temps 1000 (tenue avant la 1re
+      // pose, comme l'angle).
+      rig.upsertKeyframe(root.id, 1000, 0, tx: 30, ty: 0);
+
+      final rest = SkeletonPose.evaluate(rig, 0);
+      final animated = SkeletonPose.evaluate(rig, 1000);
+      // La POSE DE REPOS (jointRest) est intacte — c'est elle qui garantit
+      // l'identité au repos du rig maître.
+      expect(rest.frameOf(root.id)!.jointRest, const Offset(100, 100));
+      expect(rest.frameOf(child.id)!.jointRest, const Offset(200, 100));
+      // Animé : le joint glisse et l'enfant suit rigidement.
+      expect(animated.frameOf(root.id)!.joint, const Offset(130, 100));
+      expect(animated.frameOf(child.id)!.joint, const Offset(230, 100));
+      // L'angle monde ne change pas (translation ≠ rotation).
+      expect(
+        animated.frameOf(root.id)!.worldAngle,
+        rest.frameOf(root.id)!.worldAngle,
+      );
+    });
+
+    test('translation d\'un enfant : exprimée dans le repère du parent', () {
+      final rig = SkeletonRig();
+      final root = RigBone(
+        name: 'R',
+        offsetX: 100,
+        offsetY: 100,
+        restAngle: -math.pi / 2,
+        length: 100,
+      );
+      final child = RigBone(
+        name: 'C',
+        parentId: root.id,
+        offsetX: 100,
+        offsetY: 0,
+        length: 50,
+      );
+      rig.addBone(root);
+      rig.addBone(child);
+      // Le parent pointe vers le HAUT (−90°) : une translation de l'enfant
+      // de (30, 0) dans son repère de repos glisse le LONG du parent →
+      // (0, −30) monde.
+      rig.upsertKeyframe(child.id, 500, 0, tx: 30, ty: 0);
+      final animated = SkeletonPose.evaluate(rig, 500);
+      final joint = animated.frameOf(child.id)!.joint;
+      expect(joint.dx, closeTo(100, 1e-6));
+      expect(joint.dy, closeTo(-30, 1e-6));
+      final tip = animated.frameOf(child.id)!.tip;
+      expect(tip.dx, closeTo(100, 1e-6));
+      expect(tip.dy, closeTo(-80, 1e-6));
+    });
+
+    test('ikChain suit les enfants uniques et s\'arrête aux branches', () {
+      final rig = SkeletonRig();
+      final a = RigBone(name: 'A', length: 40);
+      final b = RigBone(name: 'B', parentId: a.id, offsetX: 40, length: 30);
+      final c = RigBone(name: 'C', parentId: b.id, offsetX: 30, length: 20);
+      final branch1 = RigBone(
+        name: 'D1',
+        parentId: c.id,
+        offsetX: 20,
+        length: 5,
+      );
+      final branch2 = RigBone(
+        name: 'D2',
+        parentId: c.id,
+        offsetX: 20,
+        length: 5,
+      );
+      for (final bone in [a, b, c, branch1, branch2]) {
+        rig.addBone(bone);
+      }
+      // A a un seul enfant (B)… mais la chaîne D1/D2 part de C : l'IK de A
+      // s'arrête à C (2 enfants → fin de chaîne, effecteur = C).
+      expect(rig.ikChain(a.id).map((b) => b.name), ['A', 'B', 'C']);
+      expect(rig.ikEffectorOf(a.id)!.name, 'C');
+      // Une chaîne linéaire jusqu'au bout.
+      expect(rig.ikChain(b.id).map((b) => b.name), ['B', 'C']);
+      expect(rig.ikEffectorOf(b.id)!.name, 'C');
+      // Os absent → chaîne vide.
+      expect(rig.ikChain('inconnu'), isEmpty);
+    });
+
+    test('solveChainIk (CCD) atteint la cible sur 3 os', () {
+      final rootJoint = const Offset(100, 100);
+      final lengths = <double>[80, 60, 40];
+      final angles = solveChainIk(
+        rootJoint: rootJoint,
+        lengths: lengths,
+        angles: const <double>[0, 0, 0],
+        target: const Offset(160, 190),
+      );
+      // L'extrémité de la chaîne tombe sur la cible (portée = 180 > distance).
+      var tip = rootJoint;
+      for (var i = 0; i < lengths.length; i++) {
+        tip += rotateVector(Offset(lengths[i], 0), angles[i]);
+      }
+      expect((tip - const Offset(160, 190)).distance, lessThan(1.0));
+      // Cible hors de portée : la chaîne se tend au maximum vers elle.
+      final stretched = solveChainIk(
+        rootJoint: rootJoint,
+        lengths: lengths,
+        angles: const <double>[0, 0, 0],
+        target: const Offset(100, 1000),
+      );
+      var stretchedTip = rootJoint;
+      for (var i = 0; i < lengths.length; i++) {
+        stretchedTip += rotateVector(Offset(lengths[i], 0), stretched[i]);
+      }
+      expect((stretchedTip - rootJoint).distance, closeTo(180, 2.0));
+    });
+
+    test('BoneKeyframe : tx/ty survivent au JSON (et rien quand nuls)', () {
+      final rig = SkeletonRig();
+      final bone = RigBone(name: 'B', length: 10);
+      rig.addBone(bone);
+      rig.upsertKeyframe(bone.id, 500, 0.3, tx: 12, ty: -5);
+      final restored = SkeletonRig.fromJson(rig.toJson());
+      final key = restored.trackOf(bone.id)!.first;
+      expect(key.tx, 12);
+      expect(key.ty, -5);
+      // Une keyframe sans translation n'écrit rien (JSON compact).
+      final plain = BoneKeyframe(timeMs: 100).toJson();
+      expect(plain.containsKey('tx'), isFalse);
+      expect(plain.containsKey('ty'), isFalse);
+    });
+  });
 }
 
 Matcher closeToOffset(Offset expected, [double epsilon = 1e-6]) =>

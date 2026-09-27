@@ -138,6 +138,40 @@ void main() {
       loadedShape.valueAt(AnimatableProperty.opacity, 700),
       closeTo(0.5, 0.01),
     );
+
+    // v0.15 : couleur animée + morph de points doivent survivre à la DB
+    // (leçon v0.13.2 : un champ de modèle sans colonne meurt au rechargement).
+    shape.keyframes.first.layerColors[shape.layers.first.id] = 0xFFFF0000;
+    shape.keyframes[1].layerColors[shape.layers.first.id] = 0xFF00FF00;
+    shape.keyframes.first.layerPoints[shape.layers.first.id] = const <Offset>[
+      Offset(1, 2),
+      Offset(3, 4),
+      Offset(5, 6),
+    ];
+    await repository.save(project);
+    final reloaded = await repository.load(project.id);
+    final reloadedShape = reloaded.shapes.first;
+    expect(
+      reloadedShape.keyframes.first.layerColors[reloadedShape.layers.first.id],
+      0xFFFF0000,
+    );
+    expect(
+      reloadedShape.keyframes[1].layerColors[reloadedShape.layers.first.id],
+      0xFF00FF00,
+    );
+    expect(
+      reloadedShape.keyframes.first.layerPoints[reloadedShape.layers.first.id],
+      const <Offset>[Offset(1, 2), Offset(3, 4), Offset(5, 6)],
+    );
+    // Interpolation couleur reconstruite depuis la DB (easeInOut à mi-course).
+    expect(
+      reloadedShape.colorAtLayer(
+        reloadedShape.layers.first.id,
+        700,
+        0xFF000000,
+      ),
+      0xFF808000,
+    );
   });
 
   test(
@@ -252,6 +286,12 @@ void main() {
     expect(loadedRig.bones.single.length, 60);
     expect(loadedRig.boneIdForShape(piece.id), bone.id);
     expect(loadedRig.trackOf(bone.id)![1].angleDelta, closeTo(0.9, 1e-9));
+    // v0.15 : la translation keyframée d'os vit dans le JSON du rig.
+    expect(
+      loadedRig.translationAt(bone.id, 1400),
+      Offset.zero,
+      reason: 'repos sans move posé',
+    );
 
     // La duplication emporte le rig avec un id de projet différent.
     final copy = await repository.duplicate(project.id);
@@ -259,6 +299,41 @@ void main() {
     expect(copy.skeleton!.name, 'Rig test');
     expect(copy.skeleton!.bones.single.id, bone.id);
     expect(copy.id, isNot(project.id));
+  });
+
+  test('la translation keyframée d os survit à la DB (v0.15)', () async {
+    final project = AnimationProject.blank(
+      name: 'Rig glissé',
+      type: ProjectType.skeleton,
+    );
+    final rig = SkeletonRig();
+    final bone = RigBone(name: 'Slide', offsetX: 100, offsetY: 100, length: 60);
+    rig.addBone(bone);
+    rig.upsertKeyframe(bone.id, 0, 0, easing: EasingKind.linear);
+    rig.upsertKeyframe(
+      bone.id,
+      1200,
+      0.2,
+      easing: EasingKind.linear,
+      tx: 12,
+      ty: -5,
+    );
+    project.skeleton = rig;
+
+    await repository.save(project);
+    final loaded = await repository.load(project.id);
+    final loadedRig = loaded.skeleton!;
+    expect(loadedRig.translationAt(bone.id, 0), Offset.zero);
+    expect(loadedRig.translationAt(bone.id, 1200), const Offset(12, -5));
+    // FK reconstruit : le joint glisse, la pose de repos reste en place.
+    expect(
+      SkeletonPose.evaluate(loadedRig, 1200).frameOf(bone.id)!.joint,
+      const Offset(112, 95),
+    );
+    expect(
+      SkeletonPose.evaluate(loadedRig, 0).frameOf(bone.id)!.joint,
+      const Offset(100, 100),
+    );
   });
 
   test('les projets vectoriels créés avant la v4 restent vectoriels', () async {

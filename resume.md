@@ -6,15 +6,21 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Repo : https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`)
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
-- Dernière version : **0.14.0** (option C : import par fichier — sélecteur
-  système SAF, le collage presse-papiers est retiré ; reciblage « sans
-  saut » — re-lier une pièce/couche à un autre os réécrit ses poses pour
-  préserver la position MONDE au changement, gond + rotation, base au
-  curseur + keyframes recalées à leur propre instant ; tests de rendu
-  PERMANENTS en CI — suite `test/render_regression_test.dart`, centroids
-  de masques couleur : pièce liée suit l'os, couche liée suit son os,
-  reciblage avant/après identique). v0.13.2 (persistance pivot/axes/
-  bézier, schéma v5) validée appareil le 27/09.
+- Dernière version : **0.15.0** (vasf-3 / Groupe 3 — moteur lourd :
+  **couleur animée** par keyframe (`color`/`colors`, sampler carry,
+  painter interpolé, lignes couleur par couche dans la sheet ⚙ avec
+  auto-key) ; **morph de points** de path (`points`/`layerPoints`, lerp
+  point par point avec bourrage du nuage court, repère = base) ;
+  **translation d'os** (`move` monde / `tx`,`ty` internes, FK étendue,
+  ✥ animé → auto-key) ; **IK chaînes N os** (`ikChain` + CCD ≥ 3 os,
+  analytique conservé à 2, losange vert sur l'effecteur de chaîne) ;
+  **bug v0.11 corrigé** — bookkeeping d'import des chaînes ≥ 3 os ;
+  **bonus** — `upsertKeyframe` préserve la bézier/couleurs de la pose
+  existante ; schéma DB **v6** (layer_colors/layer_points) + round-trip).
+  v0.14.0 (import par fichier — sélecteur système SAF ; reciblage « sans
+  saut » ; tests de rendu PERMANENTS en CI) validée appareil le 27/09.
+  v0.13.2 (persistance pivot/axes/bézier, schéma v5) validée appareil le
+  27/09.
 - Détails techniques : `docs/PLAN.md` · Notes de version : `RELEASE_NOTES.md`
 
 ---
@@ -185,6 +191,61 @@ v0.9.0, l'**animation squelette** (rig maître).
   foyer DÉJÀ déplacé : premier move de 22 px écran (< slop IK 26) puis move de
   correction ; rig initial JAMAIS tendu à fond (L1+L2 > distance joint→effecteur)
   sinon toute cible est hors de portée (le solveur clampe, tip ≠ cible).
+
+### v0.15.0 (livrée — vasf-3 / Groupe 3 : couleur animée, morph, translation d'os, IK chaînes)
+- **Couleur animée** : `ShapeKeyframe.layerColors` (id de couche → ARGB) ;
+  sampler `colorAtLayer` — sémantique des poses numériques : valeur RÉSOLUE
+  par pose (entrée propre, sinon carry de la dernière posée, sinon base),
+  interpolation entre les poses encadrantes avec la courbe d'arrivée, tenue
+  hors plage ; painter : `Color(colorAtLayer(...))` ; UI : section « Couleurs
+  des couches » dans la sheet ⚙ (une ligne par couche : palette 8 pastilles
+  + losange pose/retire l'entrée au curseur) ; callbacks
+  `_setLayerColor`/`_toggleLayerColor` (undo coalescé par tag).
+- **Morph de points** : `ShapeKeyframe.layerPoints` (id de couche → points
+  stockés, même repère que layer.points) ; `pointsAtLayer` lerp point par
+  point, nuage court bourré par répétition de son dernier point ; painter :
+  les couches path dessinent le nuage échantillonné ; import only.
+- **Translation d'os** : `BoneKeyframe.tx/ty` (repère de repos du PARENT) +
+  `translationAt` (tenue/interp) ; FK : joint animé = repos + translation
+  (les enfants suivent via parentDeltaPos, la pose de repos reste intacte —
+  rig maître préservé) ; vasf : `move` [dx, dy] MONDE (conversion par
+  `_restWorldAngleRad` du parent, aller-retour testé) ; in-app : ✥ sur os
+  animé → translation keyframée au curseur (le glisser d'une PIÈCE liée
+  garde le comportement repos + carry — paramètre `keyframed:`).
+- **IK chaînes** : `SkeletonRig.ikChain/ikEffectorOf` (descendance en
+  enfants uniques, arrêt au branchement) ; `solveChainIk` CCD (16 itérations,
+  cible à < 0,5) pour ≥ 3 os / 1 os ; 2 os = solveur analytique v0.10
+  conservé (`bend`) ; hit/losange vert sur l'effecteur de CHAÎNE
+  (`hitIkEndEffector` chaîne-aware) ; armement ① os racine sélectionné
+  (v0.10) ② os = effecteur d'une chaîne (remontée ancêtres) ③ aucune
+  sélection (scan) ; pose des angles : `_poseChainAnglesTo` (auto-key par
+  os, ré-évaluation mid à chaque étape, carry des pièces).
+- **Bug v0.11 corrigé (import chaînes ≥ 3 os)** :
+  `worldRestDeg[bone] = somme(parent) + angle` doublait l'angle du parent →
+  le 3e niveau (et plus) se posait faux (offset ET restAngle) ;
+  auto-cohérent en round-trip export donc invisible depuis v0.11. Fix :
+  `worldRestDeg[bone] = angle` (monde déclaré). Les projets déjà importés
+  (persistés en interne) restent inchangés ; re-importer un JSON ≥ 3 os
+  change (correctement) le rendu.
+- **Bonus upsertKeyframe** : écrire sur une pose existante préserve
+  désormais son easing custom-bezier ET ses couleurs/morph (v0.13
+  réinitialisait en easeInOut → overshoot mort après édition).
+- **Format vasf-3** : `version: 3` ; import accepte 1/2/3 ; champs
+  keyframes : `color`/`colors`, `points`/`layerPoints` (refus croisé
+  explicite hors contexte), `move` (os) ; export v3 si extension utilisée ;
+  spec +section VASF-3, exemple `docs/vasf-3-example.json` (ciel couchant +
+  flamme morphée en cycle + bras 3 os IK avec move), validateur Python v3
+  (alias autorisés dans les couleurs de keyframe, clouds ≥ 2 points,
+  ik ≥ 1 enfant + warn multi-enfants).
+- **Persistance (leçon v0.13.2 appliquée)** : schéma v6 —
+  `shape_keyframes.layer_colors`/`layer_points` (maps JSON, additif,
+  onCreate + onUpgrade) ; save/load ; round-trip DB étendu (couleurs,
+  points, couleur interpolée reconstruite) ; tx/ty vivent dans le JSON du
+  rig (testé).
+- Tests : **188/188** — 6 nouveau groupes (couleur/morph modèle, FK+CCD,
+  vasf-3 import/export/erreurs, round-trip DB, 2 sondes de rendu mesurées
+  couleur+morph, exemple G3 complet, widget sheet couleur) ; analyze 0
+  problème.
 
 ### v0.14.0 (livrée — option C : import fichier + reciblage + rendu CI)
 - **Import par fichier** (`_importJsonFile`) : `FilePicker.pickFiles`

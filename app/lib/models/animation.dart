@@ -196,6 +196,36 @@ String easingLabel(EasingKind easing) => switch (easing) {
   EasingKind.customBezier => 'Personnalisé (Bézier)',
 };
 
+/// Interpolation point par point : le nuage le plus court est bourré par
+/// répétition de son dernier point, puis lerp un à un (morph de path, v0.15).
+List<Offset> lerpPointLists(List<Offset> a, List<Offset> b, double t) {
+  final n = math.max(a.length, b.length);
+  final u = t.clamp(0.0, 1.0);
+  return <Offset>[
+    for (var i = 0; i < n; i++)
+      Offset.lerp(
+        a[math.min(i, a.length - 1)],
+        b[math.min(i, b.length - 1)],
+        u,
+      )!,
+  ];
+}
+
+/// Mélange deux couleurs ARGB canal par canal (couleur animée, v0.15).
+int lerpArgb(int from, int to, double t) {
+  final u = t.clamp(0.0, 1.0);
+  int channel(int shift) {
+    final a = (from >> shift) & 0xFF;
+    final b = (to >> shift) & 0xFF;
+    return (a + (b - a) * u).round().clamp(0, 255);
+  }
+
+  return (channel(24) << 24) |
+      (channel(16) << 16) |
+      (channel(8) << 8) |
+      channel(0);
+}
+
 /// Une keyframe « pose » : toutes les propriétés de la forme à `timeMs`.
 class ShapeKeyframe {
   ShapeKeyframe({
@@ -203,10 +233,21 @@ class ShapeKeyframe {
     Map<AnimatableProperty, double>? values,
     this.easing = EasingKind.easeInOut,
     List<double>? bezier,
+    Map<String, int>? layerColors,
+    Map<String, List<Offset>>? layerPoints,
   }) : values = values ?? <AnimatableProperty, double>{},
        bezier = (bezier != null && bezier.length == 4)
            ? List<double>.from(bezier)
-           : null;
+           : null,
+       layerColors = layerColors == null
+           ? <String, int>{}
+           : Map<String, int>.from(layerColors),
+       layerPoints = layerPoints == null
+           ? <String, List<Offset>>{}
+           : <String, List<Offset>>{
+               for (final entry in layerPoints.entries)
+                 entry.key: List<Offset>.from(entry.value),
+             };
 
   int timeMs;
 
@@ -219,6 +260,16 @@ class ShapeKeyframe {
 
   final Map<AnimatableProperty, double> values;
 
+  /// Couleurs par couche portées par cette pose (v0.15, couleur animée) :
+  /// id de couche → ARGB. Une couche absente garde sa couleur précédente
+  /// (carry) ou de base. Vide = aucune couleur animée sur cette pose.
+  final Map<String, int> layerColors;
+
+  /// Points de path par couche portés par cette pose (v0.15, morph) :
+  /// id de couche → points dans le MÊME repère que `ShapeLayer.points`.
+  /// Vide = pas de morph sur cette pose.
+  final Map<String, List<Offset>> layerPoints;
+
   double? valueOf(AnimatableProperty property) => values[property];
 
   ShapeKeyframe copy() => ShapeKeyframe(
@@ -226,6 +277,11 @@ class ShapeKeyframe {
     values: Map<AnimatableProperty, double>.from(values),
     easing: easing,
     bezier: bezier,
+    layerColors: Map<String, int>.from(layerColors),
+    layerPoints: <String, List<Offset>>{
+      for (final entry in layerPoints.entries)
+        entry.key: List<Offset>.from(entry.value),
+    },
   );
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -235,6 +291,15 @@ class ShapeKeyframe {
     'values': <String, double>{
       for (final entry in values.entries) entry.key.name: entry.value,
     },
+    if (layerColors.isNotEmpty)
+      'layerColors': Map<String, int>.from(layerColors),
+    if (layerPoints.isNotEmpty)
+      'layerPoints': <String, Object?>{
+        for (final entry in layerPoints.entries)
+          entry.key: [
+            for (final p in entry.value) [p.dx, p.dy],
+          ],
+      },
   };
 
   static ShapeKeyframe fromJson(Map<String, Object?> json) {
@@ -255,6 +320,18 @@ class ShapeKeyframe {
           if (raw[property.name] != null)
             property: (raw[property.name] as num).toDouble(),
       },
+      layerColors: (json['layerColors'] as Map?)?.cast<String, Object?>().map(
+        (key, value) => MapEntry(key, (value as num).toInt()),
+      ),
+      layerPoints: (json['layerPoints'] as Map?)?.map(
+        (key, value) => MapEntry(key as String, <Offset>[
+          for (final point in (value as List<Object?>? ?? const []))
+            Offset(
+              ((point as List<Object?>)[0] as num).toDouble(),
+              (point[1] as num).toDouble(),
+            ),
+        ]),
+      ),
     );
   }
 }
@@ -558,6 +635,131 @@ class VectorShape {
           property: valueAt(property, timeMs),
       };
 
+  // ------------------------------------------------------- v0.15 couleur/morph
+
+  /// La pose définit-elle une couleur pour cette couche (indicateur d'UI) ?
+  bool layerColorAnimated(String layerId) =>
+      keyframes.any((k) => k.layerColors[layerId] != null);
+
+  /// La pose définit-elle des points de morph pour cette couche ?
+  bool layerPointsAnimated(String layerId) =>
+      keyframes.any((k) => (k.layerPoints[layerId] ?? const []).isNotEmpty);
+
+  /// Couleur RENDUE d'une couche à [timeMs] (v0.15, couleur animée) —
+  /// sémantique identique aux poses numériques : chaque pose a une valeur
+  /// RÉSOLUE (son entrée, sinon la dernière couleur posée avant elle — carry,
+  /// sinon la couleur de base) ; on interpole entre les poses encadrantes
+  /// avec la courbe de la pose d'arrivée. Tenue avant la 1re/après la
+  /// dernière pose. Aucune pose colorée → [fallback].
+  int colorAtLayer(String layerId, int timeMs, int fallback) {
+    if (keyframes.isEmpty) return fallback;
+    var carry = fallback;
+    final resolved =
+        <({int timeMs, int color, EasingKind easing, List<double>? bezier})>[];
+    for (final key in keyframes) {
+      final own = key.layerColors[layerId];
+      if (own != null) carry = own;
+      resolved.add((
+        timeMs: key.timeMs,
+        color: carry,
+        easing: key.easing,
+        bezier: key.bezier,
+      ));
+    }
+    if (timeMs <= resolved.first.timeMs) return resolved.first.color;
+    if (timeMs >= resolved.last.timeMs) return resolved.last.color;
+    for (var i = 0; i < resolved.length - 1; i++) {
+      final a = resolved[i];
+      final b = resolved[i + 1];
+      if (timeMs >= a.timeMs && timeMs <= b.timeMs) {
+        final span = math.max(1, b.timeMs - a.timeMs);
+        final progress = easingProgress(
+          b.easing,
+          b.bezier,
+          (timeMs - a.timeMs) / span,
+        );
+        return lerpArgb(a.color, b.color, progress);
+      }
+    }
+    return resolved.last.color;
+  }
+
+  /// Points de path RENDUS d'une couche à [timeMs] (v0.15, morph) — même
+  /// sémantique que [colorAtLayer] : valeur résolue par pose (son nuage, sinon
+  /// carry, sinon les points de base), interpolation point par point entre
+  /// les poses encadrantes, nuage le plus court bourré par répétition de son
+  /// dernier point.
+  List<Offset> pointsAtLayer(
+    String layerId,
+    List<Offset> fallback,
+    int timeMs,
+  ) {
+    if (keyframes.isEmpty) return fallback;
+    List<Offset> carry = fallback;
+    final resolved =
+        <
+          ({
+            int timeMs,
+            List<Offset> points,
+            EasingKind easing,
+            List<double>? bezier,
+          })
+        >[];
+    for (final key in keyframes) {
+      final own = key.layerPoints[layerId];
+      if (own != null && own.isNotEmpty) carry = own;
+      resolved.add((
+        timeMs: key.timeMs,
+        points: carry,
+        easing: key.easing,
+        bezier: key.bezier,
+      ));
+    }
+    if (timeMs <= resolved.first.timeMs) return resolved.first.points;
+    if (timeMs >= resolved.last.timeMs) return resolved.last.points;
+    for (var i = 0; i < resolved.length - 1; i++) {
+      final a = resolved[i];
+      final b = resolved[i + 1];
+      if (timeMs >= a.timeMs && timeMs <= b.timeMs) {
+        final span = math.max(1, b.timeMs - a.timeMs);
+        final progress = easingProgress(
+          b.easing,
+          b.bezier,
+          (timeMs - a.timeMs) / span,
+        );
+        return lerpPointLists(a.points, b.points, progress);
+      }
+    }
+    return resolved.last.points;
+  }
+
+  /// Écrit la couleur d'une couche (v0.15) : dans la valeur de base si la
+  /// forme n'a aucune keyframe, sinon entrée de couleur dans la pose au
+  /// curseur (auto-key) — la pose numérique existante est conservée.
+  void applyLayerColor(
+    ShapeLayer layer,
+    int colorValue,
+    int timeMs, {
+    required bool autoKey,
+    int toleranceMs = 0,
+  }) {
+    if (!autoKey || keyframes.isEmpty) {
+      layer.colorValue = colorValue;
+      return;
+    }
+    final target = keyframeNear(timeMs, toleranceMs)?.timeMs ?? timeMs;
+    final existing = keyframes.where((k) => k.timeMs == target).firstOrNull;
+    if (existing != null) {
+      // Fusion : l'entrée de couleur s'ajoute à la pose existante (numérique,
+      // easings, couleurs et morph des autres couches préservés).
+      existing.layerColors[layer.id] = colorValue;
+    } else {
+      final pose = poseAt(target);
+      final colors = <String, int>{layer.id: colorValue};
+      upsertKeyframe(target, pose, layerColors: colors);
+    }
+  }
+
   /// La propriété varie-t-elle entre les keyframes (indicateur d'UI) ?
   bool isAnimated(AnimatableProperty property) {
     if (keyframes.length < 2) return false;
@@ -581,18 +783,35 @@ class VectorShape {
     return best;
   }
 
-  /// Ajoute ou remplace la pose à `timeMs`.
+  /// Ajoute ou remplace la pose à `timeMs`. Remplacement = FUSION : l'easing,
+  /// la bézier, les couleurs et les points de morph de la pose existante sont
+  /// conservés sauf valeurs explicitement fournies (écrire une position à la
+  /// même keyframe n'écrase plus sa courbe custom-bezier — bug v0.13 corrigé
+  /// en v0.15, même sémantique que les keyframes d'os).
   void upsertKeyframe(
     int timeMs,
     Map<AnimatableProperty, double> values, {
     EasingKind? easing,
+    List<double>? bezier,
+    Map<String, int>? layerColors,
+    Map<String, List<Offset>>? layerPoints,
   }) {
+    ShapeKeyframe? existing;
+    for (final key in keyframes) {
+      if (key.timeMs == timeMs) {
+        existing = key;
+        break;
+      }
+    }
     keyframes.removeWhere((k) => k.timeMs == timeMs);
     keyframes.add(
       ShapeKeyframe(
         timeMs: timeMs,
         values: Map<AnimatableProperty, double>.from(values),
-        easing: easing ?? EasingKind.easeInOut,
+        easing: easing ?? existing?.easing ?? EasingKind.easeInOut,
+        bezier: bezier ?? existing?.bezier,
+        layerColors: layerColors ?? existing?.layerColors,
+        layerPoints: layerPoints ?? existing?.layerPoints,
       ),
     );
     keyframes.sort((a, b) => a.timeMs.compareTo(b.timeMs));
