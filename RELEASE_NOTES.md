@@ -1,60 +1,63 @@
-# Vector Anim Studio 0.15.0
+# Vector Anim Studio 0.16.0
 
-## Nouveautés (vasf-3 / Groupe 3 — le moteur lourd)
+## Nouveautés (éditeur de points in-app — le morph sans JSON)
 
-- **Couleur animée** : la couleur d'une couche devient une propriété de pose.
-  Dans la sheet ⚙ d'une forme, une section « Couleurs des couches » donne
-  une ligne par couche (palette de 8 pastilles + losange) : sans keyframe le
-  choix écrit la couleur de base ; avec keyframes, chaque choix pose la
-  couleur AU CURSEUR (auto-key) et l'app interpole entre les poses colorées
-  (tenue hors plage, courbe de la pose d'arrivée). Coucher de soleil,
-  rougeur, pulsation — sans changer la géométrie.
+- **Poignées de points** : dans l'éditeur de forme (Modifier une forme), une
+  couche « Chemin » sélectionnée affiche désormais ses points sur le preview
+  (cercles blancs en espace écran, taille constante). On les attrape au
+  doigt : chaque glisser déplace le point — la géométrie suit le doigt
+  exactement, y compris sous rotation et squash & stretch de la forme.
 
-- **Morph de points** : les points d'un chemin (`path`) s'animent entre les
-  keyframes, point par point — visages, expressions, flammes. Un nuage plus
-  court est bourré par répétition de son dernier point (les nouveaux
-  segments poussent depuis lui). Le morph se définit dans le JSON vasf-3
-  (`points` / `layerPoints` par couche) ; il suit le repère des points de
-  base. Pas encore d'éditeur de points dans l'app : import uniquement.
+- **Curseur de temps dans l'éditeur** : un slider sous le preview
+  (pas de 50 ms, borné à la fenêtre de la forme) choisit l'instant affiché ;
+  toutes les poignées échantillonnent le nuage RENDU à cet instant.
 
-- **Translation d'os** : `move: [dx, dy]` (monde) sur une keyframe d'os —
-  l'articulation glisse, les enfants et les pièces liées suivent
-  rigidement, la pose de repos reste intacte. Dans l'app : glisser la
-  poignée ✥ d'un os ANIMÉ écrit une translation au curseur (auto-key) ; sur
-  un os au repos, ✥ garde le comportement historique (pose du rig + emport
-  des pièces).
+- **Auto-key du morph** : sans keyframe, glisser un point édite les points
+  de base (dessin). Dès que la forme a des keyframes (créées au ◆ du
+  studio), glisser un point écrit le nuage de morph dans la pose au
+  curseur : le nuage est SEMÉ du rendu courant (visuellement neutre — seul
+  le point déplacé bouge, l'interpolation vers les poses voisines reste
+  continue), la pose numérique, les easings, les couleurs et le morph des
+  autres couches sont préservés. Le curseur snappe à la keyframe proche
+  (tolérance de la timeline, ~80 ms pour 4 s) comme dans le studio.
 
-- **IK à chaînes de N os** : `ik: true` fait maintenant d'un os la racine
-  d'une chaîne — le losange vert se pose sur l'extrémité du DERNIER os de
-  la chaîne (descendance d'enfants uniques) et son glisser résout toute la
-  chaîne : 2 os = solveur analytique exact (coude contrôlé par `bend`),
-  3 os et plus = solveur itératif CCD.
+- **Ajouter un point** : bouton ✚ en haut à gauche du preview — puis toucher
+  un segment du chemin (à moins de 28 px écran) insère un point à cet
+  endroit, dans la base ET dans chaque nuage de morph existant au même
+  index (la correspondance positionnelle des nuages est préservée : le
+  morph reste continu, le nouveau point diverge dès qu'on le déplace par
+  pose). Une activation = une insertion.
 
-- **Compatibilité format** : l'import accepte les vasf 1, 2 ET 3 ; les
-  nouveaux champs (`color`/`colors`, `points`/`layerPoints`, `move`) sont
-  tous optionnels — un fichier v1 reste valide. L'export écrit `version: 3`
-  quand une extension v3 est utilisée. Spec : `docs/vasf-1-format.md`
-  (section « VASF-3 extensions »), exemple complet :
-  `docs/vasf-3-example.json`.
+- **Supprimer un point** : appui long sur une poignée — le point disparaît
+  de la base et des nuages au même index.
 
-## Corrections
+- **Robustesse** : `ShapeLayer.points` est désormais toujours une liste
+  modifiable (les points fournis constants — littéraux par défaut, import
+  — sont copiés) : l'insertion/suppression structurelle ne peut plus
+  casser sur une liste figée.
 
-- **Import vasf des chaînes ≥ 3 os (bug v0.11)** : l'angle de repos d'un
-  3e niveau (et plus) était calculé contre un faux angle monde du parent
-  (double comptage) — l'os se posait décalé/faux. Corrigé : les joints et
-  angles MONDE déclarés sont honorés à tous les niveaux. Les projets déjà
-  importés ne bougent pas (persistance interne) ; re-importer un JSON de
-  chaîne ≥ 3 os peut légèrement modifier son rendu — vers le conforme.
-- **Édition d'une pose custom-bezier** : écrire une propriété sur une pose
-  existante préservait mal sa courbe (retour en easeInOut, overshoot mort).
-  La pose garde désormais sa bézier, ses couleurs et son morph.
+## Limites (volontaires pour cette version)
+
+- Les poses numériques (x/y, rotation, échelle…) ne s'auto-keyent toujours
+  pas dans l'éditeur : elles s'éditent au ◆/sliders du studio ; dans
+  l'éditeur, seuls les POINTS de chemin auto-keyent au curseur.
+- L'éditeur de forme n'a pas d'undo interne (inchangé) : l'enregistrement
+  remplace la forme en une seule entrée d'annulation dans le studio.
+- Un point de morph ne peut pas être supprimé d'un nuage plus court que
+  son index (nuages de longueurs différentes : règle du padding v0.15).
 
 ## Technique
 
-- Schéma SQLite **v6** : les couleurs et points de morph par keyframe
-  sont persistés (`layer_colors` / `layer_points`, migration additive) —
-  round-trip save/load testé (leçon v0.13.2 : tout nouveau champ passe par
-  la DB).
-- 188/188 tests (dont 2 nouvelles sondes de rendu mesurées : interpolation
-  couleur au pixel et morph par centroid ; import + rendu du fichier
-  d'exemple v3 vérifiés en CI).
+- `VectorShape.applyLayerPoints` (écriture base/pose au curseur, même
+  sémantique que `applyLayerColor`), `insertLayerPoint` /
+  `removeLayerPoint` (structurel base + nuages alignés).
+- `SelectionGeometry.canvasToLocal` (inverse exact de `localToCanvas`,
+  pivot inclus) + `pointHandlePositions` / `hitPointIndex` /
+  `nearestClosedSegment` / `distanceToSegment` ; hit des poignées sur la
+  position BRUTE du doigt (la reconnaissance du geste arrive le foyer déjà
+  déplacé — piège connu).
+- `ScenePainter.showLayerPoints` + `activePointIndex` : dessin des
+  poignées, éditeur seulement (jamais en export).
+- Tests : **209/209** (+15 unitaires modèle/géométrie/vasf round-trip,
+  +5 widget : glisser auto-key, base sans keyframe, appui long, mode ✚,
+  légende). `flutter analyze` 0 problème.

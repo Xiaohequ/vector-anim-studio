@@ -124,6 +124,16 @@ class SelectionGeometry {
   /// Marge de toucher (px écran) autour du corps de l'objet.
   static const double shapeTouchMargin = 10;
 
+  /// Rayon (px écran) d'une poignée de point de chemin (éditeur de points,
+  /// v0.16) — et de la poignée ACTIVE (en cours de glisser).
+  static const double pointHandleRadius = 5.5;
+  static const double activePointHandleRadius = 9;
+
+  /// Tolérance de toucher (px écran) d'un point de chemin : généreuse pour
+  /// le doigt, et pour rattraper le décalage de reconnaissance du geste
+  /// (onScaleStart arrive avec le foyer déjà déplacé — piège v0.10.1).
+  static const double pointTouchSlop = 24;
+
   // ------------------------------------------------------------- poses
 
   /// Pose d'une forme à l'instant donné (valeurs interpolées).
@@ -267,19 +277,90 @@ class SelectionGeometry {
     return bottomLeft + step;
   }
 
+  // -------------------------------------------------- points d'un chemin
+
+  /// Positions ÉCRAN des poignées de points d'un chemin : le nuage [cloud]
+  /// est échantillonné (repère « boîte » comme [ShapeLayer.points], rendu à
+  /// `point − (w/2, h/2)` dans le repère local de la couche, identique au
+  /// painter) ; [pose] = pose de la couche (`layerPose`).
+  static List<Offset> pointHandlePositions(
+    List<Offset> cloud,
+    ShapeLayer layer,
+    Pose2D pose,
+    SceneGeometry geo,
+  ) {
+    final ox = -layer.width / 2;
+    final oy = -layer.height / 2;
+    return <Offset>[
+      for (final p in cloud)
+        localToCanvas(Offset(p.dx + ox, p.dy + oy), pose, geo),
+    ];
+  }
+
+  /// Index du point le plus proche dans la tolérance (px écran), ou −1.
+  static int hitPointIndex(List<Offset> handles, Offset point, double slop) {
+    var best = -1;
+    var bestDist = slop;
+    for (var i = 0; i < handles.length; i++) {
+      final d = (point - handles[i]).distance;
+      if (d <= bestDist) {
+        best = i;
+        bestDist = d;
+      }
+    }
+    return best;
+  }
+
+  /// Distance d'un point à un segment [a, b].
+  static double distanceToSegment(Offset p, Offset a, Offset b) {
+    final ab = b - a;
+    final len2 = ab.distanceSquared;
+    if (len2 < 0.0001) return (p - a).distance;
+    final t = (((p.dx - a.dx) * ab.dx + (p.dy - a.dy) * ab.dy) / len2).clamp(
+      0.0,
+      1.0,
+    );
+    return (p - a - ab * t).distance;
+  }
+
+  /// Plus proche segment d'un chemin FERMÉ (liste de positions écran) :
+  /// renvoie (index du point de départ, distance). Le segment de fermeture
+  /// (dernier → premier) part de l'index `n − 1` — l'insertion d'un point
+  /// dessus se fait à l'index `départ + 1` (= n, en fin de liste).
+  static (int, double) nearestClosedSegment(
+    List<Offset> positions,
+    Offset point,
+  ) {
+    if (positions.length < 2) return (0, double.infinity);
+    var best = 0;
+    var bestDist = double.infinity;
+    for (var i = 0; i < positions.length; i++) {
+      final d = distanceToSegment(
+        point,
+        positions[i],
+        positions[(i + 1) % positions.length],
+      );
+      if (d < bestDist) {
+        bestDist = d;
+        best = i;
+      }
+    }
+    return (best, bestDist);
+  }
+
   // ---------------------------------------------------------- hit tests
 
   /// Le point canvas touche-t-il la poignée de rotation ?
   static bool hitRotationHandle(Offset point, Offset handleCenter) =>
       (point - handleCenter).distance <= touchSlop;
 
-  /// Le point canvas touche-t-il l'objet ? Rect local pivoté/zoomé avec une
-  /// marge de toucher constante en pixels écran.
-  static bool hit(
-    Rect localBounds,
+  /// Convertit un point canvas en coordonnées LOCALES de l'objet
+  /// (inverse de [localToCanvas]) — deltas inclus : la différence des
+  /// conversions de deux points canvas donne le delta local exact.
+  static Offset canvasToLocal(
+    Offset canvasPoint,
     Pose2D pose,
     SceneGeometry geo,
-    Offset canvasPoint,
   ) {
     final sx = math.max(0.0001, pose.sx.abs());
     final sy = math.max(0.0001, pose.sy.abs());
@@ -289,10 +370,23 @@ class SelectionGeometry {
     final relY = scene.dy - o.dy;
     final cosR = math.cos(-pose.rotation);
     final sinR = math.sin(-pose.rotation);
-    final local = Offset(
+    return Offset(
       (relX * cosR - relY * sinR) / sx,
       (relX * sinR + relY * cosR) / sy,
     );
+  }
+
+  /// Le point canvas touche-t-il l'objet ? Rect local pivoté/zoomé avec une
+  /// marge de toucher constante en pixels écran.
+  static bool hit(
+    Rect localBounds,
+    Pose2D pose,
+    SceneGeometry geo,
+    Offset canvasPoint,
+  ) {
+    final local = canvasToLocal(canvasPoint, pose, geo);
+    final sx = math.max(0.0001, pose.sx.abs());
+    final sy = math.max(0.0001, pose.sy.abs());
     return localBounds
         .inflate(shapeTouchMargin / math.min(sx, sy))
         .contains(local);

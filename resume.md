@@ -192,7 +192,7 @@ v0.9.0, l'**animation squelette** (rig maître).
   correction ; rig initial JAMAIS tendu à fond (L1+L2 > distance joint→effecteur)
   sinon toute cible est hors de portée (le solveur clampe, tip ≠ cible).
 
-### v0.15.0 (livrée — vasf-3 / Groupe 3 : couleur animée, morph, translation d'os, IK chaînes)
+### v0.15.0 (livrée + VALIDÉE APPAREIL 27/09, 4/4 tests OK — vasf-3 / Groupe 3 : couleur animée, morph, translation d'os, IK chaînes)
 - **Couleur animée** : `ShapeKeyframe.layerColors` (id de couche → ARGB) ;
   sampler `colorAtLayer` — sémantique des poses numériques : valeur RÉSOLUE
   par pose (entrée propre, sinon carry de la dernière posée, sinon base),

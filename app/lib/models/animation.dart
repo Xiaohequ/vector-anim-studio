@@ -355,7 +355,10 @@ class ShapeLayer {
     List<Offset>? points,
     this.visible = true,
   }) : id = id ?? generateId('layer'),
-       points = points ?? <Offset>[];
+       // Normalisé en liste modifiable : des points passés const (littéraux
+       // par défaut de l'éditeur) doivent accepter l'insertion/suppression
+       // structurelle de l'éditeur de points (v0.16).
+       points = List<Offset>.from(points ?? const <Offset>[]);
 
   final String id;
   String name;
@@ -757,6 +760,68 @@ class VectorShape {
       final pose = poseAt(target);
       final colors = <String, int>{layer.id: colorValue};
       upsertKeyframe(target, pose, layerColors: colors);
+    }
+  }
+
+  /// Écrit le nuage de points d'une couche (v0.16, éditeur de points) : dans
+  /// les points de base si la forme n'a aucune keyframe, sinon entrée de
+  /// morph dans la pose au curseur (auto-key) — pose numérique, easings,
+  /// couleurs et morph des autres couches conservés. Le nuage fourni est le
+  /// nuage COMPLET de la couche (même repère que `ShapeLayer.points`) ; pour
+  /// n'éditer qu'un point, l'appelant part de [pointsAtLayer] et déplace
+  /// l'index visé — semer le nuage échantillonné est visuellement neutre
+  /// (l'extrémité du segment interpolé garde sa valeur).
+  void applyLayerPoints(
+    ShapeLayer layer,
+    List<Offset> points,
+    int timeMs, {
+    required bool autoKey,
+    int toleranceMs = 0,
+  }) {
+    final cloud = List<Offset>.from(points);
+    if (!autoKey || keyframes.isEmpty) {
+      layer.points = cloud;
+      return;
+    }
+    final target = keyframeNear(timeMs, toleranceMs)?.timeMs ?? timeMs;
+    final existing = keyframes.where((k) => k.timeMs == target).firstOrNull;
+    if (existing != null) {
+      existing.layerPoints[layer.id] = cloud;
+    } else {
+      final pose = poseAt(target);
+      upsertKeyframe(
+        target,
+        pose,
+        layerPoints: <String, List<Offset>>{layer.id: cloud},
+      );
+    }
+  }
+
+  /// Ajoute un point au chemin d'une couche (v0.16, éditeur de points) :
+  /// insertion structurelle dans la base ET dans chaque nuage de morph
+  /// existant au même index — la correspondance positionnelle des nuages
+  /// (lerp point par point) est préservée. Le même point est inséré partout
+  /// (morph plat à cet instant : il diverge dès qu'on le déplace par pose).
+  void insertLayerPoint(ShapeLayer layer, int index, Offset point) {
+    final i = index.clamp(0, layer.points.length).toInt();
+    layer.points.insert(i, point);
+    for (final key in keyframes) {
+      final entry = key.layerPoints[layer.id];
+      if (entry == null || entry.isEmpty) continue;
+      entry.insert(i.clamp(0, entry.length).toInt(), point);
+    }
+  }
+
+  /// Supprime un point du chemin d'une couche (v0.16) : même logique que
+  /// [insertLayerPoint] en miroir. Un nuage plus court que [index] est laissé
+  /// tel quel (pas de point à supprimer à cette position).
+  void removeLayerPoint(ShapeLayer layer, int index) {
+    if (index < 0 || index >= layer.points.length) return;
+    layer.points.removeAt(index);
+    for (final key in keyframes) {
+      final entry = key.layerPoints[layer.id];
+      if (entry == null || entry.isEmpty || entry.length <= index) continue;
+      entry.removeAt(index);
     }
   }
 

@@ -9,7 +9,7 @@ import 'layer_properties_sheet.dart';
 import 'palette.dart';
 
 /// Geste en cours sur le preview de l'éditeur.
-enum _EditorGesture { none, move, scale, rotate }
+enum _EditorGesture { none, move, scale, rotate, pointDrag }
 
 /// Création / édition d'une forme : aperçu manipulable en haut, couches en bas.
 ///
@@ -37,6 +37,23 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
 
   // Option : aimanter la rotation aux multiples de 90° (bouton du preview).
   bool _snapRotation = false;
+
+  // Curseur du preview (dans la fenêtre de la forme) : les POSES y sont
+  // échantillonnées et les points de chemin y auto-keyent (v0.16).
+  int _previewMs = 0;
+
+  // Glisser d'un point de chemin : index visé, nuage de départ et temps
+  // cible (keyframe snappée ou curseur).
+  int _pointIndex = -1;
+  List<Offset> _pointSeed = const [];
+  int _pointTargetMs = 0;
+
+  // Mode « ajouter un point » (bouton ✚ du preview).
+  bool _addPointMode = false;
+
+  // Position BRUTE du premier doigt (hit des poignées avant reconnaissance
+  // du geste : onScaleStart arrive avec le foyer déjà déplacé).
+  Offset _downPos = Offset.zero;
 
   // Geste en cours (déplacement, pinch, rotation par poignée).
   _EditorGesture _gesture = _EditorGesture.none;
@@ -66,6 +83,7 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
         );
     _name = TextEditingController(text: _draft.name);
     _selectedLayerId = _draft.layers.isEmpty ? null : _draft.layers.last.id;
+    _previewMs = _draft.startMs;
   }
 
   @override
@@ -197,6 +215,7 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
       body: Column(
         children: <Widget>[
           _buildPreview(),
+          _buildPlayhead(),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
             child: TextField(
@@ -244,7 +263,10 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
             children: <Widget>[
               Positioned.fill(
                 child: Listener(
-                  onPointerDown: (_) => _activePointers++,
+                  onPointerDown: (event) {
+                    if (_activePointers == 0) _downPos = event.localPosition;
+                    _activePointers++;
+                  },
                   onPointerUp: (_) => _pointerUp(),
                   onPointerCancel: (_) => _pointerUp(),
                   child: GestureDetector(
@@ -255,16 +277,42 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
                         _onGestureUpdate(details, canvasSize),
                     onScaleEnd: (_) => _gesture = _EditorGesture.none,
                     onTapUp: (details) => _onTapUp(details, canvasSize),
+                    onLongPressStart: (details) =>
+                        _onLongPress(details, canvasSize),
                     child: CustomPaint(
                       painter: ScenePainter(
                         project: _preview,
-                        timeMs: _draft.startMs,
+                        timeMs: _previewMs,
                         selectedShapeId: _draft.id,
                         selectedLayerId: _selectedLayerId,
                         showFrame: true,
+                        showLayerPoints: true,
+                        activePointIndex: _gesture == _EditorGesture.pointDrag
+                            ? _pointIndex
+                            : -1,
                       ),
                       child: const SizedBox.expand(),
                     ),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 8,
+                top: 8,
+                child: IconButton(
+                  tooltip: 'Ajouter un point — touche un segment du chemin',
+                  isSelected: _addPointMode,
+                  onPressed: () =>
+                      setState(() => _addPointMode = !_addPointMode),
+                  icon: const Icon(Icons.add_circle_outline, size: 20),
+                  selectedIcon: const Icon(
+                    Icons.add_circle,
+                    size: 20,
+                    color: Color(0xFF3ECF8E),
+                  ),
+                  style: IconButton.styleFrom(
+                    backgroundColor: const Color(0xCC151922),
+                    foregroundColor: Colors.white70,
                   ),
                 ),
               ),
@@ -300,13 +348,65 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
     );
   }
 
+  /// Curseur du preview : échantillonne les poses/nuages dans la fenêtre de
+  /// la forme. Les poignées de points y auto-keyent (pas d'auto-key pour les
+  /// autres propriétés de couche : elles restent statiques, comme partout).
+  Widget _buildPlayhead() {
+    final min = _draft.startMs.toDouble();
+    final max = math.max(min + 100, _draft.endMs).toDouble();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
+      child: Column(
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: Slider(
+                  value: _previewMs.toDouble().clamp(min, max),
+                  min: min,
+                  max: max,
+                  divisions: math.max(1, _draft.durationMs ~/ 50),
+                  label: '${(_previewMs / 1000).toStringAsFixed(2)} s',
+                  onChanged: (value) => setState(() {
+                    _previewMs = value.round().clamp(
+                      _draft.startMs,
+                      math.max(_draft.startMs, _draft.endMs),
+                    );
+                  }),
+                ),
+              ),
+              SizedBox(
+                width: 64,
+                child: Text(
+                  '${(_previewMs / 1000).toStringAsFixed(2)} s',
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(fontSize: 12, color: Colors.white70),
+                ),
+              ),
+            ],
+          ),
+          if (_selectedLayer?.kind == ShapeKind.path)
+            const Padding(
+              padding: EdgeInsets.fromLTRB(8, 0, 8, 4),
+              child: Text(
+                'Touche un point pour le déplacer · appui long : le '
+                'supprimer · ✚ puis touche un segment pour en ajouter',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 11, color: Colors.white54),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   /// Bouton « réglages » ancré au coin bas-gauche du rectangle de la couche.
   Widget _buildLayerButton(ShapeLayer layer, Size canvasSize) {
     if (canvasSize.isEmpty) return const SizedBox.shrink();
     final geo = SceneGeometry.fitFor(widget.project, canvasSize);
     final center = SelectionGeometry.propertiesButton(
       ScenePainter.layerBounds(layer),
-      SelectionGeometry.layerPose(_draft, layer, _draft.startMs),
+      SelectionGeometry.layerPose(_draft, layer, _previewMs),
       geo,
     );
     const size = 34.0;
@@ -355,6 +455,49 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
 
   void _pointerUp() => _activePointers = math.max(0, _activePointers - 1);
 
+  /// Pose de la couche sélectionnée au temps AFFICHÉ (curseur du preview).
+  Pose2D _previewLayerPose(ShapeLayer layer) =>
+      SelectionGeometry.layerPose(_draft, layer, _previewMs);
+
+  /// Nuage échantillonné + positions écran des poignées de points de la
+  /// couche sélectionnée, ou `null` (pas un chemin, couche cachée, vide).
+  (List<Offset>, List<Offset>)? _pointHandles(Size canvasSize) {
+    final layer = _selectedLayer;
+    if (layer == null ||
+        !layer.visible ||
+        layer.kind != ShapeKind.path ||
+        canvasSize.isEmpty) {
+      return null;
+    }
+    final geo = SceneGeometry.fitFor(widget.project, canvasSize);
+    final cloud = _draft.pointsAtLayer(layer.id, layer.points, _previewMs);
+    final positions = SelectionGeometry.pointHandlePositions(
+      cloud,
+      layer,
+      _previewLayerPose(layer),
+      geo,
+    );
+    return (cloud, positions);
+  }
+
+  /// Prépare le glisser d'un point : temps cible (keyframe snappée à la
+  /// tolérance de la timeline, sinon le curseur) et nuage de départ —
+  /// l'entrée de la pose cible si elle existe, sinon le nuage échantillonné
+  /// À LA CIBLE (l'extrémité du segment interpolé garde sa valeur : semer
+  /// est visuellement neutre, seul le point déplacé bouge).
+  void _beginPointDrag(ShapeLayer layer, int index) {
+    final tolerance = keyframeSnapToleranceMs(_draft.durationMs);
+    final targetKey = _draft.keyframeNear(_previewMs, tolerance);
+    _pointTargetMs = targetKey?.timeMs ?? _previewMs;
+    final entry = targetKey?.layerPoints[layer.id];
+    _pointSeed = (entry != null && entry.isNotEmpty)
+        ? List<Offset>.from(entry)
+        : List<Offset>.from(
+            _draft.pointsAtLayer(layer.id, layer.points, _pointTargetMs),
+          );
+    _pointIndex = index;
+  }
+
   void _onGestureStart(ScaleStartDetails details, Size canvasSize) {
     _gestureStartPoint = details.localFocalPoint;
     final layer = _selectedLayer;
@@ -363,33 +506,46 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
       return;
     }
     final geo = SceneGeometry.fitFor(widget.project, canvasSize);
-    final pose = SelectionGeometry.layerPose(_draft, layer, _draft.startMs);
+    final pose = _previewLayerPose(layer);
     final bounds = ScenePainter.layerBounds(layer);
+    var gesture = _EditorGesture.none;
     if (_activePointers >= 2) {
       // Pinch : échelle de la couche sélectionnée.
-      _gesture = _EditorGesture.scale;
+      gesture = _EditorGesture.scale;
     } else if (SelectionGeometry.hitRotationHandle(
       details.localFocalPoint,
       SelectionGeometry.rotationHandle(bounds, pose, geo),
     )) {
       // Poignée de rotation.
-      _gesture = _EditorGesture.rotate;
+      gesture = _EditorGesture.rotate;
       final center = SelectionGeometry.center(pose, geo);
       _gestureStartAngle = math.atan2(
         details.localFocalPoint.dy - center.dy,
         details.localFocalPoint.dx - center.dx,
       );
-    } else if (SelectionGeometry.hit(
-      bounds,
-      pose,
-      geo,
-      details.localFocalPoint,
-    )) {
-      // Corps de la couche : déplacement.
-      _gesture = _EditorGesture.move;
-    } else {
-      _gesture = _EditorGesture.none;
+    } else if (layer.kind == ShapeKind.path && !_addPointMode) {
+      // Poignées de points : prioritaires (elles sont SUR le corps de la
+      // couche). Le hit se fait sur la position BRUTE du doigt (_downPos,
+      // enregistrée avant la reconnaissance du geste).
+      final handles = _pointHandles(canvasSize);
+      if (handles != null) {
+        final index = SelectionGeometry.hitPointIndex(
+          handles.$2,
+          _downPos,
+          SelectionGeometry.pointTouchSlop,
+        );
+        if (index >= 0) {
+          gesture = _EditorGesture.pointDrag;
+          _beginPointDrag(layer, index);
+        }
+      }
     }
+    if (gesture == _EditorGesture.none &&
+        SelectionGeometry.hit(bounds, pose, geo, details.localFocalPoint)) {
+      // Corps de la couche : déplacement.
+      gesture = _EditorGesture.move;
+    }
+    _gesture = gesture;
     _gestureBaseX = layer.x;
     _gestureBaseY = layer.y;
     _gestureBaseRotation = layer.rotation;
@@ -400,6 +556,29 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
     final layer = _selectedLayer;
     if (layer == null || _gesture == _EditorGesture.none) return;
     switch (_gesture) {
+      case _EditorGesture.pointDrag:
+        // Le delta stocké = différence des conversions canvas → local
+        // dessiné (pose figée au temps affiché pendant le geste) — la
+        // recentrage (w/2, h/2) ne décale pas les deltas.
+        final geo = SceneGeometry.fitFor(widget.project, canvasSize);
+        final pose = _previewLayerPose(layer);
+        final startLocal = SelectionGeometry.canvasToLocal(
+          _gestureStartPoint,
+          pose,
+          geo,
+        );
+        final nowLocal = SelectionGeometry.canvasToLocal(
+          details.localFocalPoint,
+          pose,
+          geo,
+        );
+        final cloud = List<Offset>.from(_pointSeed);
+        if (_pointIndex >= 0 && _pointIndex < cloud.length) {
+          cloud[_pointIndex] = cloud[_pointIndex] + (nowLocal - startLocal);
+        }
+        setState(() {
+          _draft.applyLayerPoints(layer, cloud, _pointTargetMs, autoKey: true);
+        });
       case _EditorGesture.move:
         final geo = SceneGeometry.fitFor(widget.project, canvasSize);
         final sceneDelta =
@@ -408,7 +587,7 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
         // La couche vit dans le repère de la forme : le delta de scène est
         // repassé en local (rotation et échelles PAR AXE de la forme
         // inversées — v0.13 squash & stretch).
-        final shapePose = SelectionGeometry.shapePose(_draft, _draft.startMs);
+        final shapePose = SelectionGeometry.shapePose(_draft, _previewMs);
         final cosR = math.cos(-shapePose.rotation);
         final sinR = math.sin(-shapePose.rotation);
         final safeSx = math.max(0.0001, shapePose.sx.abs());
@@ -426,7 +605,7 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
         setState(() => layer.scale = next.toDouble());
       case _EditorGesture.rotate:
         final geo = SceneGeometry.fitFor(widget.project, canvasSize);
-        final pose = SelectionGeometry.layerPose(_draft, layer, _draft.startMs);
+        final pose = _previewLayerPose(layer);
         final center = SelectionGeometry.center(pose, geo);
         final angle = math.atan2(
           details.localFocalPoint.dy - center.dy,
@@ -445,15 +624,53 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
     }
   }
 
-  /// Tap sur une couche : la sélectionne (du premier plan vers l'arrière-plan).
-  /// Tap dans le vide : la sélection actuelle est conservée.
+  /// Tap : en mode ✚, ajoute un point sur le segment le plus proche (dans
+  /// une tolérance de 28 px écran) — une insertion par activation du mode.
+  /// Sinon, tap sur une couche : la sélectionne (du premier plan vers
+  /// l'arrière-plan). Tap dans le vide : la sélection actuelle est conservée.
   void _onTapUp(TapUpDetails details, Size canvasSize) {
+    final layer = _selectedLayer;
+    if (_addPointMode && layer != null && layer.visible) {
+      if (layer.kind != ShapeKind.path) {
+        _snack('Le mode ✚ s’applique aux couches « Chemin ».');
+        return;
+      }
+      setState(() => _addPointMode = false);
+      final handles = _pointHandles(canvasSize);
+      if (handles == null) return;
+      final pose = _previewLayerPose(layer);
+      final geo = SceneGeometry.fitFor(widget.project, canvasSize);
+      final local = SelectionGeometry.canvasToLocal(
+        details.localPosition,
+        pose,
+        geo,
+      );
+      final stored = local + Offset(layer.width / 2, layer.height / 2);
+      if (handles.$1.length < 2) {
+        setState(
+          () => _draft.insertLayerPoint(layer, layer.points.length, stored),
+        );
+        _snack('Point ajouté');
+        return;
+      }
+      final (segment, distance) = SelectionGeometry.nearestClosedSegment(
+        handles.$2,
+        details.localPosition,
+      );
+      if (distance > 28) {
+        _snack('Touche un segment du chemin pour y ajouter un point.');
+        return;
+      }
+      setState(() => _draft.insertLayerPoint(layer, segment + 1, stored));
+      _snack('Point ajouté');
+      return;
+    }
     final geo = SceneGeometry.fitFor(widget.project, canvasSize);
     for (final layer in _draft.layers.reversed) {
       if (!layer.visible) continue;
       if (SelectionGeometry.hit(
         ScenePainter.layerBounds(layer),
-        SelectionGeometry.layerPose(_draft, layer, _draft.startMs),
+        SelectionGeometry.layerPose(_draft, layer, _previewMs),
         geo,
         details.localPosition,
       )) {
@@ -461,6 +678,25 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
         return;
       }
     }
+  }
+
+  /// Appui long sur une poignée de point : supprime le point (base + tous
+  /// les nuages de morph de la couche, même index).
+  void _onLongPress(LongPressStartDetails details, Size canvasSize) {
+    final layer = _selectedLayer;
+    if (layer == null || !layer.visible || layer.kind != ShapeKind.path) {
+      return;
+    }
+    final handles = _pointHandles(canvasSize);
+    if (handles == null) return;
+    final index = SelectionGeometry.hitPointIndex(
+      handles.$2,
+      details.localPosition,
+      SelectionGeometry.pointTouchSlop,
+    );
+    if (index < 0) return;
+    setState(() => _draft.removeLayerPoint(layer, index));
+    _snack('Point supprimé');
   }
 }
 

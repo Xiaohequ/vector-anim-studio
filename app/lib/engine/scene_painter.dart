@@ -18,6 +18,8 @@ class ScenePainter extends CustomPainter {
     this.transparentBackground = false,
     this.showFrame = false,
     this.embeddedProjects = const {},
+    this.showLayerPoints = false,
+    this.activePointIndex = -1,
   });
 
   final AnimationProject project;
@@ -34,6 +36,13 @@ class ScenePainter extends CustomPainter {
 
   /// Projets imbriqués préchargés, indexés par id (rendu des instances).
   final Map<String, AnimationProject> embeddedProjects;
+
+  /// Dessine les poignées de points de la couche sélectionnée si c'est un
+  /// chemin (éditeur de points, v0.16) — éditeur seulement, jamais en export.
+  final bool showLayerPoints;
+
+  /// Index du point en cours de glisser (surbrillance), ou −1.
+  final int activePointIndex;
 
   /// Facteur d'échelle permettant d'inscrire la scène dans [size].
   static double scaleFor(AnimationProject project, Size size) =>
@@ -90,12 +99,11 @@ class ScenePainter extends CustomPainter {
     if (selectedLayerId != null) {
       for (final layer in selected.layers) {
         if (layer.id == selectedLayerId && layer.visible) {
-          _paintPoseOverlay(
-            canvas,
-            layerBounds(layer),
-            SelectionGeometry.layerPose(selected, layer, timeMs),
-            geo,
-          );
+          final pose = SelectionGeometry.layerPose(selected, layer, timeMs);
+          _paintPoseOverlay(canvas, layerBounds(layer), pose, geo);
+          if (showLayerPoints && layer.kind == ShapeKind.path) {
+            _paintPointHandles(canvas, selected, layer, pose, geo);
+          }
           return;
         }
       }
@@ -530,6 +538,41 @@ class ScenePainter extends CustomPainter {
       Paint()..color = const Color(0xFF0B0D12),
     );
     canvas.drawCircle(handle, SelectionGeometry.handleRadius, border);
+  }
+
+  /// Poignées de points du chemin sélectionné (v0.16, éditeur de points) :
+  /// le nuage échantillonné au temps affiché, projeté en espace écran via la
+  /// pose de la couche — cercles à rayon constant en pixels écran, point
+  /// actif surligné en orange.
+  void _paintPointHandles(
+    Canvas canvas,
+    VectorShape shape,
+    ShapeLayer layer,
+    Pose2D pose,
+    SceneGeometry geo,
+  ) {
+    final cloud = shape.pointsAtLayer(layer.id, layer.points, timeMs);
+    final positions = SelectionGeometry.pointHandlePositions(
+      cloud,
+      layer,
+      pose,
+      geo,
+    );
+    final fill = Paint()..style = PaintingStyle.fill;
+    final border = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..color = const Color(0xFF0B0D12)
+      ..isAntiAlias = true;
+    for (var i = 0; i < positions.length; i++) {
+      final active = i == activePointIndex;
+      final radius = active
+          ? SelectionGeometry.activePointHandleRadius
+          : SelectionGeometry.pointHandleRadius;
+      fill.color = active ? const Color(0xFFF2994A) : const Color(0xFFF2F4F8);
+      canvas.drawCircle(positions[i], radius, fill);
+      canvas.drawCircle(positions[i], radius, border);
+    }
   }
 
   /// Boîte englobante de la forme en coordonnées locales (avant transformation).
