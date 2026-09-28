@@ -225,7 +225,7 @@ v0.9.0, l'**animation squelette** (rig maître).
   (800×600), PAS le preview — viser le CustomPaint dont le painter est un
   `ScenePainter` (un seul par écran).
 
-### v0.16.3 (27/09, bugfix — le curseur de l'éditeur démarre au playhead du studio)
+### v0.16.3 (27/09, CI run #37 verte, release `v0.16.3-build37`, APK 51,6 Mo ; commit `368502c` — bugfix : curseur de l'éditeur = playhead du studio) — VALIDATION APPAREIL EN ATTENTE
 - **Symptôme (retours v0.16.2)** : le snack affiche toujours « Pose à
   0,00 s enregistrée (morph) » même en éditant une keyframe à 2 s.
 - **Cause** : le curseur du preview de l'éditeur était initialisé à
