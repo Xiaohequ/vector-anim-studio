@@ -42,6 +42,10 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
   // échantillonnées et les points de chemin y auto-keyent (v0.16).
   int _previewMs = 0;
 
+  // Le glisser de point en cours a écrit une POSE (morph) — snack au
+  // relâchement pour rendre l'auto-key visible (v0.16.2).
+  bool _gestureWrotePose = false;
+
   // Glisser d'un point de chemin : index visé, nuage de départ et temps
   // cible (keyframe snappée ou curseur).
   int _pointIndex = -1;
@@ -275,7 +279,7 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
                         _onGestureStart(details, canvasSize),
                     onScaleUpdate: (details) =>
                         _onGestureUpdate(details, canvasSize),
-                    onScaleEnd: (_) => _gesture = _EditorGesture.none,
+                    onScaleEnd: (_) => _endGesture(),
                     onTapUp: (details) => _onTapUp(details, canvasSize),
                     onLongPressStart: (details) =>
                         _onLongPress(details, canvasSize),
@@ -354,12 +358,36 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
   Widget _buildPlayhead() {
     final min = _draft.startMs.toDouble();
     final max = math.max(min + 100, _draft.endMs).toDouble();
+    final near = _draft.keyframeNear(
+      _previewMs,
+      keyframeSnapToleranceMs(_draft.durationMs),
+    );
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
       child: Column(
         children: <Widget>[
           Row(
             children: <Widget>[
+              // ◆ pose au curseur (v0.16.2) : le workflow morph devient
+              // autonomé — scrubber, poser, déplacer les points, rejouer.
+              IconButton(
+                tooltip: near == null
+                    ? 'Ajouter une keyframe au curseur'
+                    : 'Retirer la keyframe au curseur',
+                visualDensity: VisualDensity.compact,
+                iconSize: 20,
+                icon: Icon(
+                  near == null ? Icons.diamond_outlined : Icons.diamond,
+                  color: near == null ? null : const Color(0xFFF2C94C),
+                ),
+                onPressed: () => setState(() {
+                  if (near != null) {
+                    _draft.removeKeyframeAt(near.timeMs);
+                  } else {
+                    _draft.addKeyframeAt(_previewMs);
+                  }
+                }),
+              ),
               Expanded(
                 child: Slider(
                   value: _previewMs.toDouble().clamp(min, max),
@@ -386,18 +414,43 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
             ],
           ),
           if (_selectedLayer?.kind == ShapeKind.path)
-            const Padding(
-              padding: EdgeInsets.fromLTRB(8, 0, 8, 4),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
               child: Text(
-                'Touche un point pour le déplacer · appui long : le '
-                'supprimer · ✚ puis touche un segment pour en ajouter',
+                _morphHint(),
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 11, color: Colors.white54),
+                style: const TextStyle(fontSize: 11, color: Colors.white54),
               ),
             ),
         ],
       ),
     );
+  }
+
+  /// Aide contextuelle du morph (v0.16.2) : dit où va l'écriture du
+  /// glisser et comment enchaîner deux poses pour animer.
+  String _morphHint() {
+    final layer = _selectedLayer;
+    if (layer == null) {
+      return 'Touche un point pour le déplacer · appui long : le '
+          'supprimer · ✚ puis touche un segment pour en ajouter';
+    }
+    final clouded = _draft.keyframes
+        .where((k) => (k.layerPoints[layer.id] ?? const <Offset>[]).isNotEmpty)
+        .length;
+    if (_draft.keyframes.isEmpty) {
+      return widget.project.isSkeleton
+          ? 'Déplace un point : la 1ʳᵉ pose se crée automatiquement · '
+                '◆ pose d’autres instants · appui long : supprimer'
+          : 'Sans keyframe : tu dessines la base · ◆ pour commencer à '
+                'animer (morph) · appui long : supprimer un point';
+    }
+    if (clouded < 2) {
+      return 'Une seule pose porte le morph (forme figée ailleurs) : '
+          'scruble un autre instant, ◆ puis déplace les points';
+    }
+    return 'Morph : les points s’interpolent entre les poses · '
+        '◆ au curseur ajoute/retire une pose';
   }
 
   /// Bouton « réglages » ancré au coin bas-gauche du rectangle de la couche.
@@ -454,6 +507,19 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
   // ----------------------------------------------------------------- gestes
 
   void _pointerUp() => _activePointers = math.max(0, _activePointers - 1);
+
+  /// Relâchement : snack de confirmation quand le glisser a écrit une
+  /// pose (auto-key visible), puis remise à zéro du geste.
+  void _endGesture() {
+    if (_gesture == _EditorGesture.pointDrag && _gestureWrotePose) {
+      _snack(
+        'Pose à ${(_pointTargetMs / 1000).toStringAsFixed(2)} s '
+        'enregistrée (morph)',
+      );
+    }
+    _gestureWrotePose = false;
+    _gesture = _EditorGesture.none;
+  }
 
   /// Pose de la couche sélectionnée au temps AFFICHÉ (curseur du preview).
   Pose2D _previewLayerPose(ShapeLayer layer) =>
@@ -577,6 +643,17 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
           cloud[_pointIndex] = cloud[_pointIndex] + (nowLocal - startLocal);
         }
         setState(() {
+          // Bugfix v0.16.2 : pièce d'un projet SQUELETTE sans AUCUNE
+          // keyframe — le premier glisser CRÉE la première pose au lieu
+          // d'éditer la base en silence (le rig est là pour animer ;
+          // l'utilisateur s'attend à l'auto-key). La pose est semée du
+          // rendu courant : visuellement neutre.
+          if (_draft.keyframes.isEmpty && widget.project.isSkeleton) {
+            _draft.addKeyframeAt(_pointTargetMs);
+            _gestureWrotePose = true;
+          } else if (_draft.keyframes.isNotEmpty) {
+            _gestureWrotePose = true;
+          }
           _draft.applyLayerPoints(layer, cloud, _pointTargetMs, autoKey: true);
         });
       case _EditorGesture.move:

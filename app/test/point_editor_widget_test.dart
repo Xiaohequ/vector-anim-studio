@@ -304,9 +304,105 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(
-      find.textContaining('Touche un point pour le déplacer'),
-      findsOneWidget,
+    // Vectoriel sans keyframe : l'aide dit que l'on dessine la base.
+    expect(find.textContaining('tu dessines la base'), findsOneWidget);
+  });
+
+  testWidgets(
+    'pièce squelette sans keyframe : le 1ᵉʳ glisser crée la pose (base intacte)',
+    (tester) async {
+      // Bugfix v0.16.2 : en projet squelette, le premier glisser de point
+      // CRÉE la première pose au lieu d'éditer la base en silence.
+      final project = AnimationProject(
+        name: 'Rig',
+        type: ProjectType.skeleton,
+        width: 360,
+        height: 640,
+      );
+      final shape = _pathShape(withKeyframes: false);
+      final layer = shape.layers.first;
+      final base = List<Offset>.from(layer.points);
+      VectorShape? saved;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: _Host(
+            project: project,
+            shape: shape,
+            onSaved: (v) => saved = v,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final handles = _handlePositions(tester, project, shape);
+
+      final gesture = await tester.startGesture(_global(tester, handles[1]));
+      await gesture.moveBy(const Offset(40, -30));
+      await gesture.moveBy(const Offset(10, 0));
+      await tester.pump();
+      await gesture.up();
+      await tester.pump();
+
+      await tester.tap(find.byIcon(Icons.check));
+      await tester.pumpAndSettle();
+      expect(saved, isNotNull);
+      // La première pose a été CRÉÉE au curseur (startMs = 0).
+      expect(saved!.keyframes, hasLength(1));
+      final entry = saved!.keyframes.single.layerPoints[saved!.layers.first.id];
+      expect(entry, isNotNull);
+      expect(entry, hasLength(4));
+      expect(entry![1], isNot(equals(base[1])));
+      // La base n'a PAS bougé (l'écriture est allée dans la pose).
+      expect(saved!.layers.first.points[1], base[1]);
+    },
+  );
+
+  testWidgets('le ◆ de l’éditeur crée une keyframe au curseur', (tester) async {
+    final project = _project();
+    final shape = _pathShape(withKeyframes: false);
+    VectorShape? saved;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: _Host(project: project, shape: shape, onSaved: (v) => saved = v),
+      ),
     );
+    await tester.pumpAndSettle();
+
+    // ◆ au curseur (0 s) : la pose est créée dans le brouillon.
+    await tester.tap(find.byTooltip('Ajouter une keyframe au curseur'));
+    await tester.pumpAndSettle();
+    // Le losange devient plein (tooltip inversé).
+    expect(find.byTooltip('Retirer la keyframe au curseur'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.check));
+    await tester.pumpAndSettle();
+    expect(saved, isNotNull);
+    expect(saved!.keyframes.map((k) => k.timeMs), <int>[0]);
+  });
+
+  testWidgets('le ◆ de l’éditeur retire la keyframe au curseur', (
+    tester,
+  ) async {
+    final project = _project();
+    final shape = _pathShape(withKeyframes: false);
+    shape.addKeyframeAt(0);
+    VectorShape? saved;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: _Host(project: project, shape: shape, onSaved: (v) => saved = v),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Le curseur démarre sur la pose (startMs) : tooltip « Retirer ».
+    await tester.tap(find.byTooltip('Retirer la keyframe au curseur'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.check));
+    await tester.pumpAndSettle();
+    expect(saved, isNotNull);
+    expect(saved!.keyframes, isEmpty);
   });
 }

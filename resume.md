@@ -224,6 +224,32 @@ v0.9.0, l'**animation squelette** (rig maître).
   (800×600), PAS le preview — viser le CustomPaint dont le painter est un
   `ScenePainter` (un seul par écran).
 
+### v0.16.2 (27/09, morph — auto-key visible dans l'éditeur)
+- **Symptôme (retours v0.16.1)** : en changeant les points d'un chemin,
+  aucune keyframe n'était ajoutée automatiquement — et en éditant sur une
+  pose, la modification restait sans morphing à la lecture.
+- **Cause (double)** : ① sans AUCUNE keyframe sur la pièce, le glisser
+  édite les points de BASE en silence (comportement v0.16.0) — les
+  keyframes visibles sur la timeline étaient celles des OS, pas de la
+  pièce, d'où l'attente d'auto-key déçue ; ② une seule pose portant le
+  morph fige la forme ailleurs (carry de la dernière pose) — il faut
+  DEUX poses pour interpoler, ce qui n'était découvrable nulle part.
+- **Fix éditeur** : ① pièce d'un projet SQUELETTE sans aucune keyframe →
+  le premier glisser CRÉE la 1ʳᵉ pose au curseur, semée du rendu courant
+  (visuellement neutre, base intacte) ; ② bouton ◆ dans la ligne du
+  curseur du preview — poser/retirer une pose à n'importe quel instant
+  sans retourner au studio (toggle keyframeNear, même sémantique) ;
+  ③ snack « Pose à X,XX s enregistrée (morph) » au relâchement quand le
+  glisser a écrit une pose ; ④ aide contextuelle dynamique sous le
+  curseur : dessin de base (vectoriel sans keyframe) / auto-création
+  (pièce squelette) / « une seule pose = forme figée » / morph actif.
+- **Chaîne vérifiée de bout en bout** (sonde d'intégration supprimée
+  après validation) : ◆ pièce (0 s, 2 s) → sheet ⚙ → éditeur → glisser à
+  2000 ms → nuage écrit dans la pose 2000, base intacte, morph à
+  1000 ms interpolé (120 → 146,9 px, mi-chemin 133,4) ; modèle+DB+painter
+  déjà couverts (repository/point_morph/render_regression).
+- Tests : **214/214** (+3 widget), analyze 0 problème.
+
 ### v0.16.1 (27/09, CI run #35 verte, release `v0.16.1-build35`, APK 51,6 Mo ; commit `8e11d35` — bugfix : keyframes de pièce incréables en projet squelette) — VALIDATION APPAREIL EN ATTENTE
 - **Symptôme** : dans un projet SQUELETTE, impossible de créer une
   keyframe sur une forme/pièce — le ◆ de la playbar ne faisait rien dès
