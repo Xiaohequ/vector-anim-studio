@@ -6,12 +6,13 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Repo : https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`)
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
-- Dernière version : **0.16.1** (bugfix — le ◆ de la playbar anime la
-  PIÈCE sélectionnée d'un projet squelette : avant, il visait un os et
-  no-opait, aucune pose de pièce n'était créable ; la sheet ⚙ d'une
-  pièce retrouve son ◆ de pose + la ligne Interpolation ; 211/211
-  tests). v0.16.0 = éditeur de points in-app (poignées, curseur de
-  temps, auto-key morph). v0.15.0 (vasf-3 : couleur animée, morph de
+- Dernière version : **0.16.2** (morph — le 1ᵉʳ glisser de point d'une
+  pièce squelette SANS keyframe crée la 1ʳᵉ pose ; ◆ dans la ligne du
+  curseur de l'éditeur ; snack « Pose à X,XX s enregistrée » ; aide
+  contextuelle ; 214/214 tests). v0.16.1 (bugfix — le ◆ de la playbar
+  anime la PIÈCE sélectionnée d'un projet squelette ; sheet ⚙ des
+  pièces avec ◆ de pose + Interpolation). v0.16.0 = éditeur de points
+  in-app (poignées, curseur de temps, auto-key morph). v0.15.0 (vasf-3 : couleur animée, morph de
   points, translation d'os, IK chaînes N os, schéma DB v6). v0.14.0
   (import par fichier, reciblage, rendu CI) et v0.13.2 (persistance
   pivot/axes/bézier, schéma v5) validées appareil le 27/09.
@@ -224,7 +225,7 @@ v0.9.0, l'**animation squelette** (rig maître).
   (800×600), PAS le preview — viser le CustomPaint dont le painter est un
   `ScenePainter` (un seul par écran).
 
-### v0.16.2 (27/09, morph — auto-key visible dans l'éditeur)
+### v0.16.2 (27/09, CI run #36 verte, release `v0.16.2-build36`, APK 51,6 Mo ; commit `6a4a464` — morph : auto-key visible dans l'éditeur) — VALIDATION APPAREIL EN ATTENTE
 - **Symptôme (retours v0.16.1)** : en changeant les points d'un chemin,
   aucune keyframe n'était ajoutée automatiquement — et en éditant sur une
   pose, la modification restait sans morphing à la lecture.
