@@ -2467,19 +2467,21 @@ class _StudioScreenState extends State<StudioScreen>
   }
 
   Widget _buildPlaybar(TimelineController controller) {
-    final project = _project;
-    final skeleton = project?.isSkeleton ?? false;
     final rig = _rig;
     final shape = _selected;
     final bone = _selectedBone;
     final keyframe = shape == null ? null : controller.nearestKeyframe(shape);
-    final boneKeyframe = skeleton && rig != null && bone != null
+    // Projet squelette : le ◆ cible l'OS sélectionné s'il y en a un, sinon la
+    // PIÈCE sélectionnée (bugfix v0.16.1 — avant, le ◆ no-opait dès qu'une
+    // pièce remplaçait un os : aucune pose de pièce n'était créable).
+    final boneSelected = bone != null;
+    final boneKeyframe = boneSelected && rig != null
         ? controller.nearestBoneKeyframe(rig, bone)
         : null;
-    final hasKeyframes = skeleton
-        ? (rig != null && bone != null && rig.hasKeyframes(bone.id))
+    final hasKeyframes = boneSelected
+        ? (rig != null && rig.hasKeyframes(bone.id))
         : (shape?.hasKeyframes ?? false);
-    final diamondKeyframe = skeleton ? boneKeyframe : keyframe;
+    final diamondKeyframe = boneSelected ? boneKeyframe : keyframe;
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 2, 12, 2),
       child: Row(
@@ -2510,12 +2512,12 @@ class _StudioScreenState extends State<StudioScreen>
               icon: Icon(controller.playing ? Icons.pause : Icons.play_arrow),
             ),
             IconButton(
-              tooltip: diamondKeyframe == null
-                  ? (skeleton
-                        ? 'Ajouter une keyframe d’angle à l’os au curseur'
-                        : 'Ajouter une keyframe au curseur')
-                  : 'Retirer la keyframe au curseur',
-              onPressed: skeleton ? _toggleBoneKeyframe : _toggleKeyframe,
+              tooltip: diamondKeyframe != null
+                  ? 'Retirer la keyframe au curseur'
+                  : boneSelected
+                  ? 'Ajouter une keyframe d’angle à l’os au curseur'
+                  : 'Ajouter une keyframe au curseur',
+              onPressed: boneSelected ? _toggleBoneKeyframe : _toggleKeyframe,
               icon: Icon(
                 diamondKeyframe == null
                     ? Icons.diamond_outlined

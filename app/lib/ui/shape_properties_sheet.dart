@@ -109,25 +109,25 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    if (widget.skeletonPiece)
-                      const SizedBox(width: 48)
-                    else
-                      IconButton(
-                        tooltip: keyframe == null
-                            ? 'Ajouter une keyframe au curseur'
-                            : 'Retirer la keyframe au curseur',
-                        iconSize: 20,
-                        icon: Icon(
-                          keyframe == null
-                              ? Icons.diamond_outlined
-                              : Icons.diamond,
-                          color: hasKeyframes ? const Color(0xFFF2C94C) : null,
-                        ),
-                        onPressed: () async {
-                          await widget.onToggleKeyframe();
-                          _refresh();
-                        },
+                    // Bugfix v0.16.1 : le ◆ de pose était masqué pour les
+                    // pièces d'un projet squelette — les poses de pièces
+                    // étaient donc incréables (le ◆ de la playbar no-opait).
+                    IconButton(
+                      tooltip: keyframe == null
+                          ? 'Ajouter une keyframe au curseur'
+                          : 'Retirer la keyframe au curseur',
+                      iconSize: 20,
+                      icon: Icon(
+                        keyframe == null
+                            ? Icons.diamond_outlined
+                            : Icons.diamond,
+                        color: hasKeyframes ? const Color(0xFFF2C94C) : null,
                       ),
+                      onPressed: () async {
+                        await widget.onToggleKeyframe();
+                        _refresh();
+                      },
+                    ),
                     if (shape.isInstance)
                       TextButton.icon(
                         onPressed: () {
@@ -150,7 +150,8 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                 ),
                 Text(
                   widget.skeletonPiece
-                      ? widget.skeletonNote ?? 'Pièce du rig'
+                      ? '${widget.skeletonNote ?? 'Pièce du rig'}'
+                            '${hasKeyframes ? '' : ' · aucune keyframe'}'
                       : 'Affichée de ${(shape.startMs / 1000).toStringAsFixed(2)} s à '
                             '${(shape.endMs / 1000).toStringAsFixed(2)} s'
                             '${shape.visible ? '' : ' · masquée'}'
@@ -174,54 +175,51 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                     widget.skeletonRig != null &&
                     shape.layers.isNotEmpty)
                   ..._buildRigLayerRows(),
-                if (!widget.skeletonPiece)
-                  Row(
-                    children: <Widget>[
-                      const SizedBox(
-                        width: 92,
-                        child: Text(
-                          'Interpolation',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                      ),
-                      Expanded(
-                        child: DropdownButton<EasingKind>(
-                          isExpanded: true,
-                          value: keyframe?.easing ?? EasingKind.easeInOut,
-                          onChanged: keyframe == null
-                              ? null
-                              : (value) async {
-                                  if (value == null) return;
-                                  await widget.onKeyframeEasing(value);
-                                  _refresh();
-                                },
-                          items: <DropdownMenuItem<EasingKind>>[
-                            for (final easing in EasingKind.values)
-                              DropdownMenuItem<EasingKind>(
-                                value: easing,
-                                child: Text(
-                                  easingLabel(easing),
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                if (!widget.skeletonPiece)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Text(
-                      hasKeyframes
-                          ? 'Forme animée : toute modification écrit une keyframe au curseur.'
-                          : 'Ajoute une keyframe (◆) pour animer toutes les propriétés.',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: Colors.white54,
+                // Bugfix v0.16.1 : l'interpolation et l'astuce ◆ valent pour
+                // les pièces — leurs poses s'interpolent comme les formes.
+                Row(
+                  children: <Widget>[
+                    const SizedBox(
+                      width: 92,
+                      child: Text(
+                        'Interpolation',
+                        style: TextStyle(fontSize: 12),
                       ),
                     ),
+                    Expanded(
+                      child: DropdownButton<EasingKind>(
+                        isExpanded: true,
+                        value: keyframe?.easing ?? EasingKind.easeInOut,
+                        onChanged: keyframe == null
+                            ? null
+                            : (value) async {
+                                if (value == null) return;
+                                await widget.onKeyframeEasing(value);
+                                _refresh();
+                              },
+                        items: <DropdownMenuItem<EasingKind>>[
+                          for (final easing in EasingKind.values)
+                            DropdownMenuItem<EasingKind>(
+                              value: easing,
+                              child: Text(
+                                easingLabel(easing),
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    hasKeyframes
+                        ? 'Forme animée : toute modification écrit une keyframe au curseur.'
+                        : 'Ajoute une keyframe (◆) pour animer toutes les propriétés.',
+                    style: const TextStyle(fontSize: 11, color: Colors.white54),
                   ),
+                ),
               ],
             ),
           ),

@@ -6,21 +6,15 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Repo : https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`)
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
-- Dernière version : **0.15.0** (vasf-3 / Groupe 3 — moteur lourd :
-  **couleur animée** par keyframe (`color`/`colors`, sampler carry,
-  painter interpolé, lignes couleur par couche dans la sheet ⚙ avec
-  auto-key) ; **morph de points** de path (`points`/`layerPoints`, lerp
-  point par point avec bourrage du nuage court, repère = base) ;
-  **translation d'os** (`move` monde / `tx`,`ty` internes, FK étendue,
-  ✥ animé → auto-key) ; **IK chaînes N os** (`ikChain` + CCD ≥ 3 os,
-  analytique conservé à 2, losange vert sur l'effecteur de chaîne) ;
-  **bug v0.11 corrigé** — bookkeeping d'import des chaînes ≥ 3 os ;
-  **bonus** — `upsertKeyframe` préserve la bézier/couleurs de la pose
-  existante ; schéma DB **v6** (layer_colors/layer_points) + round-trip).
-  v0.14.0 (import par fichier — sélecteur système SAF ; reciblage « sans
-  saut » ; tests de rendu PERMANENTS en CI) validée appareil le 27/09.
-  v0.13.2 (persistance pivot/axes/bézier, schéma v5) validée appareil le
-  27/09.
+- Dernière version : **0.16.1** (bugfix — le ◆ de la playbar anime la
+  PIÈCE sélectionnée d'un projet squelette : avant, il visait un os et
+  no-opait, aucune pose de pièce n'était créable ; la sheet ⚙ d'une
+  pièce retrouve son ◆ de pose + la ligne Interpolation ; 211/211
+  tests). v0.16.0 = éditeur de points in-app (poignées, curseur de
+  temps, auto-key morph). v0.15.0 (vasf-3 : couleur animée, morph de
+  points, translation d'os, IK chaînes N os, schéma DB v6). v0.14.0
+  (import par fichier, reciblage, rendu CI) et v0.13.2 (persistance
+  pivot/axes/bézier, schéma v5) validées appareil le 27/09.
 - Détails techniques : `docs/PLAN.md` · Notes de version : `RELEASE_NOTES.md`
 
 ---
@@ -191,6 +185,69 @@ v0.9.0, l'**animation squelette** (rig maître).
   foyer DÉJÀ déplacé : premier move de 22 px écran (< slop IK 26) puis move de
   correction ; rig initial JAMAIS tendu à fond (L1+L2 > distance joint→effecteur)
   sinon toute cible est hors de portée (le solveur clampe, tip ≠ cible).
+
+### v0.16.0 (27/09, CI run #34 verte, release `v0.16.0-build34`, APK 51,6 Mo — éditeur de points in-app ; commit `dd53e6b`)
+- **Poignées de points** (éditeur de forme, couche Chemin sélectionnée) :
+  cercles blancs en espace écran (`ScenePainter.showLayerPoints` +
+  `activePointIndex` orange pendant le glisser — jamais en export) ; le
+  nuage affiché = échantillon au temps AFFICHÉ du nouveau curseur.
+- **Curseur de temps** : slider sous le preview, pas de 50 ms, borné à la
+  fenêtre de la forme ; toutes les poses/poignées échantillonnent à
+  `_previewMs` (les couches restent statiques — x/y/rotation/scale de
+  couche n'auto-keyent PAS dans l'éditeur, seuls les POINTS).
+- **Auto-key morph** : `VectorShape.applyLayerPoints` (miroir de
+  `applyLayerColor`) — sans keyframe → écrit la base ; avec keyframes →
+  nuage complet dans la pose au curseur, SEMÉ du rendu courant
+  (`pointsAtLayer` à la cible — l'extrémité du segment interpolé garde sa
+  valeur : semer est visuellement neutre) ; pose numérique, easings,
+  couleurs et morph des autres couches préservés ; snap `keyframeNear` à
+  la tolérance de la timeline (80 ms pour 4 s).
+- **Ajouter un point** (bouton ✚ du preview) : toucher un segment à
+  ≤ 28 px écran insère le point tapé dans la base ET chaque nuage de morph
+  au MÊME index (`insertLayerPoint` — correspondance positionnelle
+  préservée, morph plat au nouveau point) ; une activation = une
+  insertion. **Supprimer** : appui long sur une poignée → base + nuages au
+  même index (`removeLayerPoint`, nuages plus courts ignorés).
+- **Robustesse** : `ShapeLayer.points` est TOUJOURS une liste modifiable
+  (normalisation `List.from` au constructeur — les listes const passées
+  par les littéraux par défaut/import ne cassent plus l'insertion).
+- **Géométrie** : `SelectionGeometry.canvasToLocal` (inverse exact de
+  `localToCanvas`, pivot inclus), `pointHandlePositions`,
+  `hitPointIndex`, `nearestClosedSegment` (chemin fermé, segment de
+  fermeture = insertion en fin), `distanceToSegment` ; hit des poignées
+  sur la position BRUTE du doigt (`_downPos` du Listener — la
+  reconnaissance du geste arrive le foyer déjà déplacé, piège v0.10.1).
+- Tests : **209/209** (+15 unitaires modèle/géométrie/vasf round-trip,
+  +5 widget : glisser auto-key, base sans keyframe, appui long, mode ✚,
+  légende) ; analyze 0 problème. Piège harnais de test :
+  `find.byType(Listener).first` = un Listener interne Material plein écran
+  (800×600), PAS le preview — viser le CustomPaint dont le painter est un
+  `ScenePainter` (un seul par écran).
+
+### v0.16.1 (27/09, bugfix — keyframes de pièce incréables en projet squelette)
+- **Symptôme** : dans un projet SQUELETTE, impossible de créer une
+  keyframe sur une forme/pièce — le ◆ de la playbar ne faisait rien dès
+  qu'une pièce était sélectionnée.
+- **Cause** : `_buildPlaybar` routait le ◆ sur `_toggleBoneKeyframe` pour
+  TOUT projet squelette ; la sélection étant exclusive (os OU pièce),
+  `_selectedBone` était null avec une pièce → no-op. Et la sheet ⚙
+  masquait le ◆ de pose pour les pièces (`skeletonPiece` → spacer 48),
+  ainsi que la ligne Interpolation et l'astuce ◆ — aucun chemin UI vers
+  une pose de pièce (bloquait aussi le workflow morph v0.16.0 sur les
+  pièces).
+- **Fix** : le ◆ cible l'OS sélectionné s'il y en a un, sinon la PIÈCE
+  (`boneSelected = bone != null` — flow analysis promeut `bone`, pas de
+  `!` nécessaire) ; la sheet ⚙ affiche le ◆ de pose + Interpolation +
+  l'astuce pour les pièces, la note gagne « · aucune keyframe ».
+- **Tests** (+2 dans widget_test.dart, 211/211) : ◆ playbar → pose de
+  pièce (créée puis retirée, piste d'os intacte) ; sheet ⚙ pièce → ◆
+  présent, pose créée, note mise à jour, ligne Interpolation atteinte
+  au défilement. **Piège harnais** : `find.text('Interpolation')` ne
+  trouve RIEN sans défilement — le ListView `shrinkWrap` de la sheet
+  reste paresseux sous `ConstrainedBox(maxHeight)`, les enfants hors
+  fenêtre+cacheExtent ne sont PAS construits ; utiliser
+  `tester.scrollUntilVisible(..., scrollable: descendant de la sheet)`
+  et taper le ◆ AVANT de défiler (sinon l'en-tête sort de l'écran).
 
 ### v0.15.0 (livrée + VALIDÉE APPAREIL 27/09, 4/4 tests OK — vasf-3 / Groupe 3 : couleur animée, morph, translation d'os, IK chaînes)
 - **Couleur animée** : `ShapeKeyframe.layerColors` (id de couche → ARGB) ;

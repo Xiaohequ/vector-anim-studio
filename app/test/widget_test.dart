@@ -13,6 +13,7 @@ import 'package:vector_anim_studio/engine/selection_geometry.dart';
 import 'package:vector_anim_studio/main.dart';
 import 'package:vector_anim_studio/models/animation.dart';
 import 'package:vector_anim_studio/models/skeleton.dart';
+import 'package:vector_anim_studio/ui/shape_properties_sheet.dart';
 import 'package:vector_anim_studio/ui/studio_screen.dart';
 
 /// Dépôt en mémoire pour les tests de widgets.
@@ -245,6 +246,121 @@ void main() {
     await tester.pumpAndSettle();
     expect(project.skeleton!.hasKeyframes(bone.id), isFalse);
   });
+
+  testWidgets(
+    'le ◆ du playbar anime la PIÈCE sélectionnée (projet squelette)',
+    (tester) async {
+      // Bugfix v0.16.1 : avec une pièce sélectionnée, le ◆ no-opait (il
+      // visait un os) — aucune pose de pièce n'était créable au doigt.
+      final project = AnimationProject.blank(
+        name: 'Rat',
+        type: ProjectType.skeleton,
+      );
+      final piece = VectorShape(name: 'Bloc', startMs: 0, endMs: 2000);
+      piece.layers.add(ShapeLayer(name: 'L', kind: ShapeKind.rect));
+      project.shapes.add(piece);
+      final rig = SkeletonRig(name: 'Rig');
+      final bone = RigBone(
+        name: 'Queue',
+        offsetX: 180,
+        offsetY: 320,
+        length: 50,
+      );
+      rig.addBone(bone);
+      rig.bindShape(piece.id, bone.id);
+      project.skeleton = rig;
+
+      await pumpStudio(tester, repository, project);
+
+      // Sélectionner la pièce via le menu Formes (sélection exclusive).
+      await tester.tap(find.byTooltip('Formes'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Bloc').last);
+      await tester.pumpAndSettle();
+
+      // Le ◆ cible la pièce : tooltip de pose, pas celui d'os.
+      expect(find.byTooltip('Ajouter une keyframe au curseur'), findsOneWidget);
+      expect(
+        find.byTooltip('Ajouter une keyframe d’angle à l’os au curseur'),
+        findsNothing,
+      );
+
+      // ◆ au curseur (0 s) : la pièce reçoit une pose complète ; la piste
+      // de l'os reste vide.
+      await tester.tap(find.byTooltip('Ajouter une keyframe au curseur'));
+      await tester.pumpAndSettle();
+      expect(piece.keyframes.length, 1);
+      expect(piece.keyframes.single.timeMs, 0);
+      expect(rig.hasKeyframes(bone.id), isFalse);
+
+      // Second appui au même endroit : la pose est retirée.
+      await tester.tap(find.byTooltip('Retirer la keyframe au curseur'));
+      await tester.pumpAndSettle();
+      expect(piece.keyframes, isEmpty);
+    },
+  );
+
+  testWidgets(
+    'la sheet ⚙ d’une pièce propose le ◆ de pose et l’interpolation',
+    (tester) async {
+      final project = AnimationProject.blank(
+        name: 'Rat',
+        type: ProjectType.skeleton,
+      );
+      final piece = VectorShape(name: 'Bloc', startMs: 0, endMs: 2000);
+      piece.layers.add(ShapeLayer(name: 'L', kind: ShapeKind.rect));
+      project.shapes.add(piece);
+      final rig = SkeletonRig(name: 'Rig');
+      final bone = RigBone(
+        name: 'Queue',
+        offsetX: 180,
+        offsetY: 320,
+        length: 50,
+      );
+      rig.addBone(bone);
+      rig.bindShape(piece.id, bone.id);
+      project.skeleton = rig;
+
+      await pumpStudio(tester, repository, project);
+
+      await tester.tap(find.byTooltip('Formes'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Bloc').last);
+      await tester.pumpAndSettle();
+
+      // Sheet ⚙ de la pièce : le ◆ de pose (masqué avant le bugfix) est
+      // affiché dans l'en-tête ; la note signale l'absence de keyframe.
+      await tester.tap(find.byTooltip('Propriétés de la forme'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('aucune keyframe'), findsOneWidget);
+
+      // Le losange de la sheet crée la pose (playbar masquée derrière la
+      // feuille : 2 widgets portent le tooltip, la feuille est la dernière).
+      final sheetDiamond = find.byTooltip('Ajouter une keyframe au curseur');
+      expect(sheetDiamond, findsNWidgets(2));
+      await tester.tap(sheetDiamond.last);
+      await tester.pumpAndSettle();
+      expect(piece.keyframes.length, 1);
+      expect(piece.keyframes.single.timeMs, 0);
+      expect(rig.hasKeyframes(bone.id), isFalse);
+      expect(find.textContaining('aucune keyframe'), findsNothing);
+
+      // Ligne Interpolation : plus bas dans la feuille (ListView paresseuse
+      // qui ne construit pas ce qui dépasse la fenêtre de test) — défiler
+      // jusqu'à elle.
+      await tester.scrollUntilVisible(
+        find.text('Interpolation'),
+        120,
+        scrollable: find
+            .descendant(
+              of: find.byType(ShapePropertiesSheet),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      expect(find.text('Interpolation'), findsOneWidget);
+    },
+  );
 
   testWidgets('glisser le bouton ✥ déplace l’os (pas de mode armé)', (
     tester,
