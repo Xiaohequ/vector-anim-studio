@@ -224,7 +224,7 @@ v0.9.0, l'**animation squelette** (rig maître).
   (800×600), PAS le preview — viser le CustomPaint dont le painter est un
   `ScenePainter` (un seul par écran).
 
-### v0.16.1 (27/09, bugfix — keyframes de pièce incréables en projet squelette)
+### v0.16.1 (27/09, CI run #35 verte, release `v0.16.1-build35`, APK 51,6 Mo ; commit `8e11d35` — bugfix : keyframes de pièce incréables en projet squelette) — VALIDATION APPAREIL EN ATTENTE
 - **Symptôme** : dans un projet SQUELETTE, impossible de créer une
   keyframe sur une forme/pièce — le ◆ de la playbar ne faisait rien dès
   qu'une pièce était sélectionnée.
