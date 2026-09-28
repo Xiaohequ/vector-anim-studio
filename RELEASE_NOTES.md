@@ -1,36 +1,26 @@
-# Vector Anim Studio 0.16.2
+# Vector Anim Studio 0.16.3
 
-## Correction (morph de points dans l'éditeur)
+## Correction (le curseur de l'éditeur démarre au playhead du studio)
 
-- **Le morph de points ne s'enregistrait pas au doigt.** Deux causes
-  combinées : sans aucune keyframe sur la pièce, le glisser d'un point
-  éditait les points de BASE en silence (aucun ◆ n'apparaissait sur la
-  timeline — les keyframes visibles étaient celles des os, pas de la
-  pièce) ; et une seule pose portant le morph fige la forme partout
-  ailleurs : il faut deux poses pour animer, ce qui n'était indiqué
-  nulle part.
+- **Symptôme** : le snack affichait toujours « Pose à 0,00 s enregistrée
+  (morph) », même en éditant à 2 s — et les poses s'accumulaient à 0 s
+  au lieu de se répartir sur la timeline.
 
-- **Le premier glisser crée la première pose** : en projet squelette,
-  une pièce sans aucune keyframe enregistre désormais son premier
-  glisser de point comme pose au curseur (semée du rendu courant, donc
-  visuellement neutre ; le dessin de base reste intact).
+- **Cause** : le curseur du preview de l'éditeur de forme était initialisé
+  au début de la fenêtre de la forme (0 s), indépendamment de la position
+  de la tête de lecture du studio. Scrubber le studio à 2 s puis ouvrir
+  l'éditeur remettait le curseur à 0 : chaque glisser de point écrivait
+  donc sa pose à 0 s. C'était aussi la cause racine du « pas de
+  morphing » signalé en 0.16.2.
 
-- **◆ dans l'éditeur** : la ligne du curseur du preview gagne un losange
-  poser/retirer une keyframe à l'instant affiché — plus besoin de
-  retourner au studio pour poser le second instant du morph.
+- **Fix** : l'éditeur démarre maintenant à l'instant affiché par le
+  studio (borné à la fenêtre de la forme). Scrubber → ◆ → éditer garde
+  le même instant, l'auto-key écrit la pose à CET instant et le snack
+  l'affiche correctement (« Pose à 2,00 s »).
 
-- **Retour visuel** : au relâchement d'un glisser qui a écrit une pose,
-  un message « Pose à X,XX s enregistrée (morph) » confirme l'auto-key ;
-  l'aide sous le curseur s'adapte à l'état (base / auto-création / une
-  seule pose / morph actif).
+- Validation : **215/215 tests** (dont 1 nouveau : pose écrite à 2000 ms
+  après scrub studio), `flutter analyze` 0 problème.
 
-- **Workflow morph** (projet squelette) : ◆ à l'instant A → déplace les
-  points → scrub l'autre instant → ◆ → déplace les points → Lecture :
-  le chemin s'interpole entre les deux poses.
-
-- Validation : **214/214 tests** (dont 3 nouveaux), `flutter analyze`
-  0 problème.
-
-Version précédente (0.16.1) : le ◆ de la barre de lecture anime la pièce
-sélectionnée d'un projet squelette ; feuille ⚙ des pièces avec losange de
-pose et Interpolation.
+Version précédente (0.16.2) : premier glisser de point = première pose
+pour une pièce squelette sans keyframe, ◆ dans la ligne du curseur de
+l'éditeur, snack de confirmation, aide contextuelle du morph.

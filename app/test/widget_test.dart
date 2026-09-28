@@ -15,6 +15,7 @@ import 'package:vector_anim_studio/models/animation.dart';
 import 'package:vector_anim_studio/models/skeleton.dart';
 import 'package:vector_anim_studio/ui/shape_properties_sheet.dart';
 import 'package:vector_anim_studio/ui/studio_screen.dart';
+import 'package:vector_anim_studio/ui/timeline_view.dart';
 
 /// Dépôt en mémoire pour les tests de widgets.
 ///
@@ -359,6 +360,126 @@ void main() {
             .first,
       );
       expect(find.text('Interpolation'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'l’éditeur de pièce démarre au playhead du studio (poses pas à 0 s)',
+    (tester) async {
+      // Bugfix v0.16.3 : scrubber le studio à 2 s puis ouvrir l'éditeur —
+      // le curseur de l'éditeur retombait à startMs (0 s) et TOUTES les
+      // poses de morph étaient écrites à 0 (« Pose à 0,00 s » au snack).
+      final project = AnimationProject.blank(
+        name: 'Rat',
+        type: ProjectType.skeleton,
+      );
+      final piece = VectorShape(name: 'Chemin', startMs: 0, endMs: 4000);
+      piece.layers.add(
+        ShapeLayer(
+          name: 'Ch',
+          kind: ShapeKind.path,
+          width: 120,
+          height: 120,
+          points: const <Offset>[
+            Offset(0, 0),
+            Offset(120, 0),
+            Offset(120, 120),
+            Offset(0, 120),
+          ],
+        ),
+      );
+      project.shapes.add(piece);
+      final rig = SkeletonRig(name: 'Rig');
+      final bone = RigBone(
+        name: 'Queue',
+        offsetX: 180,
+        offsetY: 320,
+        length: 50,
+      );
+      rig.addBone(bone);
+      rig.bindShape(piece.id, bone.id);
+      project.skeleton = rig;
+
+      await pumpStudio(tester, repository, project);
+
+      // Sélectionner la pièce, ◆ pose à 0 s.
+      await tester.tap(find.byTooltip('Formes'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Chemin').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Ajouter une keyframe au curseur'));
+      await tester.pumpAndSettle();
+      expect(piece.keyframes, hasLength(1));
+
+      // Scrubber le studio à 2000 ms : le fond SOUS les lignes du timeline
+      // (le centre vertical tombe sur la barre de pièce → onSelect).
+      final timelineRect = tester.getRect(find.byType(TimelineView));
+      await tester.tapAt(
+        timelineRect.bottomLeft + Offset(timelineRect.width / 2, -2),
+      );
+      await tester.pumpAndSettle();
+
+      // Ouvrir la sheet ⚙ puis l'éditeur (bouton Couches).
+      await tester.tap(find.byTooltip('Propriétés de la forme'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Couches'));
+      await tester.pumpAndSettle();
+
+      // Le curseur de l'éditeur est à 2,00 s (label à droite du slider).
+      expect(find.text('2.00 s'), findsOneWidget);
+
+      // Glisser une poignée de point (preview de l'ÉDITEUR = dernier
+      // ScenePainter de l'arbre, le studio est derrière la route).
+      final canvasFinder = find
+          .byWidgetPredicate(
+            (w) => w is CustomPaint && w.painter is ScenePainter,
+          )
+          .last;
+      final size = tester.getSize(canvasFinder);
+      final geo = SceneGeometry.fitFor(project, size);
+      final layer = piece.layers.first;
+      final cloud = piece.pointsAtLayer(layer.id, layer.points, 2000);
+      final handles = SelectionGeometry.pointHandlePositions(
+        cloud,
+        layer,
+        SelectionGeometry.layerPose(piece, layer, 2000),
+        geo,
+      );
+      expect(handles, hasLength(4));
+      debugPrint(
+        'DBG canvasRect=${tester.getRect(canvasFinder)} '
+        'topLeft=${tester.getTopLeft(canvasFinder)} handles=$handles',
+      );
+      final gesture = await tester.startGesture(
+        tester.getTopLeft(canvasFinder) + handles[1],
+      );
+      await gesture.moveBy(const Offset(40, -30));
+      await gesture.moveBy(const Offset(10, 0));
+      await tester.pump();
+      await gesture.up();
+      await tester.pump();
+
+      // Enregistrer (✓) puis vérifier : la pose est écrite À 2000 ms.
+      // ATTENTION : _editShape REMPLACE l'objet pièce par le brouillon
+      // (project.shapes[index] = edited) — relire project.shapes.first.
+      await tester.tap(find.byIcon(Icons.check));
+      await tester.pumpAndSettle();
+      final savedPiece = project.shapes.first;
+      debugPrint(
+        'DBG saved: kf=${savedPiece.keyframes.map((k) => k.timeMs).toList()} '
+        'layerXY=(${savedPiece.layers.first.x}, ${savedPiece.layers.first.y})',
+      );
+      expect(savedPiece.keyframes.map((k) => k.timeMs), <int>[0, 2000]);
+      final entry = savedPiece.keyframes
+          .firstWhere((k) => k.timeMs == 2000)
+          .layerPoints[layer.id];
+      expect(entry, isNotNull);
+      expect(entry![1], isNot(equals(const Offset(120, 0))));
+      // La pose 0 (créée avant l'éditeur) est intacte : le morph existe.
+      expect(
+        savedPiece.keyframes.first.layerPoints[layer.id],
+        isNull, // pose 0 sans nuage → morph base → nuage(2000)
+      );
     },
   );
 

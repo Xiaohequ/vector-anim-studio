@@ -373,10 +373,18 @@ class _StudioScreenState extends State<StudioScreen>
   Future<void> _editShape(VectorShape shape) async {
     if (shape.isInstance) return; // une instance n'a pas de couches propres
     final project = _project;
+    final controller = _controller;
     if (project == null) return;
     final edited = await Navigator.of(context).push<VectorShape>(
       MaterialPageRoute<VectorShape>(
-        builder: (_) => ShapeEditorScreen(project: project, shape: shape),
+        builder: (_) => ShapeEditorScreen(
+          project: project,
+          shape: shape,
+          // Curseur de l'éditeur = playhead courant du studio (v0.16.3) :
+          // l'instant scrubé reste affiché dans l'éditeur, l'auto-key
+          // morph écrit bien à CET instant (et non à 0 s).
+          initialTimeMs: controller?.timeMs,
+        ),
       ),
     );
     if (edited == null || !mounted) return;

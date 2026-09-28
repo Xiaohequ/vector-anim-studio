@@ -19,12 +19,22 @@ enum _EditorGesture { none, move, scale, rotate, pointDrag }
 /// Les réglages fins sont dans la bottom sheet ouverte par le bouton ⚙ ancré
 /// au coin bas-gauche de la sélection.
 class ShapeEditorScreen extends StatefulWidget {
-  const ShapeEditorScreen({super.key, required this.project, this.shape});
+  const ShapeEditorScreen({
+    super.key,
+    required this.project,
+    this.shape,
+    this.initialTimeMs,
+  });
 
   final AnimationProject project;
 
   /// Forme à modifier ; `null` pour en créer une nouvelle.
   final VectorShape? shape;
+
+  /// Instant du studio à l'ouverture (playhead) : le curseur du preview
+  /// démarre ICI (borné à la fenêtre de la forme) au lieu de startMs —
+  /// bugfix v0.16.3 : scrubber le studio puis éditer écrivait tout à 0 s.
+  final int? initialTimeMs;
 
   @override
   State<ShapeEditorScreen> createState() => _ShapeEditorScreenState();
@@ -87,7 +97,14 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
         );
     _name = TextEditingController(text: _draft.name);
     _selectedLayerId = _draft.layers.isEmpty ? null : _draft.layers.last.id;
-    _previewMs = _draft.startMs;
+    // Curseur initial = playhead du STUDIO (bugfix v0.16.3) : ouvrir
+    // l'éditeur après un scrub garde l'instant affiché — sinon le curseur
+    // retombait à startMs (0 s) et TOUTES les poses de morph étaient
+    // écrites à 0. Borné à la fenêtre de la forme.
+    _previewMs = (widget.initialTimeMs ?? _draft.startMs).clamp(
+      _draft.startMs,
+      math.max(_draft.startMs, _draft.endMs),
+    );
   }
 
   @override

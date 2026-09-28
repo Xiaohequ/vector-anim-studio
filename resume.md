@@ -6,12 +6,12 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Repo : https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`)
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
-- Dernière version : **0.16.2** (morph — le 1ᵉʳ glisser de point d'une
-  pièce squelette SANS keyframe crée la 1ʳᵉ pose ; ◆ dans la ligne du
-  curseur de l'éditeur ; snack « Pose à X,XX s enregistrée » ; aide
-  contextuelle ; 214/214 tests). v0.16.1 (bugfix — le ◆ de la playbar
-  anime la PIÈCE sélectionnée d'un projet squelette ; sheet ⚙ des
-  pièces avec ◆ de pose + Interpolation). v0.16.0 = éditeur de points
+- Dernière version : **0.16.3** (bugfix — le curseur de l'éditeur de
+  forme démarre au playhead du STUDIO : scrubber puis éditer n'écrit
+  plus tout à 0 s — cause racine du « pas de morphing » ; 215/215
+  tests). v0.16.2 (morph — 1ᵉʳ glisser = 1ʳᵉ pose, ◆ dans l'éditeur,
+  snack, aide). v0.16.1 (bugfix — ◆ de la playbar anime la PIÈCE d'un
+  projet squelette ; sheet ⚙ des pièces avec ◆ + Interpolation). v0.16.0 = éditeur de points
   in-app (poignées, curseur de temps, auto-key morph). v0.15.0 (vasf-3 : couleur animée, morph de
   points, translation d'os, IK chaînes N os, schéma DB v6). v0.14.0
   (import par fichier, reciblage, rendu CI) et v0.13.2 (persistance
@@ -224,6 +224,25 @@ v0.9.0, l'**animation squelette** (rig maître).
   `find.byType(Listener).first` = un Listener interne Material plein écran
   (800×600), PAS le preview — viser le CustomPaint dont le painter est un
   `ScenePainter` (un seul par écran).
+
+### v0.16.3 (27/09, bugfix — le curseur de l'éditeur démarre au playhead du studio)
+- **Symptôme (retours v0.16.2)** : le snack affiche toujours « Pose à
+  0,00 s enregistrée (morph) » même en éditant une keyframe à 2 s.
+- **Cause** : le curseur du preview de l'éditeur était initialisé à
+  `_draft.startMs` (0 s), INDÉPENDANT du playhead du studio. Scrubber le
+  studio à 2 s puis ouvrir l'éditeur remettait le curseur à 0 — le
+  glisser de point écrivait donc TOUTES les poses à 0 s (le snack était
+  honnête). C'était aussi la vraie cause du « pas de morphing » v0.16.2 :
+  les nuages s'accumulaient sur la pose 0 au lieu de se répartir.
+- **Fix** : `ShapeEditorScreen.initialTimeMs` — `_editShape` passe le
+  `controller.timeMs` du studio, borné à la fenêtre de la forme dans
+  initState ; l'instant scrubé reste affiché dans l'éditeur, l'auto-key
+  morph écrit bien à CET instant (snack « Pose à 2,00 s »).
+- **Test** (+1 widget, 215/215) : ◆ pièce à 0 s → scrub studio 2 s →
+  sheet ⚙ → éditeur (label « 2,00 s ») → glisser une poignée → pose
+  écrite À 2000 ms, pose 0 intacte. Piège : `_editShape` REMPLACE
+  l'objet pièce par le brouillon (`project.shapes[index] = edited`) —
+  relire `project.shapes.first`, pas la référence d'avant l'éditeur.
 
 ### v0.16.2 (27/09, CI run #36 verte, release `v0.16.2-build36`, APK 51,6 Mo ; commit `6a4a464` — morph : auto-key visible dans l'éditeur) — VALIDATION APPAREIL EN ATTENTE
 - **Symptôme (retours v0.16.1)** : en changeant les points d'un chemin,
