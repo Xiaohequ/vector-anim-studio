@@ -199,11 +199,6 @@ class _StudioScreenState extends State<StudioScreen>
     final sub = await widget.repository.load(picked.id);
     if (!mounted) return;
     _pushUndo(); // annuler l'insertion doit restaurer l'état sans l'instance
-    final start = controller.timeMs;
-    final end = math.min(
-      project.durationMs,
-      math.max(start + sub.durationMs, start + 100),
-    );
     final shape = VectorShape(
       name: sub.name,
       embeddedProjectId: sub.id,
@@ -211,8 +206,6 @@ class _StudioScreenState extends State<StudioScreen>
       embeddedHeight: sub.height,
       x: project.width / 2,
       y: project.height / 2,
-      startMs: start,
-      endMs: end,
     );
     setState(() {
       project.shapes.add(shape);
@@ -1163,10 +1156,7 @@ class _StudioScreenState extends State<StudioScreen>
     Offset canvasPoint,
   ) {
     for (final shape in project.shapes.reversed) {
-      final show = project.isSkeleton
-          ? shape.visible
-          : shape.isVisibleAt(controller.timeMs);
-      if (!show) continue;
+      if (!shape.visible) continue;
       final bounds = ScenePainter.shapeBounds(shape, controller.timeMs);
       if (bounds == null) continue;
       if (SelectionGeometry.hit(
@@ -2172,11 +2162,7 @@ class _StudioScreenState extends State<StudioScreen>
                     ),
                   ),
                 ),
-              if (!_addBoneMode &&
-                  shape != null &&
-                  (project.isSkeleton
-                      ? shape.visible
-                      : shape.isVisibleAt(controller.timeMs)))
+              if (!_addBoneMode && shape != null && shape.visible)
                 _buildPropertiesButton(shape, controller, canvasSize),
               // Os sélectionné : ⚙ propriétés + ✥ déplacement (comme pour
               // les formes, ancrés au segment).
@@ -2427,16 +2413,11 @@ class _StudioScreenState extends State<StudioScreen>
                       onSelect: (shape) =>
                           setState(() => _selectedId = shape.id),
                       onSeek: controller.setTime,
-                      onRangeChanged: (shape, start, end) {
-                        setState(() {
-                          shape.startMs = start;
-                          shape.endMs = end;
-                        });
-                        _scheduleSave();
-                      },
                       onMoveChanged: (shape, targetStartMs) {
                         setState(
-                          () => shape.shiftBy(targetStartMs - shape.startMs),
+                          () => shape.shiftBy(
+                            targetStartMs - shape.spanStartMs,
+                          ),
                         );
                       },
                       onMoveEnd: (_) => _scheduleSave(),
@@ -2644,7 +2625,7 @@ class _StudioScreenState extends State<StudioScreen>
               ),
               title: Text(shape.name),
               subtitle: Text(
-                '${(shape.durationMs / 1000).toStringAsFixed(1)} s · '
+                '${((shape.keyframes.isEmpty ? 4000 : shape.keyframes.last.timeMs) / 1000).toStringAsFixed(1)} s · '
                 '${shape.layers.length} couche(s)',
                 style: const TextStyle(fontSize: 11),
               ),

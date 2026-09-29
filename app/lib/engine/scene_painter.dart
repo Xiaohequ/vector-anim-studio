@@ -89,7 +89,7 @@ class ScenePainter extends CustomPainter {
     VectorShape? selected;
     if (selectedShapeId != null) {
       for (final shape in project.shapes) {
-        if (shape.id == selectedShapeId && shape.isVisibleAt(timeMs)) {
+        if (shape.id == selectedShapeId && shape.visible) {
           selected = shape;
           break;
         }
@@ -148,9 +148,9 @@ class ScenePainter extends CustomPainter {
     void paintShape(VectorShape shape) {
       // Projet squelette : les pièces sont visibles en permanence (le rig
       // porte toute l'animation) — pas de fenêtre d'affichage.
-      final show = project.isSkeleton
-          ? shape.visible
-          : shape.isVisibleAt(timeMs);
+      // Toujours affichée tant qu'elle est visible : les fenêtres
+      // start/end ont été supprimées (v0.18), quel que soit le type.
+      final show = shape.visible;
       if (!show) return;
       BoneFrame? frame;
       if (rigPose != null) {
@@ -326,7 +326,7 @@ class ScenePainter extends CustomPainter {
       return;
     }
     if (depth >= 1) return;
-    final subTime = instanceTimeMs(sampleMs, shape.startMs, sub.durationMs);
+    final subTime = instanceTimeMs(sampleMs, 0, sub.durationMs);
     if (opacity < 1) {
       canvas.saveLayer(
         null,
@@ -350,8 +350,11 @@ class ScenePainter extends CustomPainter {
     final opacity = (shapeOpacity * layer.opacity).clamp(0.0, 1.0);
     if (opacity <= 0) return;
     final stroke = math.max(0.0, layer.strokeWidth * strokeFactor);
+    // L'alpha PROPRE de la couleur (#AARRGGBB) multiplie l'opacité calculée
+    // (v0.18 : avant, il était REMPLACÉ — l'alpha du JSON était ignoré).
+    final ownAlpha = ((colorValue >> 24) & 0xFF) / 255.0;
     final paint = Paint()
-      ..color = Color(colorValue).withValues(alpha: opacity)
+      ..color = Color(colorValue).withValues(alpha: opacity * ownAlpha)
       ..style = layer.filled ? PaintingStyle.fill : PaintingStyle.stroke
       ..strokeWidth = stroke
       ..strokeCap = StrokeCap.round

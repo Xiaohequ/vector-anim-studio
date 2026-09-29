@@ -8,13 +8,16 @@ import '../engine/timeline_zoom.dart';
 import '../models/animation.dart';
 import '../models/skeleton.dart';
 
-/// Timeline : une ligne par piste d'affichage, un rectangle par forme.
+/// Timeline : une ligne par piste, une barre par forme ANIMÉE (span de son
+/// contenu : 1re → dernière keyframe).
 ///
 /// L'échelle de temps est donnée par [zoom] (temps affiché sur la largeur +
 /// défilement) : pincement à deux doigts = zoom ancré, glisser à deux doigts
-/// = défilement horizontal. Appui long sur un rectangle = déplacer tout le
-/// segment (durée et keyframes conservées) ; la ligne d'atterrissage est
-/// recalculée automatiquement par l'empilement anti-chevauchement.
+/// = défilement horizontal. Appui long sur une barre = décaler toutes les
+/// keyframes (courbes conservées) ; la ligne d'atterrissage est recalculée
+/// automatiquement par l'empilement anti-chevauchement. Les fenêtres
+/// d'affichage start/end ont été supprimées (v0.18) — pas de poignées de
+/// redimensionnement, une forme est affichée tant qu'elle est visible.
 class TimelineView extends StatefulWidget {
   const TimelineView({
     super.key,
@@ -23,7 +26,6 @@ class TimelineView extends StatefulWidget {
     required this.zoom,
     required this.selectedShapeId,
     required this.onSelect,
-    required this.onRangeChanged,
     required this.onMoveChanged,
     required this.onMoveEnd,
     required this.onSeek,
@@ -47,11 +49,10 @@ class TimelineView extends StatefulWidget {
 
   final String? selectedShapeId;
   final ValueChanged<VectorShape> onSelect;
-  final void Function(VectorShape shape, int startMs, int endMs) onRangeChanged;
 
-  /// Déplace le segment : [targetStartMs] est le nouveau début (borné à ≥ 0
-  /// par l'appelant, sans limite au-delà de la fin du projet — la durée suit),
-  /// la durée et les keyframes suivent.
+  /// Déplace la piste : [targetStartMs] = nouvelle origine du span (1re
+  /// keyframe ; bornée à ≥ 0 par l'appelant, sans limite au-delà de la fin
+  /// du projet — la durée suit). Les keyframes sont décalées en bloc.
   final void Function(VectorShape shape, int targetStartMs) onMoveChanged;
   final ValueChanged<VectorShape> onMoveEnd;
   final ValueChanged<int> onSeek;
@@ -80,7 +81,6 @@ class TimelineView extends StatefulWidget {
 
   static const double rulerHeight = 20;
   static const double laneHeight = 30;
-  static const int minSpanMs = 100;
 
   @override
   State<TimelineView> createState() => _TimelineViewState();
@@ -175,7 +175,7 @@ class _TimelineViewState extends State<TimelineView> {
     HapticFeedback.mediumImpact();
     setState(() {
       _movingShape = shape;
-      _movingOriginMs = shape.startMs;
+      _movingOriginMs = shape.spanStartMs;
     });
   }
 
@@ -186,9 +186,9 @@ class _TimelineViewState extends State<TimelineView> {
       return;
     }
     widget.onMoveChanged(shape, targetStartMs);
-    // La fin du segment doit rester visible : défilement automatique quand
+    // La fin du span doit rester visible : défilement automatique quand
     // le geste dépasse le bord droit (sinon le doigt bute sur l'écran).
-    _followEdge(shape.endMs);
+    _followEdge(shape.spanEndMs);
   }
 
   /// Défilement automatique : garde le bord manipulé dans la vue (95 % de la
@@ -255,7 +255,11 @@ class _TimelineViewState extends State<TimelineView> {
     final rig = widget.skeletonRig;
     // Barres de pièces toujours affichées, barres d'os (si rig) posées en
     // dessous : v0.9.0 masquait les pièces dès qu'un os existait.
-    final lanes = TimelineLayout.packLanes(widget.project.shapes);
+    final fullSpanMs = math.max(widget.project.durationMs, 4000);
+    final lanes = TimelineLayout.packLanes(
+      widget.project.shapes,
+      fullSpanMs: fullSpanMs,
+    );
     final boneLanes = rig == null
         ? const <List<RigBone>>[]
         : TimelineLayout.packBoneLanes(rig);
@@ -335,22 +339,19 @@ class _TimelineViewState extends State<TimelineView> {
                           TimelineView.rulerHeight +
                           lane * TimelineView.laneHeight,
                       width: width,
+                      fullSpanMs: fullSpanMs,
                       pinching: _pinching,
                       moving: _movingShape?.id == shape.id,
                       movingOriginMs: _movingOriginMs,
                       selected: shape.id == widget.selectedShapeId,
                       onSelect: () => widget.onSelect(shape),
                       onSeek: (t) => widget.onSeek(t),
-                      onRangeChanged: (start, end) =>
-                          widget.onRangeChanged(shape, start, end),
                       onMoveStart: () => _handleMoveStart(shape),
                       onMoveChanged: (target) =>
                           _handleMoveUpdate(shape, target),
                       onMoveEnd: () => _handleMoveEnd(shape),
                       onDeleteKeyframe: (time) =>
                           widget.onDeleteKeyframe(shape, time),
-                      onGestureStart: () => widget.onGestureStart(shape),
-                      onFollowEdge: _followEdge,
                     ),
                 for (var lane = 0; lane < boneLanes.length; lane++)
                   for (final bone in boneLanes[lane])
@@ -488,9 +489,9 @@ class _RulerPainter extends CustomPainter {
       oldDelegate.width != width;
 }
 
-/// Rectangle d'une forme : sélection, poignées de redimensionnement,
-/// keyframes supprimables près de la tête de lecture et déplacement du
-/// segment entier par appui long + glisser horizontal.
+/// Rectangle d'une forme animée : sélection, keyframes supprimables près
+/// de la tête de lecture et décalage de tout le span par appui long +
+/// glisser horizontal (fenêtre de visibilité supprimée).
 class _ShapeBar extends StatelessWidget {
   const _ShapeBar({
     required this.shape,
@@ -499,19 +500,17 @@ class _ShapeBar extends StatelessWidget {
     required this.toleranceMs,
     required this.laneTop,
     required this.width,
+    required this.fullSpanMs,
     required this.pinching,
     required this.moving,
     required this.movingOriginMs,
     required this.selected,
     required this.onSelect,
     required this.onSeek,
-    required this.onRangeChanged,
     required this.onMoveStart,
     required this.onMoveChanged,
     required this.onMoveEnd,
     required this.onDeleteKeyframe,
-    required this.onGestureStart,
-    required this.onFollowEdge,
   });
 
   final VectorShape shape;
@@ -520,6 +519,10 @@ class _ShapeBar extends StatelessWidget {
   final int toleranceMs;
   final double laneTop;
   final double width;
+
+  /// Durée de référence des barres sans keyframe (instances) :
+  /// max(durée du projet, 4 s).
+  final int fullSpanMs;
 
   /// Pincement en cours : les gestes de la barre (déplacement, scrub) sont
   /// gelés pour laisser la main au zoom/défilement à deux doigts.
@@ -531,17 +534,10 @@ class _ShapeBar extends StatelessWidget {
   final bool selected;
   final VoidCallback onSelect;
   final ValueChanged<int> onSeek;
-  final void Function(int startMs, int endMs) onRangeChanged;
   final VoidCallback onMoveStart;
   final ValueChanged<int> onMoveChanged;
   final VoidCallback onMoveEnd;
   final ValueChanged<int> onDeleteKeyframe;
-
-  /// Début d'un geste sur les poignées (redimensionnement) : snapshot undo.
-  final VoidCallback onGestureStart;
-
-  /// Défilement automatique pendant l'étirement : garde la fin dans la vue.
-  final ValueChanged<int> onFollowEdge;
 
   @override
   Widget build(BuildContext context) {
@@ -549,10 +545,18 @@ class _ShapeBar extends StatelessWidget {
     final zoom = this.zoom;
     final width = this.width;
     final msPerPx = zoom.msPerPixel(width);
-    final left = zoom.xFor(shape.startMs, width);
-    // Largeur du segment : durée × pixels/ms — PAS ms/pixel (sinon la barre
-    // couvre tout l'écran et bloque le seek et le défilement).
-    final barWidth = math.max(24.0, shape.durationMs / msPerPx);
+    // Barre = span du CONTENU (1re → dernière keyframe) : les fenêtres
+    // d'affichage ont été supprimées (v0.18). Sans keyframe, seule une
+    // INSTANCE garde une barre — pleine durée (elle s'anime en boucle).
+    final hasKeys = shape.keyframes.isNotEmpty;
+    final spanStart = hasKeys ? shape.spanStartMs : 0;
+    final spanEnd = hasKeys ? shape.spanEndMs : fullSpanMs;
+    final left = zoom.xFor(spanStart, width);
+    // Bornée à la vue : une barre plus large est coupée, pas débordante.
+    final barWidth = math.min(
+      math.max(24.0, (spanEnd - spanStart) / msPerPx),
+      width,
+    );
     // Épinglée au bord droit : une barre plus large que son minimum doit
     // rester visible quand sa fin touche le bord droit de la vue.
     final pinnedLeft = math.min(left, math.max(0.0, width - 24));
@@ -560,9 +564,7 @@ class _ShapeBar extends StatelessWidget {
         ? const Color(0xFFC084FC)
         : Theme.of(context).colorScheme.primary;
     final keyTimes = <int>{
-      for (final key in shape.keyframes)
-        if (key.timeMs >= shape.startMs && key.timeMs <= shape.endMs)
-          key.timeMs,
+      for (final key in shape.keyframes) key.timeMs,
     }.toList()..sort();
 
     return Positioned(
@@ -573,16 +575,17 @@ class _ShapeBar extends StatelessWidget {
       child: GestureDetector(
         onTap: onSelect,
         onHorizontalDragUpdate: (details) {
-          // Scrub de la tête de lecture, même au-dessus d'une barre.
+          // Scrub de la tête de lecture, même au-dessus d'une barre : la
+          // position LOCALE (repère de la barre) est ramenée en espace vue.
           if (pinching || moving) return;
-          onSeek(zoom.timeFor(details.localPosition.dx, width));
+          onSeek(zoom.timeFor(details.localPosition.dx + pinnedLeft, width));
         },
         onLongPressStart: (details) => onMoveStart(),
         onLongPressMoveUpdate: (details) {
           if (!moving) return;
           final deltaMs = (details.localOffsetFromOrigin.dx * msPerPx).round();
           // Sans borne haute : dépasser la fin du projet l'étend (durée
-          // dérivée), et le défilement automatique suit le geste.
+          // dérivée du contenu), et le défilement automatique suit le geste.
           final target = math.max(0, movingOriginMs + deltaMs);
           onMoveChanged(target);
         },
@@ -632,8 +635,8 @@ class _ShapeBar extends StatelessWidget {
             for (final keyTime in keyTimes)
               Align(
                 alignment: Alignment(
-                  ((keyTime - shape.startMs) /
-                                  math.max(1, shape.endMs - shape.startMs))
+                  ((keyTime - spanStart) /
+                                  math.max(1, spanEnd - spanStart))
                               .clamp(0.0, 1.0) *
                           2 -
                       1,
@@ -669,95 +672,7 @@ class _ShapeBar extends StatelessWidget {
                         ),
                       ),
               ),
-            _Handle(
-              alignment: Alignment.centerLeft,
-              msPerPixel: zoom.msPerPixel(width),
-              tooltip: 'Début d’affichage',
-              onDragStart: () => onGestureStart(),
-              onDragEnd: () {},
-              onDrag: (deltaMs) {
-                final next = (shape.startMs + deltaMs).clamp(
-                  0,
-                  shape.endMs - TimelineView.minSpanMs,
-                );
-                onRangeChanged(next, shape.endMs);
-              },
-            ),
-            _Handle(
-              alignment: Alignment.centerRight,
-              msPerPixel: zoom.msPerPixel(width),
-              tooltip: 'Fin d’affichage',
-              onDragStart: () => onGestureStart(),
-              onDragEnd: () {},
-              onDrag: (deltaMs) {
-                // Sans borne haute : allonger la fin au-delà de la fin du
-                // projet étend la durée (dérivée du contenu) ; le
-                // défilement automatique garde la fin dans la vue.
-                final next = math.max(
-                  shape.startMs + TimelineView.minSpanMs,
-                  shape.endMs + deltaMs,
-                );
-                onRangeChanged(shape.startMs, next);
-                onFollowEdge(next);
-              },
-            ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _Handle extends StatelessWidget {
-  const _Handle({
-    required this.alignment,
-    required this.tooltip,
-    required this.onDrag,
-    required this.msPerPixel,
-    this.onDragStart,
-    this.onDragEnd,
-  });
-
-  final Alignment alignment;
-  final String tooltip;
-  final ValueChanged<int> onDrag;
-  final double msPerPixel;
-  final VoidCallback? onDragStart;
-  final VoidCallback? onDragEnd;
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: alignment,
-      child: Tooltip(
-        message: tooltip,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onHorizontalDragStart: (details) => onDragStart?.call(),
-          onHorizontalDragUpdate: (details) {
-            if (details.delta.dx == 0) return;
-            onDrag((details.delta.dx * msPerPixel).round());
-          },
-          onHorizontalDragEnd: (details) => onDragEnd?.call(),
-          child: MouseRegion(
-            cursor: SystemMouseCursors.resizeLeftRight,
-            child: Container(
-              width: 14,
-              height: double.infinity,
-              margin: const EdgeInsets.symmetric(vertical: 2),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.22),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: const Center(
-                child: SizedBox(
-                  width: 2,
-                  height: 12,
-                  child: ColoredBox(color: Colors.white70),
-                ),
-              ),
-            ),
-          ),
         ),
       ),
     );
@@ -819,7 +734,11 @@ class _BoneBar extends StatelessWidget {
     final last = track.last.timeMs;
     final msPerPx = zoom.msPerPixel(width);
     final left = zoom.xFor(first, width);
-    final barWidth = math.max(24.0, (last - first) / msPerPx);
+    // Bornée à la vue : une barre plus large est coupée, pas débordante.
+    final barWidth = math.min(
+      math.max(24.0, (last - first) / msPerPx),
+      width,
+    );
     final pinnedLeft = math.min(left, math.max(0.0, width - 24));
 
     return Positioned(
@@ -830,9 +749,10 @@ class _BoneBar extends StatelessWidget {
       child: GestureDetector(
         onTap: onSelect,
         onHorizontalDragUpdate: (details) {
-          // Scrub de la tête de lecture, même au-dessus d'une barre.
+          // Scrub de la tête de lecture, même au-dessus d'une barre : la
+          // position LOCALE (repère de la barre) est ramenée en espace vue.
           if (pinching || moving) return;
-          onSeek(zoom.timeFor(details.localPosition.dx, width));
+          onSeek(zoom.timeFor(details.localPosition.dx + pinnedLeft, width));
         },
         onLongPressStart: (details) => onMoveStart(),
         onLongPressMoveUpdate: (details) {

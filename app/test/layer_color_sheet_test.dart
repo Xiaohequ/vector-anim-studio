@@ -13,7 +13,7 @@ void main() {
   >
   pumpSheet(WidgetTester tester, {bool withKeyframes = false}) async {
     final project = AnimationProject.blank(name: 'Film');
-    final shape = VectorShape(name: 'Fleur', startMs: 0, endMs: 3000);
+    final shape = VectorShape(name: 'Fleur');
     shape.layers.add(ShapeLayer(name: 'Pétale', kind: ShapeKind.rect));
     shape.layers.add(ShapeLayer(name: 'Cœur', kind: ShapeKind.circle));
     project.shapes.add(shape);

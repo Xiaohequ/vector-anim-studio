@@ -8,7 +8,9 @@ Rules of thumb for generating a valid file:
 
 - **Seconds** (double) for every time value. **Degrees** for every angle.
 - Colors are strings `#RRGGBB` (or `#AARRGGBB`), or `"$alias"` resolved in the
-  `theme` palette (VASF-2).
+  `theme` palette (VASF-2). The `AA` alpha MULTIPLIES the computed opacity
+  (v0.18): a `#80FF5C5C` shape at opacity 0.5 renders at 25 % — before
+  v0.18 the color alpha was silently replaced by the opacity.
 - A shape is **one primitive** by default; `"layers": [...]` (VASF-2) packs
   several primitives into one shape. Characters made of several parts = several
   shapes, each bound to its own bone.
@@ -16,7 +18,10 @@ Rules of thumb for generating a valid file:
 - Keyframes may be **partial**: a missing property is carried over from the
   previous keyframe (or from the base pose for the first keyframe). The same
   carry rule applies to the VASF-3 `color`/`colors` and `points`/`layerPoints`
-  keyframe fields.
+  keyframe fields, AND (v0.18) to the optional BONE keyframe properties
+  `opacity` / `stretch` / `squash` / `move` — a bone keyframe that omits them
+  keeps the last posed value (base 1 / 1 / 1 / 0). Before its first posed
+  value, a property HOLDS that first value (backward hold, shapes and bones).
 - The importer collects ALL problems and reports them in French — fix them and retry.
 - Nested project instances are not representable in VASF-1 (ignored on export).
 - The VASF-2 and VASF-3 extensions (below) are optional: a `version: 1` file
@@ -77,7 +82,7 @@ convention). Positive degrees = clockwise on screen.
 | strokeWidth | 4 | outline thickness in scene units (used when `filled=false`, always for `line`) |
 | width / height | 110 / 110 | primitive size in scene units (ignored for `path`: derived from points) |
 | points | — | `path` only: `[x, y]` pairs **around the shape center** (≥ 2 points, auto-closed) |
-| start / end | 0 / latest other end, else 4.0 | visibility window in seconds; `end` must be > `start` |
+| start / end | — | **REMOVED in v0.18** — still accepted (numbers ≥ 0) but IGNORED: a shape displays during the WHOLE project; the project duration = latest keyframe (floor 4 s) |
 | x / y | canvas center | base position of the shape center |
 | rotation | 0 | base rotation, degrees |
 | scale | 1 | base scale (0.05–4 recommended) |
@@ -96,7 +101,8 @@ convention). Positive degrees = clockwise on screen.
 {"t": 0.0, "x": 180, "y": 320, "rotation": 0, "scale": 1, "opacity": 1, "strokeWidth": 1, "easing": "easeInOut"}
 ```
 
-- `t` (seconds, ≥ 0, sorted automatically) — a keyframe beyond `end` extends it.
+- `t` (seconds, ≥ 0, sorted automatically) — a keyframe beyond the current
+  content extends the **project duration** (no display window since v0.18).
 - `easing` = curve of the segment ARRIVING at this keyframe: `linear, easeIn,
   easeOut, easeInOut, step` (default `easeInOut`). VASF-2 also accepts a CSS
   chain: `"cubic-bezier(x1, y1, x2, y2)"` (x1/x2 within [0, 1], see below).
@@ -152,6 +158,11 @@ convention). Positive degrees = clockwise on screen.
   Example: a child whose world rest angle is 90° given `angle: 30` rotates −60°.
 - `opacity` (0–1), `stretch` (along the bone, 1 = neutral), `squash`
   (perpendicular, 1 = neutral) are optional per-keyframe bone properties.
+  Since v0.18 they are OPTIONAL POSES like on shapes: an omitted property
+  keeps the last posed value (carry; base 1 / 1 / 1 / 0), and the first posed
+  value HOLDS backward before its time. Before v0.18 every bone keyframe
+  carried independent defaults — an opacity posed at t=0 fell back to 1 at
+  the next keyframe.
 - VASF-3: `move` = optional `[dx, dy]` **world translation** (project coords)
   of the bone's joint, relative to its rest position at that time. The joint
   slides, children and bound pieces follow rigidly; the rest pose is untouched.
@@ -173,7 +184,6 @@ convention). Positive degrees = clockwise on screen.
       "type": "circle",
       "color": "#FF5C5C",
       "width": 120, "height": 120,
-      "end": 1.6,
       "x": 360, "y": 400,
       "keyframes": [
         {"t": 0.0, "x": 360, "y": 300},
@@ -215,7 +225,7 @@ follows. An unknown alias is a collected error. Theme values must be literal
 ```json
 {
   "name": "Visage",
-  "x": 360, "y": 640, "end": 2,
+  "x": 360, "y": 640,
   "layers": [
     {"name": "Peau", "type": "circle", "color": "$peau", "width": 170, "height": 170},
     {"name": "Œil", "type": "circle", "color": "$encre", "width": 26, "height": 26, "x": -34, "y": -22},
@@ -247,7 +257,8 @@ is skipped when it lands on a time already present — end the pattern with the
 pose it started with for a clean loop.
 
 Example: keys at 0 / 0.5 / 1.0 with `repeat: 3` → keys at 0, 0.5, 1.0, 1.5,
-2.0, 2.5, 3.0, 3.5, 4.0. A keyframe beyond `end` extends the window as usual.
+2.0, 2.5, 3.0, 3.5, 4.0. A keyframe beyond the pattern extends the project
+duration as usual.
 `repeat` must be an integer ≥ 1; without keyframes, `cycle` is ignored.
 
 ## Defs — reusable primitive definitions
@@ -256,8 +267,8 @@ Example: keys at 0 / 0.5 / 1.0 with `repeat: 3` → keys at 0, 0.5, 1.0, 1.5,
 {
   "defs": {"oeil": {"type": "circle", "color": "$encre", "width": 26, "height": 26}},
   "shapes": [
-    {"name": "Œil gauche", "ref": "oeil", "x": 326, "y": 618, "end": 2},
-    {"name": "Œil droit", "ref": "oeil", "x": 394, "y": 618, "end": 2, "color": "#FF5C5C"}
+    {"name": "Œil gauche", "ref": "oeil", "x": 326, "y": 618},
+    {"name": "Œil droit", "ref": "oeil", "x": 394, "y": 618, "color": "#FF5C5C"}
   ]
 }
 ```
@@ -265,8 +276,8 @@ Example: keys at 0 / 0.5 / 1.0 with `repeat: 3` → keys at 0, 0.5, 1.0, 1.5,
 A def holds geometry only: `type`, `color`, `filled`, `strokeWidth`,
 `width` / `height`, `points` (anything else is ignored). A shape with
 `"ref": "oeil"` inherits those as defaults and may override any of them (the
-example turns the right eye red). Name / start / end / pose / keyframes always
-come from the shape itself. No nested refs; `ref` works at shape level only
+example turns the right eye red). Name / pose / keyframes always come from
+the shape itself. No nested refs; `ref` works at shape level only
 (not inside `layers[]`).
 
 ## Axis scale — `scaleX` / `scaleY`
@@ -276,7 +287,7 @@ KEYFRAME (same names — the keyframe carries the factor):
 
 ```json
 {
-  "name": "Balle", "scaleX": 1.4, "scaleY": 0.6, "end": 1.5,
+  "name": "Balle", "scaleX": 1.4, "scaleY": 0.6,
   "keyframes": [
     {"t": 0, "scaleX": 1.2, "scaleY": 0.8},
     {"t": 0.5, "scaleX": 0.9, "scaleY": 1.15, "easing": "easeOut"}
@@ -457,6 +468,32 @@ which still applies to every bone without its own cycle (period computed
 over those bones only). A bone cycle with fewer than 2 keyframes (or a zero
 period) is ignored; `repeat` must be an integer ≥ 1. End the pattern with
 the pose it started with for a clean loop.
+
+# v0.18 app — no display windows, alpha honored, bone carry
+
+## Display windows `start` / `end` are REMOVED
+
+Shapes no longer have a visibility window: a shape displays during the WHOLE
+project (its `visible` eye toggle is the only visibility switch). The vasf
+fields `start` / `end` are still ACCEPTED (numbers ≥ 0, validated) but
+IGNORED at import, and the exporter no longer emits them. The project
+duration derives from the content: latest shape keyframe / bone keyframe /
+morph, with a 4 s floor. Existing files that set `start`/`end` import fine —
+their windows simply stop applying.
+
+## Color alpha is HONORED
+
+The `AA` byte of `#AARRGGBB` now MULTIPLIES the computed opacity (before:
+the color alpha was replaced by the opacity, i.e. silently dropped).
+`#80FF5C5C` at opacity 1 renders at 50 %; at opacity 0.5, at 25 %.
+
+## Bone keyframes carry (and hold backward)
+
+Bone keyframe properties (`opacity`, `stretch`, `squash`, `move`) follow the
+shape-keyframe semantics: omitted = last posed value carried; the first
+posed value holds backward before its time (a `move` posed at t=1 applies
+from t=0). The exporter emits them SPARSE — only when the resolved value
+changes — so the re-import reproduces the exact same render.
 
 # Limitations
 

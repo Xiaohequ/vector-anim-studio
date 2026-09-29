@@ -43,8 +43,6 @@ void main() {
       name: 'Étoile',
       x: 120,
       y: 200,
-      startMs: 200,
-      endMs: 2400,
       layers: <ShapeLayer>[
         ShapeLayer(
           name: 'Chemin',
@@ -99,15 +97,15 @@ void main() {
 
     final loaded = await repository.load(project.id);
     expect(loaded.name, project.name);
-    // Durée dérivée : fin du dernier segment (2400 ms).
-    expect(loaded.durationMs, 2400);
+    // Durée dérivée : dernière keyframe (2000 ms).
+    expect(loaded.durationMs, 2000);
     expect(loaded.fps, 24);
     expect(loaded.shapes.length, 1);
 
     final loadedShape = loaded.shapes.first;
     expect(loadedShape.name, 'Étoile');
-    expect(loadedShape.startMs, 200);
-    expect(loadedShape.endMs, 2400);
+    expect(loadedShape.spanStartMs, 200);
+    expect(loadedShape.spanEndMs, 2000);
     expect(loadedShape.layers.length, 2);
     expect(loadedShape.layers.first.kind, ShapeKind.path);
     expect(loadedShape.layers.first.points.length, 3);
@@ -251,9 +249,7 @@ void main() {
     final piece = VectorShape(
       name: 'Corps',
       x: 150,
-      y: 250,
-      startMs: 0,
-      endMs: 1000,
+      y: 250
     );
     piece.layers.add(ShapeLayer(name: 'L', kind: ShapeKind.rect));
     project.shapes.add(piece);

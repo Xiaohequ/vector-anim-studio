@@ -93,20 +93,22 @@ class RigBone {
 }
 
 /// Keyframe d'un os : le delta d'angle (radians) ajouté à l'angle de repos
-/// de l'os à cet instant. Une keyframe d'os est une « pose » à une seule
-/// propriété (l'angle) — même sémantique d'échantillonnage que les poses de
-/// forme : hors de la plage, la première/dernière keyframe est tenue.
+/// de l'os à cet instant, plus les propriétés optionnelles (opacité,
+/// étirement, écrasement, translation). Même sémantique d'échantillonnage
+/// que les poses de forme : une propriété absente (`null`) est PORTÉE de la
+/// dernière keyframe qui la pose (sinon base 1/1/1/0), la valeur de la 1re
+/// clé posée est tenue avant son temps.
 class BoneKeyframe {
   BoneKeyframe({
     required this.timeMs,
     this.easing = EasingKind.easeInOut,
     List<double>? bezier,
     this.angleDelta = 0,
-    this.opacity = 1,
-    this.stretch = 1,
-    this.squash = 1,
-    this.tx = 0,
-    this.ty = 0,
+    this.opacity,
+    this.stretch,
+    this.squash,
+    this.tx,
+    this.ty,
   }) : bezier = (bezier != null && bezier.length == 4)
            ? List<double>.from(bezier)
            : null;
@@ -120,20 +122,21 @@ class BoneKeyframe {
 
   double angleDelta;
 
-  /// Opacité des pièces portées (v0.10) : 1 = opaque.
-  double opacity;
+  /// Opacité des pièces portées (v0.10) : null = non posée (portée — carry).
+  double? opacity;
 
-  /// Étirement le long de l'os (v0.10) : 1 = neutre, > 1 allonge.
-  double stretch;
+  /// Étirement le long de l'os (v0.10) : null = non posé (porté — carry).
+  double? stretch;
 
-  /// Écrasement perpendiculaire à l'os (v0.10) : 1 = neutre.
-  double squash;
+  /// Écrasement perpendiculaire à l'os (v0.10) : null = non posé (porté).
+  double? squash;
 
   /// Translation animée de l'articulation (v0.15) : dans le repère de repos
   /// du PARENT (même convention que `RigBone.offsetX/offsetY` — projet pour
   /// une racine). La pose de repos reste intacte ; les enfants suivent.
-  double tx;
-  double ty;
+  /// null = non posée (portée — carry).
+  double? tx;
+  double? ty;
 
   BoneKeyframe copy() => BoneKeyframe(
     timeMs: timeMs,
@@ -152,10 +155,16 @@ class BoneKeyframe {
     'easing': easing.name,
     if (bezier != null) 'bezier': List<double>.from(bezier!),
     'angleDelta': angleDelta,
-    'opacity': opacity,
-    'stretch': stretch,
-    'squash': squash,
-    if (tx != 0 || ty != 0) ...<String, Object?>{'tx': tx, 'ty': ty},
+    // Propriétés optionnelles : écrites SEULEMENT si posées (null = non
+    // posée → le rechargement la porte, comme à l'écriture). La valeur
+    // posée 1.0/0.0 est conservée : elle DOIT surcharger un carry antérieur.
+    if (opacity != null) 'opacity': opacity,
+    if (stretch != null) 'stretch': stretch,
+    if (squash != null) 'squash': squash,
+    if (tx != null || ty != null) ...<String, Object?>{
+      'tx': tx ?? 0,
+      'ty': ty ?? 0,
+    },
   };
 
   factory BoneKeyframe.fromJson(Map<String, Object?> json) => BoneKeyframe(
@@ -168,11 +177,11 @@ class BoneKeyframe {
         ?.map((v) => (v as num).toDouble())
         .toList(),
     angleDelta: (json['angleDelta'] as num?)?.toDouble() ?? 0,
-    opacity: (json['opacity'] as num?)?.toDouble() ?? 1,
-    stretch: (json['stretch'] as num?)?.toDouble() ?? 1,
-    squash: (json['squash'] as num?)?.toDouble() ?? 1,
-    tx: (json['tx'] as num?)?.toDouble() ?? 0,
-    ty: (json['ty'] as num?)?.toDouble() ?? 0,
+    opacity: (json['opacity'] as num?)?.toDouble(),
+    stretch: (json['stretch'] as num?)?.toDouble(),
+    squash: (json['squash'] as num?)?.toDouble(),
+    tx: (json['tx'] as num?)?.toDouble(),
+    ty: (json['ty'] as num?)?.toDouble(),
   );
 }
 
@@ -360,14 +369,24 @@ class SkeletonRig {
     return track.last.angleDelta;
   }
 
-  /// Échantillonnage générique d'une propriété de keyframe d'os
-  /// (opacité, étirement, écrasement) : tenue hors plage, easing entre
-  /// deux keyframes, valeur 1 (neutre) sans piste.
-  double _numAt(String boneId, int timeMs, double Function(BoneKeyframe) pick) {
+  /// Échantillonnage générique d'une propriété de keyframe d'os (opacité,
+  /// étirement, écrasement) : même sémantique que `valueAt` des formes —
+  /// chaque keyframe a une valeur RÉSOLUE (son entrée, sinon la dernière
+  /// posée avant elle — carry, sinon 1 = neutre), interpolation entre les
+  /// clés encadrantes avec l'easing d'ARRIVÉE, tenue avant la 1re/après la
+  /// dernière. Piste vide → 1.
+  double _numAt(String boneId, int timeMs, double? Function(BoneKeyframe) pick) {
     final track = tracks[boneId];
     if (track == null || track.isEmpty) return 1;
-    if (timeMs <= track.first.timeMs) return pick(track.first);
-    if (timeMs >= track.last.timeMs) return pick(track.last);
+    final resolved = <double>[];
+    var carry = 1.0;
+    for (final key in track) {
+      final own = pick(key);
+      if (own != null) carry = own;
+      resolved.add(carry);
+    }
+    if (timeMs <= track.first.timeMs) return resolved.first;
+    if (timeMs >= track.last.timeMs) return resolved.last;
     for (var i = 0; i < track.length - 1; i++) {
       final a = track[i];
       final b = track[i + 1];
@@ -378,10 +397,10 @@ class SkeletonRig {
           b.bezier,
           (timeMs - a.timeMs) / span,
         );
-        return pick(a) + (pick(b) - pick(a)) * progress;
+        return resolved[i] + (resolved[i + 1] - resolved[i]) * progress;
       }
     }
-    return pick(track.last);
+    return resolved.last;
   }
 
   /// Opacité des pièces portées par l'os à [timeMs] (1 sans piste).
@@ -397,17 +416,22 @@ class SkeletonRig {
       _numAt(boneId, timeMs, (k) => k.squash);
 
   /// Translation animée de l'articulation à [timeMs] (v0.15) — zéro sans
-  /// piste, dans le repère de repos du parent (mêmes règles d'échantillonnage
-  /// que l'angle).
+  /// piste, dans le repère de repos du parent. Même sémantique résolue par
+  /// pose que les propriétés numériques : une clé sans translation porte
+  /// la dernière posée (carry), la 1re posée est tenue avant son temps.
   Offset translationAt(String boneId, int timeMs) {
     final track = tracks[boneId];
     if (track == null || track.isEmpty) return Offset.zero;
-    if (timeMs <= track.first.timeMs) {
-      return Offset(track.first.tx, track.first.ty);
+    final resolved = <Offset>[];
+    var carry = Offset.zero;
+    for (final key in track) {
+      if (key.tx != null || key.ty != null) {
+        carry = Offset(key.tx ?? carry.dx, key.ty ?? carry.dy);
+      }
+      resolved.add(carry);
     }
-    if (timeMs >= track.last.timeMs) {
-      return Offset(track.last.tx, track.last.ty);
-    }
+    if (timeMs <= track.first.timeMs) return resolved.first;
+    if (timeMs >= track.last.timeMs) return resolved.last;
     for (var i = 0; i < track.length - 1; i++) {
       final a = track[i];
       final b = track[i + 1];
@@ -419,12 +443,12 @@ class SkeletonRig {
           (timeMs - a.timeMs) / span,
         );
         return Offset(
-          a.tx + (b.tx - a.tx) * progress,
-          a.ty + (b.ty - a.ty) * progress,
+          resolved[i].dx + (resolved[i + 1].dx - resolved[i].dx) * progress,
+          resolved[i].dy + (resolved[i + 1].dy - resolved[i].dy) * progress,
         );
       }
     }
-    return Offset(track.last.tx, track.last.ty);
+    return resolved.last;
   }
 
   /// z de dessin des pièces d'une forme : os porteur (liaison forme
@@ -527,11 +551,13 @@ class SkeletonRig {
         easing: easing ?? existing?.easing ?? EasingKind.easeInOut,
         bezier: bezier ?? existing?.bezier,
         angleDelta: angleDelta,
-        opacity: opacity ?? existing?.opacity ?? 1,
-        stretch: stretch ?? existing?.stretch ?? 1,
-        squash: squash ?? existing?.squash ?? 1,
-        tx: tx ?? existing?.tx ?? 0,
-        ty: ty ?? existing?.ty ?? 0,
+        // Propriétés optionnelles : une valeur non fournie garde celle de
+        // la keyframe existante (sinon null = non posée → PORTÉE au rendu).
+        opacity: opacity ?? existing?.opacity,
+        stretch: stretch ?? existing?.stretch,
+        squash: squash ?? existing?.squash,
+        tx: tx ?? existing?.tx,
+        ty: ty ?? existing?.ty,
       ),
     );
     track.sort((a, b) => a.timeMs.compareTo(b.timeMs));

@@ -128,8 +128,11 @@ void main() {
   AnimationProject seededProject({bool withShape = true}) {
     final project = AnimationProject.blank(name: 'Film');
     if (withShape) {
-      final shape = VectorShape(name: 'Bloc', startMs: 0, endMs: 2000);
+      final shape = VectorShape(name: 'Bloc');
       shape.layers.add(ShapeLayer(name: 'L', kind: ShapeKind.rect));
+      // Keyframe : sans elle la forme statique n'a pas de barre timeline
+      // (v0.18) et le nom n'est visible nulle part.
+      shape.upsertKeyframe(1000, shape.poseAt(1000));
       project.shapes.add(shape);
     }
     return project;
@@ -164,7 +167,8 @@ void main() {
 
   testWidgets('undo annule l’ajout d’une forme', (tester) async {
     final repository = _MemoryRepository();
-    await pumpStudio(tester, repository, seededProject(withShape: false));
+    final project = seededProject(withShape: false);
+    await pumpStudio(tester, repository, project);
 
     IconButton undoButton() => tester.widget<IconButton>(
       find.widgetWithIcon(IconButton, Icons.undo).last,
@@ -177,14 +181,16 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Enregistrer'));
     await tester.pumpAndSettle();
-    expect(find.text('Forme 1'), findsOneWidget);
+    // Forme statique sans keyframe : pas de barre timeline (v0.18) — on
+    // vérifie l'état du projet, pas le texte de la barre.
+    expect(project.shapes.single.name, 'Forme 1');
     expect(undoButton().onPressed, isNotNull);
 
-    // Annuler : la forme disparaît de la timeline.
+    // Annuler : l'état restauré (snapshot d'avant l'ajout) est re-sauvé.
     await tester.tap(find.byIcon(Icons.undo).last);
     await tester.pumpAndSettle();
     expect(undoButton().onPressed, isNull);
-    expect(find.text('Forme 1'), findsNothing);
+    expect((await repository.load(project.id)).shapes, isEmpty);
   });
 
   testWidgets('le dialogue de création propose vectorielle ou squelette', (
@@ -217,7 +223,7 @@ void main() {
       name: 'Rat',
       type: ProjectType.skeleton,
     );
-    final piece = VectorShape(name: 'Bloc', startMs: 0, endMs: 2000);
+    final piece = VectorShape(name: 'Bloc');
     piece.layers.add(ShapeLayer(name: 'L', kind: ShapeKind.rect));
     project.shapes.add(piece);
     final rig = SkeletonRig(name: 'Rig');
@@ -257,7 +263,7 @@ void main() {
         name: 'Rat',
         type: ProjectType.skeleton,
       );
-      final piece = VectorShape(name: 'Bloc', startMs: 0, endMs: 2000);
+      final piece = VectorShape(name: 'Bloc');
       piece.layers.add(ShapeLayer(name: 'L', kind: ShapeKind.rect));
       project.shapes.add(piece);
       final rig = SkeletonRig(name: 'Rig');
@@ -308,7 +314,7 @@ void main() {
         name: 'Rat',
         type: ProjectType.skeleton,
       );
-      final piece = VectorShape(name: 'Bloc', startMs: 0, endMs: 2000);
+      final piece = VectorShape(name: 'Bloc');
       piece.layers.add(ShapeLayer(name: 'L', kind: ShapeKind.rect));
       project.shapes.add(piece);
       final rig = SkeletonRig(name: 'Rig');
@@ -367,13 +373,13 @@ void main() {
     'l’éditeur de pièce démarre au playhead du studio (poses pas à 0 s)',
     (tester) async {
       // Bugfix v0.16.3 : scrubber le studio à 2 s puis ouvrir l'éditeur —
-      // le curseur de l'éditeur retombait à startMs (0 s) et TOUTES les
+      // le curseur de l'éditeur retombait à 0 s et TOUTES les
       // poses de morph étaient écrites à 0 (« Pose à 0,00 s » au snack).
       final project = AnimationProject.blank(
         name: 'Rat',
         type: ProjectType.skeleton,
       );
-      final piece = VectorShape(name: 'Chemin', startMs: 0, endMs: 4000);
+      final piece = VectorShape(name: 'Chemin');
       piece.layers.add(
         ShapeLayer(
           name: 'Ch',
@@ -709,9 +715,7 @@ void main() {
         name: 'Rat',
         embeddedProjectId: skeleton.id,
         embeddedWidth: skeleton.width,
-        embeddedHeight: skeleton.height,
-        startMs: 0,
-        endMs: 2000,
+        embeddedHeight: skeleton.height
       ),
     );
 

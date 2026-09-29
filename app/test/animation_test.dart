@@ -97,15 +97,20 @@ void main() {
       expect(shape.keyframes.first.values[AnimatableProperty.y], 50);
     });
 
-    test('une forme n’est visible que dans sa fenêtre d’affichage', () {
-      final shape = VectorShape(name: 'Fenêtre', startMs: 500, endMs: 1500);
-      expect(shape.isVisibleAt(400), isFalse);
-      expect(shape.isVisibleAt(500), isTrue);
-      expect(shape.isVisibleAt(1000), isTrue);
-      expect(shape.isVisibleAt(1600), isFalse);
+    test('span du contenu : 1re et dernière keyframe (pas de fenêtre)', () {
+      final shape = VectorShape(name: 'Fenêtre');
+      // Fenêtres d'affichage supprimées (v0.18) : une forme est affichée
+      // tant que `visible` est actif, quel que soit l'instant.
+      expect(shape.spanStartMs, 0);
+      expect(shape.spanEndMs, 0);
+
+      shape.addKeyframeAt(500);
+      shape.addKeyframeAt(1500);
+      expect(shape.spanStartMs, 500);
+      expect(shape.spanEndMs, 1500);
 
       shape.visible = false;
-      expect(shape.isVisibleAt(1000), isFalse);
+      expect(shape.visible, isFalse);
     });
 
     test('copy détache les couches et les keyframes', () {
@@ -144,12 +149,6 @@ void main() {
       );
     });
 
-    test('visibleShapesAt filtre sur la fenêtre d’affichage', () {
-      final project = AnimationProject.demo();
-      expect(project.visibleShapesAt(0).length, 1);
-      expect(project.visibleShapesAt(1000).length, 2);
-    });
-
     test('moveShape réordonne les calques', () {
       final project = AnimationProject.demo();
       final first = project.shapes.first;
@@ -175,33 +174,38 @@ void main() {
       final project = AnimationProject.blank();
       expect(project.durationMs, 0);
 
-      final a = VectorShape(name: 'A', startMs: 0, endMs: 2000);
+      // Une forme sans keyframe compte pour 4 s (défaut historique d'un
+      // segment statique).
+      final a = VectorShape(name: 'A');
       project.shapes.add(a);
-      expect(project.durationMs, 2000);
+      expect(project.durationMs, 4000);
 
-      // Une forme posée plus loin étend le projet.
-      final b = VectorShape(name: 'B', startMs: 3000, endMs: 5000);
+      // Une forme animée porte la durée à sa dernière keyframe.
+      final b = VectorShape(name: 'B');
+      b.addKeyframeAt(0);
+      b.addKeyframeAt(5000);
       project.shapes.add(b);
       expect(project.durationMs, 5000);
 
       // Raccourcir le porteur de la durée raccourcit le projet.
-      b.endMs = 3500;
-      expect(project.durationMs, 3500);
+      b.keyframes.removeWhere((k) => k.timeMs == 5000);
+      expect(project.durationMs, 4000);
 
-      // Supprimer la dernière forme le raccourcit encore.
-      project.shapes.remove(b);
-      expect(project.durationMs, 2000);
+      // Supprimer la forme statique : la forme animée reprend la durée.
+      project.shapes.remove(a);
+      expect(project.durationMs, 0);
 
       // Un aller-retour JSON conserve la durée dérivée.
+      b.addKeyframeAt(3000);
       final restored = AnimationProject.fromJson(
         jsonDecode(jsonEncode(project.toJson())) as Map<String, dynamic>,
       );
-      expect(restored.durationMs, 2000);
+      expect(restored.durationMs, 3000);
     });
 
     test('durée squelette : les pièces comptent, plancher 4 s avec rig', () {
       final project = AnimationProject.blank(type: ProjectType.skeleton);
-      final piece = VectorShape(name: 'Tête', startMs: 0, endMs: 4000);
+      final piece = VectorShape(name: 'Tête');
       project.shapes.add(piece);
       // Bug v0.9.0 : sans rig, la durée d'un projet squelette valait 0 →
       // playback mort et « 0 s / 0 s » malgré des pièces de 4 s.
@@ -212,7 +216,7 @@ void main() {
       rig.addBone(RigBone(name: 'B'));
       expect(project.durationMs, 4000); // plancher 4 s
 
-      piece.endMs = 6000;
+      piece.addKeyframeAt(6000);
       expect(project.durationMs, 6000); // la pièce porte la durée
 
       rig.upsertKeyframe('b1', 9000, 1);
@@ -224,7 +228,7 @@ void main() {
     test('push copie profondément, pop rejoue en FIFO', () {
       final stack = UndoStack();
       final project = AnimationProject.blank(name: 'P');
-      final shape = VectorShape(name: 'A', startMs: 0, endMs: 1000);
+      final shape = VectorShape(name: 'A');
       shape.layers.add(ShapeLayer(name: 'L', kind: ShapeKind.rect));
       shape.upsertKeyframe(500, shape.poseAt(500));
       project.shapes.add(shape);
@@ -232,17 +236,16 @@ void main() {
       stack.push(project);
 
       // Mutation après le snapshot.
-      shape.endMs = 3000;
       shape.upsertKeyframe(1000, shape.poseAt(1000));
       shape.layers.add(ShapeLayer(name: 'B', kind: ShapeKind.circle));
-      expect(project.durationMs, 3000);
+      expect(project.durationMs, 1000); // dernière keyframe = 1000
       expect(shape.keyframes.length, 2);
       expect(shape.layers.length, 2);
 
       // L'annulation rend l'état d'avant mutation.
       final previous = stack.pop()!;
-      expect(previous.shapes.single.endMs, 1000);
-      expect(previous.durationMs, 1000);
+      expect(previous.shapes.single.keyframes.single.timeMs, 500);
+      expect(previous.durationMs, 500);
       expect(previous.shapes.single.keyframes.length, 1);
       expect(previous.shapes.single.layers.length, 1);
       expect(stack.canUndo, isFalse);
@@ -265,19 +268,20 @@ void main() {
 
   group('presets d’animation', () {
     test('apparition crée une pose d’opacité 0 → 1', () {
-      final shape = VectorShape(name: 'A', startMs: 1000, endMs: 3000);
+      final shape = VectorShape(name: 'A');
       applyPreset(shape, AnimationPreset.apparition);
       expect(shape.isAnimated(AnimatableProperty.opacity), isTrue);
       expect(shape.keyframes.first.values[AnimatableProperty.opacity], 0);
       expect(shape.keyframes.last.values[AnimatableProperty.opacity], 1);
-      expect(shape.keyframes.first.timeMs, 1000);
+      expect(shape.keyframes.first.timeMs, 0);
     });
 
     test('pulsation passe par un maximum au milieu', () {
-      final shape = VectorShape(name: 'P', startMs: 0, endMs: 2000);
+      final shape = VectorShape(name: 'P');
       applyPreset(shape, AnimationPreset.pulsation);
+      // Sans keyframe : le preset s'étend sur 0 → 4 s, maximum à 2 s.
       expect(
-        shape.valueAt(AnimatableProperty.scale, 1000),
+        shape.valueAt(AnimatableProperty.scale, 2000),
         closeTo(1.25, 0.001),
       );
       expect(shape.valueAt(AnimatableProperty.scale, 0), closeTo(1, 0.001));
@@ -394,9 +398,7 @@ void main() {
       final shape = VectorShape(
         name: 'Carré',
         x: 10,
-        y: 20,
-        startMs: 500,
-        endMs: 2500,
+        y: 20
       );
       shape.layers.add(ShapeLayer(name: 'Rect', kind: ShapeKind.rect));
       shape.layers.add(ShapeLayer(name: 'Cercle', kind: ShapeKind.circle));
@@ -410,8 +412,6 @@ void main() {
 
       expect(clone.id, isNot(shape.id));
       expect(clone.name, 'Carré (copie)');
-      expect(clone.startMs, 500);
-      expect(clone.endMs, 2500);
       for (var i = 0; i < shape.layers.length; i++) {
         expect(clone.layers[i].id, isNot(shape.layers[i].id));
         expect(clone.layers[i].name, shape.layers[i].name);
@@ -441,9 +441,9 @@ void main() {
     });
   });
 
-  group('déplacement de segment', () {
-    test('shiftBy décale fenêtre et keyframes, durée inchangée', () {
-      final shape = VectorShape(name: 'A', startMs: 1000, endMs: 3000);
+  group('déplacement de piste', () {
+    test('shiftBy décale les keyframes en bloc, courbes conservées', () {
+      final shape = VectorShape(name: 'A');
       shape.upsertKeyframe(1000, shape.poseAt(1000), easing: EasingKind.linear);
       shape.upsertKeyframe(
         2000,
@@ -457,9 +457,8 @@ void main() {
       );
 
       shape.shiftBy(500);
-      expect(shape.startMs, 1500);
-      expect(shape.endMs, 3500);
-      expect(shape.durationMs, 2000);
+      expect(shape.spanStartMs, 1500);
+      expect(shape.spanEndMs, 3500);
       expect(
         [for (final key in shape.keyframes) key.timeMs],
         <int>[1500, 2500, 3500],
@@ -474,8 +473,6 @@ void main() {
       );
 
       shape.shiftBy(-1200);
-      expect(shape.startMs, 300);
-      expect(shape.endMs, 2300);
       expect(
         [for (final key in shape.keyframes) key.timeMs],
         <int>[300, 1300, 2300],
@@ -483,18 +480,16 @@ void main() {
     });
 
     test('shiftBy décalage nul ne change rien', () {
-      final shape = VectorShape(name: 'A', startMs: 100, endMs: 500);
+      final shape = VectorShape(name: 'A');
       shape.upsertKeyframe(300, shape.poseAt(300));
       shape.shiftBy(0);
-      expect(shape.startMs, 100);
-      expect(shape.endMs, 500);
       expect(shape.keyframes.single.timeMs, 300);
     });
 
     test('shiftBy rabote les keyframes passées sous zéro', () {
-      final shape = VectorShape(name: 'A', startMs: 0, endMs: 1000);
+      final shape = VectorShape(name: 'A');
       shape.upsertKeyframe(500, shape.poseAt(500));
-      shape.keyframes.add(ShapeKeyframe(timeMs: -400)); // hors fenêtre
+      shape.keyframes.add(ShapeKeyframe(timeMs: -400)); // hors projet
       shape.shiftBy(-200);
       expect([for (final key in shape.keyframes) key.timeMs], contains(0));
       expect(shape.keyframes.length, 2);
@@ -502,34 +497,32 @@ void main() {
 
     test('shiftBy déplace au-delà de la fin : la durée projet s\'étend', () {
       final project = AnimationProject.blank(name: 'P');
-      final shape = VectorShape(name: 'A', startMs: 0, endMs: 2000);
+      final shape = VectorShape(name: 'A');
       shape.upsertKeyframe(1000, shape.poseAt(1000));
       project.shapes.add(shape);
-      expect(project.durationMs, 2000);
+      expect(project.durationMs, 1000);
 
       // Déplacer bien au-delà de la fin actuelle : aucun butoir, la durée
-      // dérivée suit la fenêtre et les keyframes suivent d'un même delta.
+      // dérivée suit la dernière keyframe, qui suit d'un même delta.
       shape.shiftBy(6000);
-      expect(shape.startMs, 6000);
-      expect(shape.endMs, 8000);
       expect(shape.keyframes.single.timeMs, 7000);
-      expect(project.durationMs, 8000);
+      expect(project.durationMs, 7000);
     });
 
-    test('allonger la fin d\'une forme au-delà de la fin étend le projet', () {
+    test('spans espacés tiennent sur la même ligne', () {
       final project = AnimationProject.blank(name: 'P');
-      final shape = VectorShape(name: 'A', startMs: 0, endMs: 2000);
+      final shape = VectorShape(name: 'A');
       shape.layers.add(ShapeLayer(name: 'L', kind: ShapeKind.rect));
+      shape.upsertKeyframe(0, shape.poseAt(0));
+      shape.upsertKeyframe(2000, shape.poseAt(0));
       project.shapes.add(shape);
-
-      // La poignée droite de la timeline écrit directement la fenêtre.
-      shape.endMs = 5000;
-      expect(project.durationMs, 5000);
 
       // Un trou reste possible : deux formes espacées tiennent sur la même
       // ligne (l'empilement glouton réutilise une ligne après un trou).
-      final b = VectorShape(name: 'B', startMs: 6000, endMs: 7000);
+      final b = VectorShape(name: 'B');
       b.layers.add(ShapeLayer(name: 'L', kind: ShapeKind.rect));
+      b.upsertKeyframe(6000, b.poseAt(0));
+      b.upsertKeyframe(7000, b.poseAt(0));
       project.shapes.add(b);
       expect(TimelineLayout.packLanes(project.shapes).length, 1);
     });
@@ -539,7 +532,7 @@ void main() {
     ShapeLayer layerOf(VectorShape shape) => shape.layers.first;
 
     test('colorAtLayer interpole, tient hors plage et retombe sur la base', () {
-      final shape = VectorShape(name: 'A', startMs: 0, endMs: 3000);
+      final shape = VectorShape(name: 'A');
       shape.layers.add(ShapeLayer(name: 'L', kind: ShapeKind.rect));
       final layer = layerOf(shape);
       shape.upsertKeyframe(
@@ -570,7 +563,7 @@ void main() {
     });
 
     test('les poses sans couleur ne coupent pas l\'animation (carry)', () {
-      final shape = VectorShape(name: 'A', startMs: 0, endMs: 4000);
+      final shape = VectorShape(name: 'A');
       final layer = ShapeLayer(name: 'L', kind: ShapeKind.rect);
       shape.layers.add(layer);
       shape.upsertKeyframe(
@@ -591,7 +584,7 @@ void main() {
     });
 
     test('pointsAtLayer lerpe point par point et bourre le nuage court', () {
-      final shape = VectorShape(name: 'A', startMs: 0, endMs: 2000);
+      final shape = VectorShape(name: 'A');
       final layer = ShapeLayer(
         name: 'L',
         kind: ShapeKind.path,
@@ -632,7 +625,7 @@ void main() {
     });
 
     test('applyLayerColor écrit la base sans keyframe, la pose ensuite', () {
-      final shape = VectorShape(name: 'A', startMs: 0, endMs: 2000);
+      final shape = VectorShape(name: 'A');
       final layer = ShapeLayer(name: 'L', kind: ShapeKind.rect);
       shape.layers.add(layer);
       shape.applyLayerColor(layer, 0xFF112233, 500, autoKey: true);
@@ -668,7 +661,7 @@ void main() {
     test(
       'upsertKeyframe préserve la bézier d\'une pose existante (bug v0.13)',
       () {
-        final shape = VectorShape(name: 'A', startMs: 0, endMs: 2000);
+        final shape = VectorShape(name: 'A');
         shape.layers.add(ShapeLayer(name: 'L', kind: ShapeKind.rect));
         shape.upsertKeyframe(0, shape.poseAt(0));
         shape.upsertKeyframe(
@@ -691,7 +684,7 @@ void main() {
     );
 
     test('aller-retour JSON des cartes couleur/morph', () {
-      final shape = VectorShape(name: 'A', startMs: 0, endMs: 2000);
+      final shape = VectorShape(name: 'A');
       final layer = ShapeLayer(
         name: 'L',
         kind: ShapeKind.path,

@@ -475,8 +475,6 @@ class ProjectRepository {
         pivotDy: (shapeRow['pivot_dy'] as num?)?.toDouble() ?? 0,
         opacity: (shapeRow['opacity'] as num).toDouble(),
         strokeWidth: (shapeRow['stroke_width'] as num).toDouble(),
-        startMs: (shapeRow['start_ms'] as num).toInt(),
-        endMs: (shapeRow['end_ms'] as num).toInt(),
         visible: (shapeRow['visible'] as num).toInt() == 1,
         embeddedProjectId: shapeRow['embedded_project_id'] as String?,
         embeddedWidth: (shapeRow['embedded_width'] as num?)?.toDouble() ?? 0,
@@ -605,8 +603,10 @@ class ProjectRepository {
           'pivot_dy': shape.pivotDy,
           'opacity': shape.opacity,
           'stroke_width': shape.strokeWidth,
-          'start_ms': shape.startMs,
-          'end_ms': shape.endMs,
+          // Colonnes legacy (fenêtres start/end supprimées en v0.18) —
+          // conservées pour le schéma, jamais relues.
+          'start_ms': 0,
+          'end_ms': 0,
           'visible': shape.visible ? 1 : 0,
           'embedded_project_id': shape.embeddedProjectId,
           'embedded_width': shape.embeddedWidth,

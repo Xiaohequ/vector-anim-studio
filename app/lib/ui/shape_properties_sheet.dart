@@ -152,8 +152,7 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                   widget.skeletonPiece
                       ? '${widget.skeletonNote ?? 'Pièce du rig'}'
                             '${hasKeyframes ? '' : ' · aucune keyframe'}'
-                      : 'Affichée de ${(shape.startMs / 1000).toStringAsFixed(2)} s à '
-                            '${(shape.endMs / 1000).toStringAsFixed(2)} s'
+                      : 'Affichée en continu'
                             '${shape.visible ? '' : ' · masquée'}'
                             '${hasKeyframes ? '' : ' · aucune keyframe'}',
                   style: const TextStyle(fontSize: 11, color: Colors.white70),

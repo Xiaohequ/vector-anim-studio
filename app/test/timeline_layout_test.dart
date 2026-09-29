@@ -4,11 +4,16 @@ import 'package:vector_anim_studio/models/animation.dart';
 import 'package:vector_anim_studio/models/skeleton.dart';
 
 void main() {
-  VectorShape shape(String name, int start, int end) =>
-      VectorShape(name: name, startMs: start, endMs: end);
+  /// Forme animée dont le span de contenu va de [start] à [end] (ms).
+  VectorShape shape(String name, int start, int end) {
+    final s = VectorShape(name: name);
+    s.upsertKeyframe(start, s.poseAt(0));
+    s.upsertKeyframe(end, s.poseAt(0));
+    return s;
+  }
 
   group('TimelineLayout.packLanes', () {
-    test('place deux formes qui ne se chevauchent pas sur la même ligne', () {
+    test('place deux spans qui ne se chevauchent pas sur la même ligne', () {
       final lanes = TimelineLayout.packLanes(<VectorShape>[
         shape('A', 0, 1000),
         shape('B', 1000, 2000),
@@ -17,7 +22,7 @@ void main() {
       expect(lanes.first.map((s) => s.name), <String>['A', 'B']);
     });
 
-    test('empile deux formes qui se chevauchent sur deux lignes', () {
+    test('empile deux spans qui se chevauchent sur deux lignes', () {
       final lanes = TimelineLayout.packLanes(<VectorShape>[
         shape('A', 0, 2000),
         shape('B', 500, 1500),
@@ -38,7 +43,7 @@ void main() {
       expect(lanes[1].map((s) => s.name), <String>['B']);
     });
 
-    test('trie les formes par début d’affichage', () {
+    test('trie les formes par début de span', () {
       final lanes = TimelineLayout.packLanes(<VectorShape>[
         shape('B', 1000, 2000),
         shape('A', 0, 500),
@@ -52,6 +57,16 @@ void main() {
       final lanes = TimelineLayout.packLanes(<VectorShape>[a, b]);
       expect(TimelineLayout.laneIndexOf(lanes, a), 0);
       expect(TimelineLayout.laneIndexOf(lanes, b), 1);
+    });
+
+    test('les formes sans keyframe sont ignorées (statiques)', () {
+      final staticShape = VectorShape(name: 'Statique');
+      final lanes = TimelineLayout.packLanes(<VectorShape>[
+        shape('A', 0, 1000),
+        staticShape,
+      ]);
+      expect(lanes.length, 1);
+      expect(lanes.single.map((s) => s.name), <String>['A']);
     });
   });
 

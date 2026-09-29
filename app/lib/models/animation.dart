@@ -493,7 +493,8 @@ String layerPropertyLabel(LayerProperty property) => switch (property) {
   LayerProperty.strokeWidth => 'Épaisseur',
 };
 
-/// Une forme du projet : un groupe de couches, animable et affiché sur [startMs, endMs].
+/// Une forme du projet : un groupe de couches animable, affiché tant qu'il
+/// est visible (les fenêtres start/end ont été supprimées — v0.18).
 class VectorShape {
   VectorShape({
     String? id,
@@ -509,8 +510,6 @@ class VectorShape {
     this.pivotDy = 0,
     this.opacity = 1,
     this.strokeWidth = 1,
-    this.startMs = 0,
-    this.endMs = 4000,
     this.visible = true,
     this.embeddedProjectId,
     this.embeddedWidth = 0,
@@ -554,9 +553,8 @@ class VectorShape {
   /// Multiplicateur d'épaisseur de trait appliqué à toutes les couches.
   double strokeWidth;
 
-  /// Fenêtre d'affichage de la forme sur la timeline.
-  int startMs;
-  int endMs;
+  /// Interrupteur d'affichage (œil) : la forme est rendue tant qu'il est
+  /// actif. Les fenêtres d'affichage start/end ont été SUPPRIMÉES (v0.18).
   bool visible;
 
   final List<ShapeLayer> layers;
@@ -564,12 +562,14 @@ class VectorShape {
   /// Keyframes « pose » : chaque entrée porte toutes les propriétés de la forme.
   final List<ShapeKeyframe> keyframes = <ShapeKeyframe>[];
 
-  int get durationMs => math.max(0, endMs - startMs);
-
   bool get hasKeyframes => keyframes.isNotEmpty;
 
-  bool isVisibleAt(int timeMs) =>
-      visible && timeMs >= startMs && timeMs <= endMs;
+  /// Début du contenu animé (1re keyframe) : repère du déplacement de piste
+  /// (appui long sur la barre de la timeline).
+  int get spanStartMs => keyframes.isEmpty ? 0 : keyframes.first.timeMs;
+
+  /// Fin du contenu animé (dernière keyframe) : étend la durée du projet.
+  int get spanEndMs => keyframes.isEmpty ? 0 : keyframes.last.timeMs;
 
   double baseOf(AnimatableProperty property) => switch (property) {
     AnimatableProperty.x => x,
@@ -936,8 +936,6 @@ class VectorShape {
       pivotDy: pivotDy,
       opacity: opacity,
       strokeWidth: strokeWidth,
-      startMs: startMs,
-      endMs: endMs,
       visible: visible,
       embeddedProjectId: embeddedProjectId,
       embeddedWidth: embeddedWidth,
@@ -951,8 +949,8 @@ class VectorShape {
 
   /// Clone complet de la forme : couches régénérées (un id de couche est une
   /// clé primaire en base : deux formes ne peuvent pas partager leurs ids)
-  /// et keyframes copiées à l'identique (mêmes temps, mêmes courbes). La
-  /// fenêtre d'affichage est conservée : le clone se superpose à l'original.
+  /// et keyframes copiées à l'identique (mêmes temps, mêmes courbes). Le
+  /// clone se superpose à l'original.
   VectorShape duplicated({String? name}) {
     final clone = copy(
       id: generateId('shape'),
@@ -964,15 +962,12 @@ class VectorShape {
     return clone;
   }
 
-  /// Déplace la fenêtre d'affichage de [deltaMs] (durée inchangée) et décale
-  /// toutes les keyframes du même décalage — leurs écarts relatifs et leurs
-  /// courbes sont préservés. Pur décalage relatif : borner le décalage pour
-  /// que la fenêtre reste dans le projet est du ressort de l'appelant ; les
-  /// keyframes hors fenêtre qui passeraient sous zéro sont rabotées à zéro.
+  /// Décale toutes les keyframes de [deltaMs] — leurs écarts relatifs et
+  /// leurs courbes sont préservés. Pur décalage relatif : borner le décalage
+  /// est du ressort de l'appelant ; les keyframes qui passeraient sous zéro
+  /// sont rabotées à zéro.
   void shiftBy(int deltaMs) {
     if (deltaMs == 0) return;
-    startMs += deltaMs;
-    endMs += deltaMs;
     for (final key in keyframes) {
       key.timeMs = math.max(0, key.timeMs + deltaMs);
     }
@@ -991,8 +986,6 @@ class VectorShape {
     'pivotDy': pivotDy,
     'opacity': opacity,
     'strokeWidth': strokeWidth,
-    'startMs': startMs,
-    'endMs': endMs,
     'visible': visible,
     'embeddedProjectId': embeddedProjectId,
     'embeddedWidth': embeddedWidth,
@@ -1015,8 +1008,6 @@ class VectorShape {
       pivotDy: (json['pivotDy'] as num?)?.toDouble() ?? 0,
       opacity: (json['opacity'] as num?)?.toDouble() ?? 1,
       strokeWidth: (json['strokeWidth'] as num?)?.toDouble() ?? 1,
-      startMs: (json['startMs'] as num?)?.toInt() ?? 0,
-      endMs: (json['endMs'] as num?)?.toInt() ?? 4000,
       visible: json['visible'] as bool? ?? true,
       embeddedProjectId: json['embeddedProjectId'] as String?,
       embeddedWidth: (json['embeddedWidth'] as num?)?.toDouble() ?? 0,
@@ -1078,14 +1069,18 @@ class AnimationProject {
   DateTime? updatedAt;
   final List<VectorShape> shapes;
 
-  /// Durée du projet : le maximum des fins de segments des formes ; pour un
-  /// projet squelette, on y ajoute les keyframes d'os, avec un plancher de
-  /// 4 s tant qu'un rig existe ou qu'une pièce est posée — pour que le
-  /// curseur reste déplaçable avant la première keyframe. Projet vide → 0.
+  /// Durée du projet : le maximum des fins de contenu (dernière keyframe de
+  /// chaque forme ; une forme sans keyframe compte pour 4 s, défaut
+  /// historique d'un segment statique) ; pour un projet squelette, on y
+  /// ajoute les keyframes d'os, avec un plancher de 4 s tant qu'un rig
+  /// existe ou qu'une pièce est posée. Projet vide → 0.
   int get durationMs {
     var max = 0;
     for (final shape in shapes) {
-      if (shape.endMs > max) max = shape.endMs;
+      max = math.max(
+        max,
+        shape.keyframes.isEmpty ? 4000 : shape.keyframes.last.timeMs,
+      );
     }
     if (isSkeleton) {
       final rig = skeleton;
@@ -1103,10 +1098,6 @@ class AnimationProject {
     }
     return null;
   }
-
-  /// Formes visibles à l'instant donné, dans l'ordre de rendu (fond → avant).
-  Iterable<VectorShape> visibleShapesAt(int timeMs) =>
-      shapes.where((s) => s.isVisibleAt(timeMs));
 
   void moveShape(int from, int to) {
     if (from < 0 || from >= shapes.length) return;
@@ -1192,8 +1183,6 @@ class AnimationProject {
       name: 'Carré',
       x: 180,
       y: 240,
-      startMs: 0,
-      endMs: 4000,
       layers: <ShapeLayer>[
         ShapeLayer(
           name: 'Rectangle',
@@ -1236,8 +1225,6 @@ class AnimationProject {
       name: 'Cercle',
       x: 180,
       y: 480,
-      startMs: 500,
-      endMs: 3500,
       layers: <ShapeLayer>[
         ShapeLayer(
           name: 'Cercle',

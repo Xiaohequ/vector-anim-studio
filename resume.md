@@ -6,17 +6,19 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Repo : https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`)
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
-- Dernière version : **0.17.0** (pipeline agents — aperçu headless
-  officiel via le vrai moteur, import strict, cycles par os ; 224/224
-  tests). v0.16.3 (bugfix — le curseur de l'éditeur démarre au playhead
-  du STUDIO) **VALIDÉE APPAREIL 28/09 : le morphing marche**.
-  v0.16.2 (morph — 1ᵉʳ glisser = 1ʳᵉ pose, ◆ dans l'éditeur,
-  snack, aide). v0.16.1 (bugfix — ◆ de la playbar anime la PIÈCE d'un
-  projet squelette ; sheet ⚙ des pièces avec ◆ + Interpolation). v0.16.0 = éditeur de points
-  in-app (poignées, curseur de temps, auto-key morph). v0.15.0 (vasf-3 : couleur animée, morph de
-  points, translation d'os, IK chaînes N os, schéma DB v6). v0.14.0
-  (import par fichier, reciblage, rendu CI) et v0.13.2 (persistance
-  pivot/axes/bézier, schéma v5) validées appareil le 27/09.
+- Dernière version : **0.18.0** (fenêtres start/end supprimées — code + UI +
+  format vasf, alpha `#AARRGGBB` honoré, carry des keyframes d'os ; 224/224
+  tests). v0.17.0 (pipeline agents — aperçu headless officiel via le vrai
+  moteur, import strict, cycles par os). v0.16.3 (bugfix — le curseur de
+  l'éditeur démarre au playhead du studio) **VALIDÉE APPAREIL 28/09 : le
+  morphing marche**. v0.16.2 (morph — 1ᵉʳ glisser = 1ʳᵉ pose, ◆ dans
+  l'éditeur, snack, aide). v0.16.1 (bugfix — ◆ de la playbar anime la PIÈCE
+  d'un projet squelette ; sheet ⚙ des pièces avec ◆ + Interpolation).
+  v0.16.0 = éditeur de points in-app (poignées, curseur de temps, auto-key
+  morph). v0.15.0 (vasf-3 : couleur animée, morph de points, translation
+  d'os, IK chaînes N os, schéma DB v6). v0.14.0 (import par fichier,
+  reciblage, rendu CI) et v0.13.2 (persistance pivot/axes/bézier, schéma v5)
+  validées appareil le 27/09.
 - Détails techniques : `docs/PLAN.md` · Notes de version : `RELEASE_NOTES.md`
 
 ---
@@ -53,6 +55,36 @@ v0.9.0, l'**animation squelette** (rig maître).
   - Undo couvre tout le rig ; export MP4/GIF/PNG/JSON OK sur les deux types.
   - Vérification empirique : rendu headless (test widget + RepaintBoundary → PNG) et
     mesure pixel par masques couleur — pièces et os alignés à <1,5 px.
+- **v0.9.1 → v0.9.6** : bugfixes rigging des retours appareil (barres pièces + os
+  ensemble, ancrage auto au 1ᵉʳ tap, re-parentage sans saut, poignée de rotation
+  dédiée, ✥ = poignée draggable, liaison par COUCHE + import squelette→vectoriel).
+- **v0.10.0 → v0.10.1** : pose avancée du rig (z d'os, opacité/étirement/écrasement
+  par os, FK stretch, IK 2 os + geste `boneIk`) ; fix du geste IK mort selon la
+  sélection (le losange vert devient une vraie poignée) — **validé appareil**.
+- **v0.11.0** : format d'échange vasf-1 pour agents IA (import/export JSON,
+  erreurs françaises avec chemins) — **validé appareil** (import des exemples).
+- **v0.12.0 → v0.13.2** : vasf-2 (couches multiples, palette, cycles, defs+ref ;
+  scaleX/scaleY animées, pivot, cubic-bezier, liaison de couche) + persistance
+  pivot/axes/bézier (schéma DB v5) — **validé appareil**.
+- **v0.14.0** : import par fichier (FilePicker), reciblage sans saut
+  (`binding_retarget.dart`), tests de rendu permanents CI.
+- **v0.15.0** : vasf-3 moteur lourd — couleur animée, morph de points, translation
+  d'os (`move`), IK chaînes N os (CCD), bug import chaînes ≥ 3 os corrigé,
+  schéma DB v6 — **validé appareil 27/09**.
+- **v0.16.0 → v0.16.3** : éditeur de points in-app (poignées, curseur de temps,
+  auto-key morph, ajout/suppression) + bugfixes (◆ anime la PIÈCE en squelette,
+  1ᵉʳ glisser = 1ʳᵉ pose, curseur de l'éditeur = playhead du studio) —
+  **morphing validé appareil 28/09**.
+- **v0.17.0** : pipeline agents — aperçu headless OFFICIEL via le vrai moteur
+  (`test/vasf_preview_test.dart`), import STRICT (champs inconnus refusés),
+  keyframes/cycle embarqués par os + cycles par os.
+- **v0.18.0** : fenêtres d'affichage start/end SUPPRIMÉES (code + UI + format
+  vasf), alpha `#AARRGGBB` honoré (multiplié par l'opacité), CARRY des
+  keyframes d'os (opacité/étirement/écrasement/move portés comme sur les
+  formes), scrub de barre corrigé (position locale → espace vue), barres
+  timeline = span de contenu (instances pleine durée).
+
+### Historique détaillé
 
 ---
 
@@ -75,8 +107,6 @@ v0.9.0, l'**animation squelette** (rig maître).
 - Retours utilisateur → le cas échéant patch v0.13.x.
 
 ---
-
-## 🔜 Ce qui doit être fait (roadmap)
 
 ### v0.9.1 (livrée — bugfix des retours v0.9.0)
 - Timeline : barres de pièces + barres d'os animés affichées ensemble.
@@ -537,10 +567,37 @@ v0.9.0, l'**animation squelette** (rig maître).
 - Le skill agent `skills/generer-animation-json/` génère le vasf-1
   (références + validateur `validate_vasf.py`) — à étendre à la v2.
 
+## 🔜 Ce qui doit être fait (roadmap)
+
+### v0.18.0 (en CI — à valider sur appareil)
+- **Fenêtres start/end supprimées** : les formes s'affichent pendant tout le
+  projet (l'œil `visible` reste le seul interrupteur) ; le vasf accepte
+  `start`/`end` (validés ≥ 0) mais les IGNORE, l'export ne les émet plus ;
+  la durée du projet = dernière keyframe (plancher 4 s).
+- **Alpha `#AARRGGBB` honoré** : multiplié par l'opacité calculée (avant :
+  remplacé — l'alpha du JSON était ignoré).
+- **Carry des keyframes d'os** : `opacity`/`stretch`/`squash`/`move` omis =
+  dernière valeur posée portée (comme les poses de forme) ; la 1ʳᵉ valeur
+  posée est tenue avant son temps ; export SPARSE (émission seulement aux
+  changements de valeur résolue).
+- **Barres timeline = span de contenu** (1re → dernière keyframe) ; une
+  instance sans keyframe garde une barre pleine durée (elle s'anime en
+  boucle) ; formes statiques sans keyframe = pas de barre (sélection au
+  canvas) ; scrub de barre corrigé (position locale ramenée en espace vue).
+- **Doc** : spec vasf (repo + skill) mise à jour, exemples sans `end` ;
+  réorganisation de `resume.md` (roadmap séparée de l'historique).
+
+### Reciblage & éditeur (propositions en attente de choix)
+- Reciblage avec os étirés (limites documentées v0.14).
+- Reciblage de binding à la keyframe.
+- Édition des easings de morph dans l'éditeur de forme.
+
 ### Backlog de long terme
 - Signature release (keystore + secrets GitHub) et/ou App Bundle `.aab`.
 - Job iOS sur runner macOS (même mécanisme de release).
 - Import SVG, courbes de Bézier, export SVG animé, calques imbriqués.
+- Animation x/y par couche (limitation vasf v3 notée « planned » dans la
+  spec).
 
 ---
 

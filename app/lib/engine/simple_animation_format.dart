@@ -74,7 +74,7 @@ class SimpleAnimationFormat {
         if (track.any((k) => k.easing == EasingKind.customBezier)) {
           usesV2 = true;
         }
-        if (track.any((k) => k.tx != 0 || k.ty != 0)) usesV3 = true;
+        if (track.any((k) => k.tx != null || k.ty != null)) usesV3 = true;
       }
       if (rig.bindings.any((b) => b.layerId != null)) usesV2 = true;
     }
@@ -117,8 +117,6 @@ class SimpleAnimationFormat {
       'strokeWidth': layer.strokeWidth,
       'width': layer.width,
       'height': layer.height,
-      'start': shape.startMs / 1000,
-      'end': shape.endMs / 1000,
       'x': shape.x,
       'y': shape.y,
       'rotation': _radToDeg(shape.rotation),
@@ -170,8 +168,6 @@ class SimpleAnimationFormat {
     final json = <String, Object?>{
       'name': shape.name,
       'layers': [for (final layer in shape.layers) _layerToJson(layer)],
-      'start': shape.startMs / 1000,
-      'end': shape.endMs / 1000,
       'x': shape.x,
       'y': shape.y,
       'rotation': _radToDeg(shape.rotation),
@@ -388,6 +384,13 @@ class SimpleAnimationFormat {
       final frame = restPose.frameOf(entry.key);
       if (bone == null || frame == null) continue;
       final restDeg = _radToDeg(frame.worldAngleRest);
+      // Valeurs portées au fil de la piste (carry os v0.18) : la base est
+      // 1/1/1 pour l'opacité/étirement/écrasement, (0, 0) pour la translation.
+      var prevOp = 1.0;
+      var prevSt = 1.0;
+      var prevSq = 1.0;
+      var prevTx = 0.0;
+      var prevTy = 0.0;
       for (final key in entry.value) {
         final json = <String, Object?>{
           'bone': bone.name,
@@ -398,18 +401,37 @@ class SimpleAnimationFormat {
               ? _bezierToJson(key.bezier)
               : key.easing.name,
         };
-        if (key.opacity != 1) json['opacity'] = key.opacity;
-        if (key.stretch != 1) json['stretch'] = key.stretch;
-        if (key.squash != 1) json['squash'] = key.squash;
+        // Export SPARSE (carry os v0.18) : une propriété n'est émise que
+        // si elle est POSÉE et différente de la valeur portée précédente —
+        // le re-import la porte exactement comme au rendu.
+        final resolvedOp = key.opacity ?? prevOp;
+        final resolvedSt = key.stretch ?? prevSt;
+        final resolvedSq = key.squash ?? prevSq;
+        final resolvedTx = key.tx ?? prevTx;
+        final resolvedTy = key.ty ?? prevTy;
+        if (key.opacity != null && resolvedOp != prevOp) {
+          json['opacity'] = resolvedOp;
+        }
+        if (key.stretch != null && resolvedSt != prevSt) {
+          json['stretch'] = resolvedSt;
+        }
+        if (key.squash != null && resolvedSq != prevSq) {
+          json['squash'] = resolvedSq;
+        }
+        prevOp = resolvedOp;
+        prevSt = resolvedSt;
+        prevSq = resolvedSq;
         // Translation d'os (v0.15) : stockée dans le repère de repos du
         // PARENT → émise en MONDE (delta depuis la position de repos),
         // symétrique de l'import.
-        if (key.tx != 0 || key.ty != 0) {
+        if (key.tx != null || key.ty != null) {
           final move = rotateVector(
-            Offset(key.tx, key.ty),
+            Offset(resolvedTx, resolvedTy),
             _restWorldAngleRad(rig, rig.boneById(bone.parentId)),
           );
           json['move'] = [move.dx, move.dy];
+          prevTx = resolvedTx;
+          prevTy = resolvedTy;
         }
         keyframes.add(json);
       }
@@ -484,8 +506,8 @@ class _PendingBoneKey {
     this.opacity,
     this.stretch,
     this.squash, {
-    this.tx = 0,
-    this.ty = 0,
+    this.tx,
+    this.ty,
   });
 
   final String boneId;
@@ -493,13 +515,17 @@ class _PendingBoneKey {
   final double angleDelta;
   final EasingKind easing;
   final List<double>? bezier;
-  final double opacity;
-  final double stretch;
-  final double squash;
 
-  /// Translation animée (v0.15), repère de repos du parent.
-  final double tx;
-  final double ty;
+  /// Propriétés optionnelles : null = NON posée dans le JSON (portée —
+  /// carry au rendu).
+  final double? opacity;
+  final double? stretch;
+  final double? squash;
+
+  /// Translation animée (v0.15), repère de repos du parent ; null = non
+  /// posée (portée — carry au rendu).
+  final double? tx;
+  final double? ty;
 
   _PendingBoneKey withTime(int timeMs) => _PendingBoneKey(
     boneId,
@@ -1041,20 +1067,14 @@ class _Parse {
     Map<String, Object?> json,
     VectorShape shape,
   ) {
+    // Fenêtres d'affichage SUPPRIMÉES (v0.18) : start/end restent acceptés
+    // (validation de type ≥ 0) mais ignorés — une forme est affichée pendant
+    // tout le projet tant que son champ `visible` est actif. La durée du
+    // projet vient du contenu (dernière keyframe / keyframes d'os).
     final start = numAt('$path.start', json['start'], fallback: 0);
-    var end = numAt('$path.end', json['end'], fallback: 0);
-    if (end <= 0) {
-      // Fin par défaut : la fin la plus tardive des autres formes, sinon 4 s.
-      end = project.shapes.isEmpty
-          ? 4
-          : project.shapes.map((s) => s.endMs / 1000).reduce(math.max);
-    }
+    final end = numAt('$path.end', json['end'], fallback: 0);
     if (start < 0) problem('$path.start : ≥ 0 attendu ($start)');
-    if (end <= start) {
-      problem('$path.end : fin > début attendu ($end ≤ $start)');
-    }
-    shape.startMs = (start * 1000).round();
-    shape.endMs = (end * 1000).round();
+    if (end < 0) problem('$path.end : ≥ 0 attendu ($end)');
   }
 
   void _applyGeometry(
@@ -1277,10 +1297,6 @@ class _Parse {
       );
     }
     shape.keyframes.sort((a, b) => a.timeMs.compareTo(b.timeMs));
-    // Une keyframe au-delà de la fin du segment étend la fin.
-    for (final key in shape.keyframes) {
-      if (key.timeMs > shape.endMs) shape.endMs = key.timeMs;
-    }
   }
 
   /// Points d'une keyframe de morph (json « autour du centre », MÊME repère
@@ -1346,9 +1362,6 @@ class _Parse {
         final key = shape.keyframes[i];
         shape.keyframes.add(key.copy()..timeMs = key.timeMs + r * period);
       }
-    }
-    for (final key in shape.keyframes) {
-      if (key.timeMs > shape.endMs) shape.endMs = key.timeMs;
     }
   }
 
@@ -1571,8 +1584,8 @@ class _Parse {
         opacity: key.opacity,
         stretch: key.stretch,
         squash: key.squash,
-        tx: key.tx == 0 ? null : key.tx,
-        ty: key.ty == 0 ? null : key.ty,
+        tx: key.tx,
+        ty: key.ty,
       );
     }
   }
@@ -1600,11 +1613,18 @@ class _Parse {
     final restDeg = _restWorldDeg(rig, bone);
     final angleDeg = numAt('$path.angle', keyJson['angle'], fallback: restDeg);
     final spec = easingSpecAt('$path.easing', keyJson['easing']);
+    // Propriétés optionnelles : null quand absentes du JSON → PORTÉES au
+    // rendu (carry de la dernière posée, défauts 1/1/1) — sémantique des
+    // poses de forme.
+    final opacity = (keyJson['opacity'] as num?)?.toDouble();
+    final stretch = (keyJson['stretch'] as num?)?.toDouble();
+    final squash = (keyJson['squash'] as num?)?.toDouble();
     // Translation d'os (v0.15) : `move` = [dx, dy] MONDE (delta depuis la
     // position de repos de l'articulation) → ramené dans le repère de
-    // repos du parent (même convention que offsetX/offsetY).
-    var tx = 0.0;
-    var ty = 0.0;
+    // repos du parent (même convention que offsetX/offsetY). null quand
+    // absente (portée — carry).
+    double? tx;
+    double? ty;
     final movePair = listOf('$path.move', keyJson['move']) ?? const <Object?>[];
     if (movePair.isNotEmpty) {
       if (movePair.length < 2) {
@@ -1630,9 +1650,9 @@ class _Parse {
         _degToRad(angleDeg - restDeg),
         spec.easing,
         spec.bezier,
-        numAt('$path.opacity', keyJson['opacity'], fallback: 1),
-        numAt('$path.stretch', keyJson['stretch'], fallback: 1),
-        numAt('$path.squash', keyJson['squash'], fallback: 1),
+        opacity,
+        stretch,
+        squash,
         tx: tx,
         ty: ty,
       ),

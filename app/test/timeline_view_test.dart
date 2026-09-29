@@ -14,14 +14,10 @@ class _Rec {
 
 AnimationProject _project() {
   final project = AnimationProject.blank();
-  final shape = VectorShape(name: 'A', startMs: 0, endMs: 1000);
+  final shape = VectorShape(name: 'A');
   shape.layers.add(ShapeLayer(name: 'L', kind: ShapeKind.rect));
   shape.upsertKeyframe(500, shape.poseAt(500));
   project.shapes.add(shape);
-  // Porteur de la durée dérivée du projet : fin du dernier segment (4 s).
-  final carrier = VectorShape(name: 'Fond', startMs: 0, endMs: 4000);
-  carrier.layers.add(ShapeLayer(name: 'Base', kind: ShapeKind.rect));
-  project.shapes.add(carrier);
   return project;
 }
 
@@ -34,13 +30,9 @@ Widget _host(AnimationProject project, TimelineZoomState zoom, _Rec rec) {
         zoom: zoom,
         selectedShapeId: null,
         onSelect: (_) {},
-        onRangeChanged: (shape, start, end) {
-          shape.startMs = start;
-          shape.endMs = end;
-        },
         onMoveChanged: (shape, target) {
           rec.moved.add((shape.id, target));
-          shape.shiftBy(target - shape.startMs);
+          shape.shiftBy(target - shape.spanStartMs);
         },
         onMoveEnd: (shape) => rec.ended = shape.id,
         onSeek: (t) => rec.seeked = t,
@@ -71,11 +63,13 @@ void main() {
   ) async {
     final project = _project();
     final rec = _Rec();
+    // Span 500–1500 ms (2 keyframes) pour tester la largeur du span.
+    project.shapes.first.upsertKeyframe(1500, project.shapes.first.poseAt(1500));
     await tester.pumpWidget(
       _host(project, TimelineZoomState(durationOf: () => 4000), rec),
     );
 
-    // Vue 4000 ms sur 800 px : segment 0–1000 ms → 200 px (le bug v0.6.0
+    // Vue 4000 ms sur 800 px : span 500–1500 ms → 200 px (le bug v0.6.0
     // donnait durée × ms/px = 5000 px, une barre qui couvre tout l'écran).
     expect(_barWidths(tester), contains(200.0));
 
@@ -108,17 +102,16 @@ void main() {
       _host(project, TimelineZoomState(durationOf: () => 4000), rec),
     );
 
-    // Appui long sur la barre (x < 200) puis glisser de 200 px :
-    // ms/px = 4000/800 = 5 → décalage de 1000 ms.
-    final gesture = await tester.startGesture(const Offset(100, 27));
+    // Appui long au MILIEU de la barre (span = keyframe unique à 500 ms →
+    // barre 24 px à x = 100..124) puis glisser de 200 px : ms/px = 4000/800
+    // = 5 → cible = origine (500) + 1000 = 1500.
+    final gesture = await tester.startGesture(const Offset(112, 27));
     await tester.pump(const Duration(milliseconds: 600));
     await gesture.moveBy(const Offset(200, 0));
     await tester.pump();
 
-    expect(rec.moved, contains((shape.id, 1000)));
-    expect(shape.startMs, 1000);
-    expect(shape.endMs, 2000);
-    expect(shape.durationMs, 1000);
+    expect(rec.moved, contains((shape.id, 1500)));
+    expect(shape.spanStartMs, 1500);
     expect(shape.keyframes.single.timeMs, 1500);
 
     await gesture.up();
@@ -158,14 +151,15 @@ void main() {
       _host(project, TimelineZoomState(durationOf: () => 4000), rec),
     );
 
-    // Glisser au milieu de la barre (x = 100) : scrub, pas de déplacement.
-    await tester.dragFrom(const Offset(100, 27), const Offset(120, 0));
+    // Glisser au milieu de la barre (span 500→barre x = 100..124) : scrub
+    // en espace vue, pas de déplacement. x final 232 px × 5 ms/px = 1160.
+    await tester.dragFrom(const Offset(112, 27), const Offset(120, 0));
     await tester.pump();
 
     expect(rec.seeked, isNotNull);
-    expect(rec.seeked!, closeTo(1100, 20)); // ~220 px × 5 ms/px
+    expect(rec.seeked!, closeTo(1160, 20));
     expect(rec.moved, isEmpty);
     expect(rec.ended, isNull);
-    expect(shape.startMs, 0);
+    expect(shape.spanStartMs, 500);
   });
 }

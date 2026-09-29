@@ -4,7 +4,7 @@ import 'package:vector_anim_studio/engine/simple_animation_format.dart';
 import 'package:vector_anim_studio/models/animation.dart';
 
 VectorShape _pathShape({List<Offset>? points}) {
-  final shape = VectorShape(name: 'A', startMs: 0, endMs: 4000);
+  final shape = VectorShape(name: 'A');
   shape.layers.add(
     ShapeLayer(
       name: 'L',
@@ -130,7 +130,7 @@ void main() {
         cloud,
         2050,
         autoKey: true,
-        toleranceMs: keyframeSnapToleranceMs(shape.durationMs),
+        toleranceMs: keyframeSnapToleranceMs(4000),
       );
       expect(shape.keyframes, hasLength(2));
       expect(shape.keyframes[1].timeMs, 2000);

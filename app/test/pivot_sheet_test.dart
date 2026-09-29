@@ -9,7 +9,7 @@ import 'package:vector_anim_studio/ui/shape_properties_sheet.dart';
 /// le garde `!skeletonPiece` les cachait, le pivot était introuvable).
 void main() {
   VectorShape shapeIn(AnimationProject project) {
-    final shape = VectorShape(name: 'Porte', startMs: 0, endMs: 3000);
+    final shape = VectorShape(name: 'Porte');
     shape.layers.add(ShapeLayer(name: 'Panneau', kind: ShapeKind.rect));
     project.shapes.add(shape);
     return shape;

@@ -17,7 +17,6 @@
       "color": "$ciel_nuit",
       "width": 720, "height": 1280,
       "x": 360, "y": 640,
-      "end": 4,
       "keyframes": [
         {"t": 0, "color": "$ciel_nuit"},
         {"t": 2, "easing": "linear", "color": "$ciel_couchant"},
@@ -41,7 +40,6 @@
           "x": 660, "y": 730
         }
       ],
-      "end": 4,
       "cycle": {"repeat": 3},
       "keyframes": [
         {
@@ -69,16 +67,14 @@
       "color": "$bois",
       "width": 260, "height": 22,
       "x": 640, "y": 760,
-      "rotation": -20,
-      "end": 4
+      "rotation": -20
     },
     {
       "name": "Main",
       "type": "circle",
       "color": "$chair",
       "width": 64, "height": 64,
-      "x": 620, "y": 775,
-      "end": 4
+      "x": 620, "y": 775
     },
     {
       "name": "Avant-bras",
@@ -86,16 +82,14 @@
       "color": "$chair",
       "width": 74, "height": 64,
       "x": 590, "y": 792,
-      "rotation": -30,
-      "end": 4
+      "rotation": -30
     },
     {
       "name": "Bras",
       "type": "rect",
       "color": "$chair",
       "width": 90, "height": 80,
-      "x": 560, "y": 855,
-      "end": 4
+      "x": 560, "y": 855
     }
   ],
   "skeleton": {

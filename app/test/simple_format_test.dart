@@ -7,7 +7,7 @@ import 'package:vector_anim_studio/models/skeleton.dart';
 
 AnimationProject _vectorProject() {
   final project = AnimationProject.blank(name: 'Film');
-  final shape = VectorShape(name: 'Bloc', startMs: 0, endMs: 2000);
+  final shape = VectorShape(name: 'Bloc');
   shape.x = 100;
   shape.y = 200;
   shape.rotation = math.pi / 4;
@@ -57,14 +57,15 @@ void main() {
         expect(bloc['rotation'], closeTo(45, 1e-9));
         expect(bloc['scale'], 2);
         expect(bloc['opacity'], 0.5);
-        expect(bloc['start'], 0);
-        expect(bloc['end'], 2);
+        // Fenêtres start/end supprimées (v0.18) : plus exportées.
+        expect(bloc.containsKey('start'), isFalse);
+        expect(bloc.containsKey('end'), isFalse);
       },
     );
 
     test('export sparse : une propriété inchangée est omise', () {
       final project = AnimationProject.blank(name: 'Film');
-      final shape = VectorShape(name: 'Bloc', startMs: 0, endMs: 2000);
+      final shape = VectorShape(name: 'Bloc');
       shape.x = 50;
       shape.upsertKeyframe(1000, <AnimatableProperty, double>{
         AnimatableProperty.x: 150,
@@ -173,8 +174,6 @@ void main() {
       expect(shape.rotation, closeTo(math.pi / 4, 1e-9));
       expect(shape.scale, 2);
       expect(shape.opacity, 0.5);
-      expect(shape.startMs, 0);
-      expect(shape.endMs, 2000);
       final layer = shape.layers.first;
       expect(layer.kind, ShapeKind.rect);
       expect(layer.colorValue, 0xFFFF5C5C);
@@ -634,7 +633,7 @@ void main() {
 
     test('round-trip multi-couches : export → import → identique', () {
       final original = AnimationProject.blank(name: 'Perso');
-      final shape = VectorShape(name: 'Visage', startMs: 0, endMs: 2000);
+      final shape = VectorShape(name: 'Visage');
       shape.x = 300;
       shape.y = 400;
       shape.layers.add(
@@ -677,7 +676,7 @@ void main() {
 
       // Une forme à couche unique reste exportée à plat (vasf-1).
       final single = AnimationProject.blank(name: 'Plat');
-      final flat = VectorShape(name: 'Bloc', startMs: 0, endMs: 1000);
+      final flat = VectorShape(name: 'Bloc');
       flat.layers.add(ShapeLayer(name: 'Couche', kind: ShapeKind.rect));
       single.shapes.add(flat);
       expect(SimpleAnimationFormat.toJson(single)['version'], 1);
@@ -712,7 +711,7 @@ void main() {
       ]);
       expect(shape.keyframes[3].valueOf(AnimatableProperty.x), 40);
       expect(shape.keyframes[5].valueOf(AnimatableProperty.x), 40);
-      expect(shape.endMs, 6000);
+      expect(shape.spanEndMs, 6000);
     });
 
     test('cycle sans keyframes : ignoré ; repeat invalide : erreur', () {
@@ -881,7 +880,7 @@ void main() {
 
     test('pivot : exporté/importé, version 2', () {
       final original = AnimationProject.blank(name: 'Porte');
-      final shape = VectorShape(name: 'Porte', startMs: 0, endMs: 1000);
+      final shape = VectorShape(name: 'Porte');
       shape.pivotDx = 30;
       shape.pivotDy = -20;
       shape.layers.add(ShapeLayer(name: 'Couche', kind: ShapeKind.rect));

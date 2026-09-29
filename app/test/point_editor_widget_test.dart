@@ -50,7 +50,7 @@ AnimationProject _project() => AnimationProject(
 );
 
 VectorShape _pathShape({required bool withKeyframes}) {
-  final shape = VectorShape(name: 'S', x: 180, y: 320, startMs: 0, endMs: 4000);
+  final shape = VectorShape(name: 'S', x: 180, y: 320);
   shape.layers.add(
     ShapeLayer(
       name: 'L',
@@ -82,11 +82,11 @@ List<Offset> _handlePositions(
   final size = tester.getSize(_previewCanvas());
   final geo = SceneGeometry.fitFor(project, size);
   final layer = shape.layers.first;
-  final cloud = shape.pointsAtLayer(layer.id, layer.points, shape.startMs);
+  final cloud = shape.pointsAtLayer(layer.id, layer.points, 0);
   return SelectionGeometry.pointHandlePositions(
     cloud,
     layer,
-    SelectionGeometry.layerPose(shape, layer, shape.startMs),
+    SelectionGeometry.layerPose(shape, layer, 0),
     geo,
   );
 }
@@ -346,7 +346,7 @@ void main() {
       await tester.tap(find.byIcon(Icons.check));
       await tester.pumpAndSettle();
       expect(saved, isNotNull);
-      // La première pose a été CRÉÉE au curseur (startMs = 0).
+      // La première pose a été CRÉÉE au curseur (0 s).
       expect(saved!.keyframes, hasLength(1));
       final entry = saved!.keyframes.single.layerPoints[saved!.layers.first.id];
       expect(entry, isNotNull);
@@ -396,7 +396,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Le curseur démarre sur la pose (startMs) : tooltip « Retirer ».
+    // Le curseur démarre sur la pose (0 s) : tooltip « Retirer ».
     await tester.tap(find.byTooltip('Retirer la keyframe au curseur'));
     await tester.pumpAndSettle();
 

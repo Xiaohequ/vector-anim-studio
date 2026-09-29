@@ -32,8 +32,8 @@ class ShapeEditorScreen extends StatefulWidget {
   final VectorShape? shape;
 
   /// Instant du studio à l'ouverture (playhead) : le curseur du preview
-  /// démarre ICI (borné à la fenêtre de la forme) au lieu de startMs —
-  /// bugfix v0.16.3 : scrubber le studio puis éditer écrivait tout à 0 s.
+  /// démarre ICI — bugfix v0.16.3 : scrubber le studio puis éditer
+  /// écrivait tout à 0 s.
   final int? initialTimeMs;
 
   @override
@@ -91,19 +91,16 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
           name: 'Forme ${project.shapes.length + 1}',
           x: project.width / 2,
           y: project.height / 2,
-          startMs: 0,
-          endMs: math.max(project.durationMs, 4000),
           layers: <ShapeLayer>[_defaultLayer(ShapeKind.rect, 0)],
         );
     _name = TextEditingController(text: _draft.name);
     _selectedLayerId = _draft.layers.isEmpty ? null : _draft.layers.last.id;
     // Curseur initial = playhead du STUDIO (bugfix v0.16.3) : ouvrir
     // l'éditeur après un scrub garde l'instant affiché — sinon le curseur
-    // retombait à startMs (0 s) et TOUTES les poses de morph étaient
-    // écrites à 0. Borné à la fenêtre de la forme.
-    _previewMs = (widget.initialTimeMs ?? _draft.startMs).clamp(
-      _draft.startMs,
-      math.max(_draft.startMs, _draft.endMs),
+    // retombait à 0 s et TOUTES les poses de morph étaient écrites à 0.
+    _previewMs = (widget.initialTimeMs ?? 0).clamp(
+      0,
+      math.max(widget.project.durationMs, 4000),
     );
   }
 
@@ -189,17 +186,6 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
     context,
   ).showSnackBar(SnackBar(content: Text(message)));
 
-  /// Bornée de la fenêtre d'affichage éditable : la fin du dernier AUTRE
-  /// segment +10 s (le projet s'étend tout seul) — jamais sous la fin du
-  /// brouillon pour ne pas casser le RangeSlider.
-  int _windowMaxMs() {
-    var other = 0;
-    for (final shape in widget.project.shapes) {
-      if (shape.id != _draft.id && shape.endMs > other) other = shape.endMs;
-    }
-    return math.max(other + 10000, _draft.endMs);
-  }
-
   AnimationProject get _preview {
     final project = AnimationProject(
       name: _draft.name,
@@ -250,7 +236,6 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
           Expanded(
             child: LayerPanel(
               shape: _draft,
-              durationMs: _windowMaxMs(),
               selectedLayer: layer,
               onSelect: (value) => setState(() => _selectedLayerId = value.id),
               onAdd: _addLayer,
@@ -369,15 +354,15 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
     );
   }
 
-  /// Curseur du preview : échantillonne les poses/nuages dans la fenêtre de
-  /// la forme. Les poignées de points y auto-keyent (pas d'auto-key pour les
+  /// Curseur du preview : échantillonne les poses/nuages sur la durée du
+  /// projet. Les poignées de points y auto-keyent (pas d'auto-key pour les
   /// autres propriétés de couche : elles restent statiques, comme partout).
   Widget _buildPlayhead() {
-    final min = _draft.startMs.toDouble();
-    final max = math.max(min + 100, _draft.endMs).toDouble();
+    final min = 0.0;
+    final max = math.max(widget.project.durationMs, 4000).toDouble();
     final near = _draft.keyframeNear(
       _previewMs,
-      keyframeSnapToleranceMs(_draft.durationMs),
+      keyframeSnapToleranceMs(math.max(widget.project.durationMs, 4000)),
     );
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
@@ -410,14 +395,10 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
                   value: _previewMs.toDouble().clamp(min, max),
                   min: min,
                   max: max,
-                  divisions: math.max(1, _draft.durationMs ~/ 50),
+                  divisions: math.max(1, max ~/ 50),
                   label: '${(_previewMs / 1000).toStringAsFixed(2)} s',
-                  onChanged: (value) => setState(() {
-                    _previewMs = value.round().clamp(
-                      _draft.startMs,
-                      math.max(_draft.startMs, _draft.endMs),
-                    );
-                  }),
+                  onChanged: (value) =>
+                      setState(() => _previewMs = value.round()),
                 ),
               ),
               SizedBox(
@@ -569,7 +550,9 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
   /// À LA CIBLE (l'extrémité du segment interpolé garde sa valeur : semer
   /// est visuellement neutre, seul le point déplacé bouge).
   void _beginPointDrag(ShapeLayer layer, int index) {
-    final tolerance = keyframeSnapToleranceMs(_draft.durationMs);
+    final tolerance = keyframeSnapToleranceMs(
+      math.max(widget.project.durationMs, 4000),
+    );
     final targetKey = _draft.keyframeNear(_previewMs, tolerance);
     _pointTargetMs = targetKey?.timeMs ?? _previewMs;
     final entry = targetKey?.layerPoints[layer.id];
@@ -794,21 +777,13 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
   }
 }
 
-/// Durée minimale de la fenêtre d'affichage d'une forme (ms).
-class TimelineViewMinSpan {
-  const TimelineViewMinSpan._();
-
-  static const int ms = 100;
-}
-
-/// Liste des couches + fenêtre d'affichage de la forme. Les réglages fins de
-/// la couche sélectionnée sont dans la bottom sheet (`LayerPropertiesSheet`),
-/// ouverte depuis le bouton ⚙ du preview.
+/// Liste des couches de la forme. Les réglages fins de la couche
+/// sélectionnée sont dans la bottom sheet (`LayerPropertiesSheet`), ouverte
+/// depuis le bouton ⚙ du preview.
 class LayerPanel extends StatelessWidget {
   const LayerPanel({
     super.key,
     required this.shape,
-    required this.durationMs,
     required this.selectedLayer,
     required this.onSelect,
     required this.onAdd,
@@ -818,7 +793,6 @@ class LayerPanel extends StatelessWidget {
   });
 
   final VectorShape shape;
-  final int durationMs;
   final ShapeLayer? selectedLayer;
   final ValueChanged<ShapeLayer> onSelect;
   final ValueChanged<ShapeKind> onAdd;
@@ -828,7 +802,6 @@ class LayerPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final layer = selectedLayer;
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
       children: <Widget>[
@@ -864,41 +837,6 @@ class LayerPanel extends StatelessWidget {
               ),
           ],
         ),
-        if (layer != null) ...<Widget>[
-          const Divider(height: 28),
-          const Text(
-            'Fenêtre d’affichage (timeline)',
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Début ${(shape.startMs / 1000).toStringAsFixed(2)} s · '
-            'Fin ${(shape.endMs / 1000).toStringAsFixed(2)} s',
-            style: const TextStyle(fontSize: 12, color: Colors.white70),
-          ),
-          RangeSlider(
-            min: 0,
-            max: durationMs.toDouble(),
-            divisions: math.max(1, durationMs ~/ 50),
-            values: RangeValues(
-              shape.startMs.toDouble().clamp(0, durationMs.toDouble()),
-              shape.endMs.toDouble().clamp(0, durationMs.toDouble()),
-            ),
-            onChanged: (values) {
-              final start = values.start
-                  .round()
-                  .clamp(0, math.max(0, durationMs - TimelineViewMinSpan.ms))
-                  .toInt();
-              final end = values.end
-                  .round()
-                  .clamp(start + TimelineViewMinSpan.ms, durationMs)
-                  .toInt();
-              shape.startMs = start;
-              shape.endMs = end;
-              onChanged();
-            },
-          ),
-        ],
       ],
     );
   }

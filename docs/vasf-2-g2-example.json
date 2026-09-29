@@ -8,14 +8,14 @@
       "type": "rect",
       "color": "#2A2E38",
       "width": 720, "height": 160,
-      "x": 360, "y": 1180, "end": 10
+      "x": 360, "y": 1180
     },
     {
       "name": "Balle",
       "type": "circle",
       "color": "#FF5C5C",
       "width": 120, "height": 120,
-      "x": 360, "y": 400, "end": 1.5,
+      "x": 360, "y": 400,
       "cycle": {"repeat": 6},
       "keyframes": [
         {"t": 0.0, "y": 400, "scaleX": 0.85, "scaleY": 1.25},
@@ -31,7 +31,7 @@
       "type": "rect",
       "color": "#5B8DEF",
       "width": 240, "height": 420,
-      "x": 560, "y": 860, "end": 3.0,
+      "x": 560, "y": 860,
       "pivot": [-120, 0],
       "keyframes": [
         {"t": 0.2, "rotation": 0},
@@ -40,7 +40,7 @@
     },
     {
       "name": "Lampadaire",
-      "x": 200, "y": 860, "end": 9.6,
+      "x": 200, "y": 860,
       "layers": [
         {"name": "Poteau", "type": "rect", "color": "#8899AA", "width": 36, "height": 200, "x": 0, "y": 90},
         {"name": "Lampe", "type": "circle", "color": "#F2C94C", "width": 74, "height": 74, "x": 0, "y": -30}

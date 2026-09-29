@@ -28,14 +28,12 @@
       "width": 150,
       "height": 220,
       "x": 360,
-      "y": 980,
-      "end": 2
+      "y": 980
     },
     {
       "name": "Tête",
       "x": 360,
       "y": 800,
-      "end": 2,
       "layers": [
         {
           "name": "Peau",
@@ -109,15 +107,13 @@
       "name": "Main gauche",
       "ref": "main",
       "x": 240,
-      "y": 900,
-      "end": 2
+      "y": 900
     },
     {
       "name": "Main droite",
       "ref": "main",
       "x": 480,
-      "y": 900,
-      "end": 2
+      "y": 900
     }
   ]
 }

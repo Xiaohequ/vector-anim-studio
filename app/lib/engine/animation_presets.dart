@@ -45,10 +45,15 @@ extension AnimationPresetInfo on AnimationPreset {
 
 /// Applique un preset à la forme : les keyframes (poses) existantes sont
 /// remplacées par la nouvelle séquence. La pose reprend les valeurs de base de
-/// la forme, seule la propriété visée varie.
+/// la forme, seule la propriété visée varie. Le preset s'étend sur le span
+/// du contenu existant (0 → dernière keyframe, défaut 4 s sans keyframe —
+/// les fenêtres d'affichage ont été supprimées).
 void applyPreset(VectorShape shape, AnimationPreset preset) {
-  final start = shape.startMs;
-  final end = math.max(shape.startMs + 1, shape.endMs);
+  final start = shape.spanStartMs;
+  final end = math.max(
+    start + 1,
+    shape.keyframes.isEmpty ? 4000 : shape.keyframes.last.timeMs,
+  );
   final span = end - start;
 
   final base = <AnimatableProperty, double>{
