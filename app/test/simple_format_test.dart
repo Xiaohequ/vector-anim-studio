@@ -1468,4 +1468,294 @@ void main() {
       },
     );
   });
+
+  group('v0.17 — import strict + cycles par os', () {
+    Map<String, Object?> rigJson({
+      required List<Object?> bones,
+      List<Object?>? skeletonKeys,
+      Object? skeletonCycle,
+      Object? bind,
+    }) => {
+      'version': 2,
+      'name': 'Test',
+      'canvas': {
+        'width': 720,
+        'height': 1280,
+        'fps': 25,
+        'background': '#0E1230',
+      },
+      'shapes': [
+        {
+          'name': 'Planete',
+          'type': 'circle',
+          'color': '#E3B466',
+          'width': 1080,
+          'height': 1080,
+          'x': 360,
+          'y': 1680,
+          'end': 12,
+        },
+      ],
+      'skeleton': {
+        'name': 'Rig',
+        'bones': bones,
+        'keyframes': ?skeletonKeys,
+        'cycle': ?skeletonCycle,
+        'bind': ?bind,
+      },
+    };
+
+    Map<String, Object?> boneJson({
+      required String name,
+      List<double> joint = const [360, 1680],
+      double angle = 0,
+      Object? keyframes,
+      Object? cycle,
+      Object? bogus,
+    }) => {
+      'name': name,
+      'joint': joint,
+      'angle': angle,
+      'length': 540,
+      'keyframes': ?keyframes,
+      'cycle': ?cycle,
+      'bogus': ?bogus,
+    };
+
+    test('keyframes embarquées dans l os : acceptées et fusionnées', () {
+      final project = SimpleAnimationFormat.fromJson(
+        rigJson(
+          bones: [
+            boneJson(
+              name: 'Planete',
+              keyframes: [
+                {'t': 0, 'angle': 0, 'easing': 'linear'},
+                {'t': 12, 'angle': -360, 'easing': 'linear'},
+              ],
+            ),
+          ],
+        ),
+      );
+      final rig = project.skeleton!;
+      final track = rig.tracks[rig.bones.first.id]!;
+      expect(track.length, 2);
+      expect(track.last.timeMs, 12000);
+      // Angle MONDE −360° avec repos 0° → delta −2π.
+      expect(track.last.angleDelta, closeTo(-2 * math.pi, 1e-6));
+      expect(track.last.easing, EasingKind.linear);
+    });
+
+    test('champ inconnu sur une forme : refusé avec le chemin', () {
+      expect(
+        () => SimpleAnimationFormat.fromJson({
+          'version': 1,
+          'shapes': [
+            {
+              'name': 'A',
+              'type': 'rect',
+              'color': '#FF0000',
+              'colo': '#00FF00',
+            },
+          ],
+        }),
+        throwsA(
+          predicate(
+            (e) =>
+                e is SimpleFormatException &&
+                e.problems.any(
+                  (p) => p.contains('shapes[0]') && p.contains('colo'),
+                ),
+          ),
+        ),
+      );
+    });
+
+    test('champ inconnu sur un os : refusé avec le chemin', () {
+      expect(
+        () => SimpleAnimationFormat.fromJson(
+          rigJson(bones: [boneJson(name: 'Planete', bogus: 1)]),
+        ),
+        throwsA(
+          predicate(
+            (e) =>
+                e is SimpleFormatException &&
+                e.problems.any(
+                  (p) => p.contains('skeleton.bones[0]') && p.contains('bogus'),
+                ),
+          ),
+        ),
+      );
+    });
+
+    test('raccourci « bone » sur une forme : la liaison est créée', () {
+      final project = SimpleAnimationFormat.fromJson({
+        'version': 2,
+        'canvas': {
+          'width': 720,
+          'height': 1280,
+          'fps': 25,
+          'background': '#0E1230',
+        },
+        'shapes': [
+          {
+            'name': 'Planete',
+            'type': 'circle',
+            'color': '#E3B466',
+            'width': 1080,
+            'height': 1080,
+            'x': 360,
+            'y': 1680,
+            'end': 12,
+            'bone': 'Planete',
+          },
+        ],
+        'skeleton': {
+          'name': 'Rig',
+          'bones': [boneJson(name: 'Planete')],
+        },
+      });
+      final rig = project.skeleton!;
+      expect(rig.bindings, hasLength(1));
+      expect(rig.bindings.first.shapeId, project.shapes.first.id);
+      expect(rig.bindings.first.boneId, rig.bones.first.id);
+      expect(rig.bindings.first.layerId, isNull);
+    });
+
+    test('« bone » + « bind » en désaccord : erreur explicite', () {
+      expect(
+        () => SimpleAnimationFormat.fromJson(
+          rigJson(
+              bones: [
+                boneJson(name: 'OsA'),
+                boneJson(name: 'OsB', joint: [10, 10]),
+              ],
+              bind: {'Planete': 'OsA'},
+            )
+            ..['shapes'] = [
+              {
+                'name': 'Planete',
+                'type': 'circle',
+                'color': '#E3B466',
+                'width': 1080,
+                'height': 1080,
+                'x': 360,
+                'y': 1680,
+                'end': 12,
+                'bone': 'OsB',
+              },
+            ],
+        ),
+        throwsA(
+          predicate(
+            (e) =>
+                e is SimpleFormatException &&
+                e.problems.any((p) => p.contains('déjà liée à un autre os')),
+          ),
+        ),
+      );
+    });
+
+    test('« bone » sans squelette : erreur claire', () {
+      expect(
+        () => SimpleAnimationFormat.fromJson({
+          'version': 1,
+          'shapes': [
+            {'name': 'A', 'type': 'rect', 'color': '#FF0000', 'bone': 'X'},
+          ],
+        }),
+        throwsA(
+          predicate(
+            (e) =>
+                e is SimpleFormatException &&
+                e.problems.any((p) => p.contains('exige une section')),
+          ),
+        ),
+      );
+    });
+
+    test(
+      'cycle par os : chaque os répète SON motif (périodes différentes)',
+      () {
+        final walkKeys = [
+          {'t': 0, 'angle': 68},
+          {'t': 0.3, 'angle': 89},
+          {'t': 0.6, 'angle': 112},
+          {'t': 0.9, 'angle': 86},
+          {'t': 1.2, 'angle': 68},
+        ];
+        final project = SimpleAnimationFormat.fromJson(
+          rigJson(
+            bones: [
+              boneJson(
+                name: 'Marche',
+                joint: [348, 869],
+                angle: 90,
+                keyframes: walkKeys,
+                cycle: {'repeat': 9},
+              ),
+              boneJson(
+                name: 'Lent',
+                joint: [500, 500],
+                keyframes: [
+                  {'t': 0, 'angle': 0, 'easing': 'linear'},
+                  {'t': 12, 'angle': -360, 'easing': 'linear'},
+                ],
+              ),
+            ],
+          ),
+        );
+        final rig = project.skeleton!;
+        final marche = rig.bones.firstWhere((b) => b.name == 'Marche');
+        final lent = rig.bones.firstWhere((b) => b.name == 'Lent');
+        // 5 keys du motif + 9 répétitions × 4 (raccord sauté) = 41.
+        expect(rig.tracks[marche.id]!, hasLength(41));
+        expect(rig.tracks[marche.id]!.last.timeMs, 12000);
+        expect(
+          rig.tracks[marche.id]!.last.angleDelta,
+          closeTo((68 - 90) * math.pi / 180, 1e-6),
+        );
+        // L os sans cycle propre garde ses 2 keyframes : la marche et la
+        // rotation lente coexistent sur des périodes DIFFÉRENTES.
+        expect(rig.tracks[lent.id]!, hasLength(2));
+        expect(rig.tracks[lent.id]!.last.timeMs, 12000);
+      },
+    );
+
+    test('cycle par os + cycle global : le global épargne les os à cycle', () {
+      final project = SimpleAnimationFormat.fromJson(
+        rigJson(
+          bones: [
+            boneJson(
+              name: 'A',
+              keyframes: [
+                {'t': 0, 'angle': 0},
+                {'t': 1, 'angle': 10},
+              ],
+              cycle: {'repeat': 2},
+            ),
+            boneJson(
+              name: 'B',
+              joint: [500, 500],
+              keyframes: [
+                {'t': 0, 'angle': 0},
+                {'t': 2, 'angle': 10},
+              ],
+            ),
+          ],
+          skeletonCycle: {'repeat': 1},
+        ),
+      );
+      final rig = project.skeleton!;
+      final a = rig.bones.firstWhere((b) => b.name == 'A');
+      final b = rig.bones.firstWhere((b) => b.name == 'B');
+      // A (cycle propre, période 1 s) : 0, 1, 2, 3 — le global ne le
+      // recycle pas.
+      final trackA = rig.tracks[a.id]!;
+      expect(trackA.map((k) => k.timeMs).toSet(), {0, 1000, 2000, 3000});
+      // B (sans cycle propre) : le global (période du sous-ensemble = 2 s)
+      // ajoute la rep à 4 s (la rep à 2 s tombe sur la keyframe posée).
+      final trackB = rig.tracks[b.id]!;
+      expect(trackB.map((k) => k.timeMs).toSet(), {0, 2000, 4000});
+    });
+  });
 }

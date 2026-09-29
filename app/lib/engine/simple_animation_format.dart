@@ -649,12 +649,89 @@ class _Parse {
 
   // ----------------------------------------------------------- structure
 
+  // Champs connus — tout autre champ est refusé (import strict v0.17 : un
+  // champ inconnu était auparavant ignoré en silence, piège du liage perdu
+  // ou de l animation immobile).
+  static const _topKnownKeys = {
+    'version',
+    'name',
+    'canvas',
+    'theme',
+    'defs',
+    'shapes',
+    'skeleton',
+  };
+  static const _canvasKnownKeys = {'width', 'height', 'fps', 'background'};
+  static const _shapeKnownKeys = {
+    'name',
+    'type',
+    'color',
+    'filled',
+    'strokeWidth',
+    'width',
+    'height',
+    'points',
+    'layers',
+    'x',
+    'y',
+    'rotation',
+    'scale',
+    'scaleX',
+    'scaleY',
+    'pivot',
+    'opacity',
+    'start',
+    'end',
+    'keyframes',
+    'cycle',
+    'ref',
+    'bone',
+  };
+  static const _boneKnownKeys = {
+    'name',
+    'parent',
+    'joint',
+    'angle',
+    'length',
+    'z',
+    'ik',
+    'bend',
+    'keyframes',
+    'cycle',
+  };
+
+  void _checkUnknownFields(
+    String path,
+    Map<String, Object?> json,
+    Set<String> known,
+  ) {
+    for (final key in json.keys) {
+      if (!known.contains(key)) {
+        problem(
+          '$path : champ inconnu « $key » — refusé depuis v0.17 (ce champ '
+          'était ignoré en silence) ; vérifie l orthographe du champ',
+        );
+      }
+    }
+  }
+
   late AnimationProject project;
   final _usedShapeNames = <String>{};
 
   // Palette « theme » (alias → couleur) et définitions réutilisables (vasf-2).
   final _palette = <String, int>{};
   final _defs = <String, Map<String, Object?>>{};
+
+  /// Liaisons courtes (v0.17) : champ « bone » d une forme — appliqué après
+  /// la création des os (le squelette est parse après les formes).
+  final pendingShapeBinds =
+      <({String path, String shapeName, String boneName})>[];
+
+  /// Keyframes/cycle EMBARQUÉS dans un objet os (v0.17) — traités avec les
+  /// keyframes du squelette, même sémantique (ignorés en silence avant :
+  /// « planète qui ne tourne pas »).
+  final boneEmbedded =
+      <({String boneName, String path, Object? keyframes, Object? cycle})>[];
 
   /// Clés de géométrie portées par une définition `defs`.
   static const _defGeometryKeys = [
@@ -710,10 +787,12 @@ class _Parse {
         version != SimpleAnimationFormat.version3) {
       problem('version : 1, 2 ou 3 attendu (trouvé $version)');
     }
+    _checkUnknownFields('racine', json, _topKnownKeys);
     _parseTheme(json['theme']);
     _parseDefs(json['defs']);
 
     final canvas = mapOf('canvas', json['canvas']) ?? const <String, Object?>{};
+    _checkUnknownFields('canvas', canvas, _canvasKnownKeys);
     final width = numAt(
       'canvas.width',
       canvas['width'],
@@ -758,7 +837,18 @@ class _Parse {
     );
 
     _parseShapes(json['shapes']);
-    if (json['skeleton'] != null) _parseSkeleton(json['skeleton']);
+    if (json['skeleton'] != null) {
+      _parseSkeleton(json['skeleton']);
+    } else if (pendingShapeBinds.isNotEmpty) {
+      for (final bind in pendingShapeBinds) {
+        problem(
+          '${bind.path}.bone : la forme « ${bind.shapeName} » exige une '
+          'section « skeleton » (avec l os « ${bind.boneName} ») pour être '
+          'liée',
+        );
+      }
+      pendingShapeBinds.clear();
+    }
     return project;
   }
 
@@ -786,6 +876,21 @@ class _Parse {
       name = '$name $n';
     }
     _usedShapeNames.add(name);
+    _checkUnknownFields(path, json, _shapeKnownKeys);
+    // Raccourci de liage (v0.17) : « bone » sur la forme = bind de la forme
+    // entière (le champ était ignoré en silence avant — liage perdu).
+    if (json['bone'] != null) {
+      final boneName = json['bone'];
+      if (boneName is String && boneName.trim().isNotEmpty) {
+        pendingShapeBinds.add((
+          path: path,
+          shapeName: name,
+          boneName: boneName.trim(),
+        ));
+      } else {
+        problem('$path.bone : nom d os attendu (chaîne non vide)');
+      }
+    }
     // Définition réutilisable (vasf-2) : la def fournit la géométrie par
     // défaut, la forme peut surcharger chaque champ. Pas de ref imbriquée.
     var effective = json;
@@ -1310,6 +1415,15 @@ class _Parse {
       bone.bendSign = numAt('$path.bend', json['bend'], fallback: 1) >= 0
           ? 1
           : -1;
+      _checkUnknownFields(path, json, _boneKnownKeys);
+      if (json['keyframes'] != null || json['cycle'] != null) {
+        boneEmbedded.add((
+          boneName: name,
+          path: path,
+          keyframes: json['keyframes'],
+          cycle: json['cycle'],
+        ));
+      }
       if (parent == null) {
         bone.offsetX = joint.dx;
         bone.offsetY = joint.dy;
@@ -1373,75 +1487,80 @@ class _Parse {
         }
       }
     }
+    // Raccourcis « bone » des formes (v0.17) — appliqués après skeleton.bind.
+    for (final shortcut in pendingShapeBinds) {
+      final bone = byName[shortcut.boneName];
+      if (bone == null) {
+        problem('${shortcut.path}.bone : os « ${shortcut.boneName} » inconnu');
+        continue;
+      }
+      final shape = project.shapes
+          .where((s) => s.name == shortcut.shapeName)
+          .firstOrNull;
+      if (shape == null) {
+        problem(
+          '${shortcut.path}.bone : forme « ${shortcut.shapeName} » inconnue',
+        );
+        continue;
+      }
+      final existing = rig.bindings
+          .where((b) => b.shapeId == shape.id && b.layerId == null)
+          .toList();
+      if (existing.isNotEmpty) {
+        final existingBone = rig.boneById(existing.first.boneId);
+        if (existingBone == null || existingBone.name != shortcut.boneName) {
+          problem(
+            '${shortcut.path}.bone : la forme « ${shortcut.shapeName} » est '
+            'déjà liée à un autre os (skeleton.bind)',
+          );
+        }
+        continue;
+      }
+      rig.bindShape(shape.id, bone.id);
+    }
+    pendingShapeBinds.clear();
   }
 
   void _parseSkeletonKeyframes(Map<String, Object?> json, SkeletonRig rig) {
+    final pending = <_PendingBoneKey>[];
     final list =
         listOf('skeleton.keyframes', json['keyframes']) ?? const <Object?>[];
-    final pending = <_PendingBoneKey>[];
     for (var i = 0; i < list.length; i++) {
       final path = 'skeleton.keyframes[$i]';
       final keyJson = mapOf(path, list[i]);
       if (keyJson == null) continue;
-      final boneName = strAt('$path.bone', keyJson['bone'], fallback: '');
-      final bone = rig.bones.where((b) => b.name == boneName).firstOrNull;
-      if (bone == null) {
-        problem('$path.bone : os « $boneName » inconnu');
-        continue;
-      }
-      final t = numAt('$path.t', keyJson['t'], fallback: -1);
-      if (t < 0) {
-        problem('$path.t : temps ≥ 0 attendu (en secondes)');
-        continue;
-      }
-      // Angle MONDE absolu → delta par rapport à l'angle de repos monde.
-      final restDeg = _restWorldDeg(rig, bone);
-      final angleDeg = numAt(
-        '$path.angle',
-        keyJson['angle'],
-        fallback: restDeg,
-      );
-      final spec = easingSpecAt('$path.easing', keyJson['easing']);
-      // Translation d'os (v0.15) : `move` = [dx, dy] MONDE (delta depuis la
-      // position de repos de l'articulation) → ramené dans le repère de
-      // repos du parent (même convention que offsetX/offsetY).
-      var tx = 0.0;
-      var ty = 0.0;
-      final movePair =
-          listOf('$path.move', keyJson['move']) ?? const <Object?>[];
-      if (movePair.isNotEmpty) {
-        if (movePair.length < 2) {
-          problem('$path.move : [dx, dy] attendu');
-        } else {
-          final world = Offset(
-            numAt('$path.move[0]', _at(movePair, 0), fallback: 0),
-            numAt('$path.move[1]', _at(movePair, 1), fallback: 0),
-          );
-          final parent = rig.boneById(bone.parentId);
-          final local = rotateVector(
-            world,
-            -SimpleAnimationFormat._restWorldAngleRad(rig, parent),
-          );
-          tx = local.dx;
-          ty = local.dy;
-        }
-      }
-      pending.add(
-        _PendingBoneKey(
-          bone.id,
-          (t * 1000).round(),
-          _degToRad(angleDeg - restDeg),
-          spec.easing,
-          spec.bezier,
-          numAt('$path.opacity', keyJson['opacity'], fallback: 1),
-          numAt('$path.stretch', keyJson['stretch'], fallback: 1),
-          numAt('$path.squash', keyJson['squash'], fallback: 1),
-          tx: tx,
-          ty: ty,
-        ),
+      _collectBoneKey(
+        path,
+        keyJson,
+        strAt('$path.bone', keyJson['bone'], fallback: ''),
+        rig,
+        pending,
       );
     }
-    _applySkeletonCycle(json, pending);
+    // Keyframes/cycle EMBARQUÉS dans un objet os (v0.17) — même sémantique
+    // que skeleton.keyframes, avec un chemin d'erreur précis.
+    final perBoneCycle =
+        <String, ({String path, Map<String, Object?> cycle})>{};
+    for (final emb in boneEmbedded) {
+      final kfList =
+          listOf('${emb.path}.keyframes', emb.keyframes) ?? const <Object?>[];
+      for (var j = 0; j < kfList.length; j++) {
+        final path = '${emb.path}.keyframes[$j]';
+        final keyJson = mapOf(path, kfList[j]);
+        if (keyJson == null) continue;
+        _collectBoneKey(path, keyJson, emb.boneName, rig, pending);
+      }
+      final cycle = mapOf('${emb.path}.cycle', emb.cycle);
+      if (cycle != null) {
+        perBoneCycle[emb.boneName] = (path: '${emb.path}.cycle', cycle: cycle);
+      }
+    }
+    _applyBoneCycles(rig, perBoneCycle, json, pending);
+    _insertPendingKeys(rig, pending);
+  }
+
+  /// Insère les keyframes d'os en attente dans le rig (fusion par upsert).
+  void _insertPendingKeys(SkeletonRig rig, List<_PendingBoneKey> pending) {
     for (final key in pending) {
       rig.upsertKeyframe(
         key.boneId,
@@ -1458,14 +1577,109 @@ class _Parse {
     }
   }
 
-  /// `skeleton.cycle.repeat` (vasf-2) : répète le motif de keyframes de TOUS
-  /// les os, période = (plus grand − plus petit temps) du squelette. Au
-  /// raccord, une keyframe tombant sur un temps déjà posé pour le même os
-  /// est sautée (motif bouclé → timeline propre).
-  void _applySkeletonCycle(
+  /// Parse une keyframe d'os (squelette OU embarquée dans l'os, v0.17) et
+  /// l'ajoute aux pending.
+  void _collectBoneKey(
+    String path,
+    Map<String, Object?> keyJson,
+    String boneName,
+    SkeletonRig rig,
+    List<_PendingBoneKey> pending,
+  ) {
+    final bone = rig.bones.where((b) => b.name == boneName).firstOrNull;
+    if (bone == null) {
+      problem('$path.bone : os « $boneName » inconnu');
+      return;
+    }
+    final t = numAt('$path.t', keyJson['t'], fallback: -1);
+    if (t < 0) {
+      problem('$path.t : temps ≥ 0 attendu (en secondes)');
+      return;
+    }
+    // Angle MONDE absolu → delta par rapport à l'angle de repos monde.
+    final restDeg = _restWorldDeg(rig, bone);
+    final angleDeg = numAt('$path.angle', keyJson['angle'], fallback: restDeg);
+    final spec = easingSpecAt('$path.easing', keyJson['easing']);
+    // Translation d'os (v0.15) : `move` = [dx, dy] MONDE (delta depuis la
+    // position de repos de l'articulation) → ramené dans le repère de
+    // repos du parent (même convention que offsetX/offsetY).
+    var tx = 0.0;
+    var ty = 0.0;
+    final movePair = listOf('$path.move', keyJson['move']) ?? const <Object?>[];
+    if (movePair.isNotEmpty) {
+      if (movePair.length < 2) {
+        problem('$path.move : [dx, dy] attendu');
+      } else {
+        final world = Offset(
+          numAt('$path.move[0]', _at(movePair, 0), fallback: 0),
+          numAt('$path.move[1]', _at(movePair, 1), fallback: 0),
+        );
+        final parent = rig.boneById(bone.parentId);
+        final local = rotateVector(
+          world,
+          -SimpleAnimationFormat._restWorldAngleRad(rig, parent),
+        );
+        tx = local.dx;
+        ty = local.dy;
+      }
+    }
+    pending.add(
+      _PendingBoneKey(
+        bone.id,
+        (t * 1000).round(),
+        _degToRad(angleDeg - restDeg),
+        spec.easing,
+        spec.bezier,
+        numAt('$path.opacity', keyJson['opacity'], fallback: 1),
+        numAt('$path.stretch', keyJson['stretch'], fallback: 1),
+        numAt('$path.squash', keyJson['squash'], fallback: 1),
+        tx: tx,
+        ty: ty,
+      ),
+    );
+  }
+
+  /// Cycles d'os (v0.17) : un os peut répéter SON PROPRE motif (« cycle »
+  /// embarqué, période = dernier − premier temps de ses keyframes) ;
+  /// `skeleton.cycle.repeat` reste le cycle GLOBAL, appliqué aux os sans
+  /// cycle propre. Au raccord, la première keyframe d'une répétition est
+  /// sautée (son temps tombe sur la dernière déjà posée — motif bouclé).
+  void _applyBoneCycles(
+    SkeletonRig rig,
+    Map<String, ({String path, Map<String, Object?> cycle})> perBoneCycle,
     Map<String, Object?> json,
     List<_PendingBoneKey> pending,
   ) {
+    final ownBones = <String>{};
+    for (final entry in perBoneCycle.entries) {
+      final bone = rig.bones.where((b) => b.name == entry.key).firstOrNull;
+      if (bone == null) {
+        problem('${entry.value.path} : os « ${entry.key} » inconnu');
+        continue;
+      }
+      final repeat = intAt(
+        '${entry.value.path}.repeat',
+        entry.value.cycle['repeat'],
+        fallback: 0,
+      );
+      if (repeat < 1) {
+        problem('${entry.value.path}.repeat : entier ≥ 1 attendu ($repeat)');
+        continue;
+      }
+      final keys = pending.where((k) => k.boneId == bone.id).toList()
+        ..sort((a, b) => a.timeMs.compareTo(b.timeMs));
+      if (keys.length < 2) continue;
+      final period = keys.last.timeMs - keys.first.timeMs;
+      if (period <= 0) continue;
+      for (var r = 1; r <= repeat; r++) {
+        // Raccord : i == 0 tombe sur la dernière keyframe déjà posée.
+        for (var i = 1; i < keys.length; i++) {
+          pending.add(keys[i].withTime(keys[i].timeMs + r * period));
+        }
+      }
+      ownBones.add(bone.id);
+    }
+    // Cycle global (vasf-2) — appliqué aux os SANS cycle propre.
     final cycle = mapOf('skeleton.cycle', json['cycle']);
     if (cycle == null) return;
     final repeat = intAt('skeleton.cycle.repeat', cycle['repeat'], fallback: 0);
@@ -1473,14 +1687,15 @@ class _Parse {
       problem('skeleton.cycle.repeat : entier ≥ 1 attendu ($repeat)');
       return;
     }
-    if (pending.isEmpty) return;
-    final first = pending.map((k) => k.timeMs).reduce(math.min);
-    final last = pending.map((k) => k.timeMs).reduce(math.max);
+    final subset = pending.where((k) => !ownBones.contains(k.boneId)).toList();
+    if (subset.isEmpty) return;
+    final first = subset.map((k) => k.timeMs).reduce(math.min);
+    final last = subset.map((k) => k.timeMs).reduce(math.max);
     final period = last - first;
     if (period <= 0) return;
     final extra = <_PendingBoneKey>[];
     for (var r = 1; r <= repeat; r++) {
-      for (final key in pending) {
+      for (final key in subset) {
         final time = key.timeMs + r * period;
         final exists =
             pending.any((x) => x.boneId == key.boneId && x.timeMs == time) ||

@@ -6,10 +6,11 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Repo : https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`)
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
-- Dernière version : **0.16.3** (bugfix — le curseur de l'éditeur de
-  forme démarre au playhead du STUDIO : scrubber puis éditer n'écrit
-  plus tout à 0 s — cause racine du « pas de morphing » ; 215/215
-  tests). v0.16.2 (morph — 1ᵉʳ glisser = 1ʳᵉ pose, ◆ dans l'éditeur,
+- Dernière version : **0.17.0** (pipeline agents — aperçu headless
+  officiel via le vrai moteur, import strict, cycles par os ; 224/224
+  tests). v0.16.3 (bugfix — le curseur de l'éditeur démarre au playhead
+  du STUDIO) **VALIDÉE APPAREIL 28/09 : le morphing marche**.
+  v0.16.2 (morph — 1ᵉʳ glisser = 1ʳᵉ pose, ◆ dans l'éditeur,
   snack, aide). v0.16.1 (bugfix — ◆ de la playbar anime la PIÈCE d'un
   projet squelette ; sheet ⚙ des pièces avec ◆ + Interpolation). v0.16.0 = éditeur de points
   in-app (poignées, curseur de temps, auto-key morph). v0.15.0 (vasf-3 : couleur animée, morph de
@@ -187,6 +188,29 @@ v0.9.0, l'**animation squelette** (rig maître).
   correction ; rig initial JAMAIS tendu à fond (L1+L2 > distance joint→effecteur)
   sinon toute cible est hors de portée (le solveur clampe, tip ≠ cible).
 
+### v0.17.0 (29/09, pipeline agents : aperçu headless officiel + import strict + cycles par os)
+- **Aperçu headless OFFICIEL** (`test/vasf_preview_test.dart`) : rend un
+  JSON vasf avec le VRAI `ScenePainter` → planche PNG + frames pleine
+  résolution dans `tmp/vasf_preview/`. À la demande par env
+  (`VASF_PREVIEW_INPUT/OUT/TIMES/SCALE`), no-op en CI normale ;
+  `flutter_docker.sh` transmet les variables. L'import qui échoue fait
+  échouer le test avec les erreurs françaises — même diagnostic que
+  l'appli. Remplace l'approximation FK pycairo (`tmp/preview_petit_prince.py`).
+- **Import strict** : tout champ inconnu (racine/canvas/forme/os) est
+  refusé avec chemin + nom (avant : silence → liage perdu, planète
+  immobile) ; champ `bone` sur une forme = raccourci de bind (conflit
+  avec `skeleton.bind` → erreur ; sans squelette → erreur).
+- **Keyframes/cycle embarqués dans un os** : acceptés et fusionnés
+  (sémantique `skeleton.keyframes`, `bone` implicite — avant : ignorés
+  en silence). **Cycle PAR OS** : chaque os répète SON motif (période =
+  dernier − premier de ses keyframes) ; `skeleton.cycle` global épargne
+  les os à cycle propre → marche ×9 + rotation lente coexistent (42
+  keyframes au lieu de 330 sur le Petit Prince).
+- Format + validateur Python + skill `generer-animation-json` alignés ;
+  exemples officiels revalidés. Dogfood : Petit Prince régénéré avec
+  cycle par os, aperçu réel vérifié (rose t=3, baobab t=9, bottes au
+  sol). +8 tests — 224/224, analyze 0.
+
 ### v0.16.0 (27/09, CI run #34 verte, release `v0.16.0-build34`, APK 51,6 Mo — éditeur de points in-app ; commit `dd53e6b`)
 - **Poignées de points** (éditeur de forme, couche Chemin sélectionnée) :
   cercles blancs en espace écran (`ScenePainter.showLayerPoints` +
@@ -225,7 +249,7 @@ v0.9.0, l'**animation squelette** (rig maître).
   (800×600), PAS le preview — viser le CustomPaint dont le painter est un
   `ScenePainter` (un seul par écran).
 
-### v0.16.3 (27/09, CI run #37 verte, release `v0.16.3-build37`, APK 51,6 Mo ; commit `368502c` — bugfix : curseur de l'éditeur = playhead du studio) — VALIDATION APPAREIL EN ATTENTE
+### v0.16.3 (27/09, CI run #37 verte, release `v0.16.3-build37`, APK 51,6 Mo ; commit `368502c` — bugfix : curseur de l'éditeur = playhead du studio) — VALIDÉE APPAREIL (28/09) : le morphing marche
 - **Symptôme (retours v0.16.2)** : le snack affiche toujours « Pose à
   0,00 s enregistrée (morph) » même en éditant une keyframe à 2 s.
 - **Cause** : le curseur du preview de l'éditeur était initialisé à
@@ -244,7 +268,7 @@ v0.9.0, l'**animation squelette** (rig maître).
   l'objet pièce par le brouillon (`project.shapes[index] = edited`) —
   relire `project.shapes.first`, pas la référence d'avant l'éditeur.
 
-### v0.16.2 (27/09, CI run #36 verte, release `v0.16.2-build36`, APK 51,6 Mo ; commit `6a4a464` — morph : auto-key visible dans l'éditeur) — VALIDATION APPAREIL EN ATTENTE
+### v0.16.2 (27/09, CI run #36 verte, release `v0.16.2-build36`, APK 51,6 Mo ; commit `6a4a464` — morph : auto-key visible dans l'éditeur) — VALIDÉE APPAREIL (28/09, via le morphing opérationnel en v0.16.3)
 - **Symptôme (retours v0.16.1)** : en changeant les points d'un chemin,
   aucune keyframe n'était ajoutée automatiquement — et en éditant sur une
   pose, la modification restait sans morphing à la lecture.
@@ -270,7 +294,7 @@ v0.9.0, l'**animation squelette** (rig maître).
   déjà couverts (repository/point_morph/render_regression).
 - Tests : **214/214** (+3 widget), analyze 0 problème.
 
-### v0.16.1 (27/09, CI run #35 verte, release `v0.16.1-build35`, APK 51,6 Mo ; commit `8e11d35` — bugfix : keyframes de pièce incréables en projet squelette) — VALIDATION APPAREIL EN ATTENTE
+### v0.16.1 (27/09, CI run #35 verte, release `v0.16.1-build35`, APK 51,6 Mo ; commit `8e11d35` — bugfix : keyframes de pièce incréables en projet squelette) — VALIDÉE APPAREIL (28/09, via la chaîne morph opérationnelle)
 - **Symptôme** : dans un projet SQUELETTE, impossible de créer une
   keyframe sur une forme/pièce — le ◆ de la playbar ne faisait rien dès
   qu'une pièce était sélectionnée.

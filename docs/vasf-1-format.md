@@ -86,6 +86,7 @@ convention). Positive degrees = clockwise on screen.
 | opacity | 1 | 0–1 |
 | layers | optional | VASF-2: array of primitive objects (see below) — overrides `type/color/filled/strokeWidth/width/height/points` |
 | ref | optional | VASF-2: name of a `defs` entry used as geometry defaults (see below) |
+| bone | optional | v0.17: binding shortcut — whole-shape binding to the named bone (same as one `skeleton.bind` entry; conflict with `bind` = error; requires a `skeleton` section) |
 | cycle | optional | VASF-2: `{"repeat": N}` repeats the keyframe pattern (see below) |
 | keyframes | optional | see below |
 
@@ -136,8 +137,8 @@ convention). Positive degrees = clockwise on screen.
 | bone.ik | false | enable IK on this bone = ROOT of an IK chain (dragging the chain end solves every bone of the chain; 2 bones = exact solver, more = CCD). A chain runs through unique-child bones only |
 | bone.bend | 1 | elbow side for 2-bone IK: +1 or −1 (CCD chains may still flip) |
 | bind | optional | map **shape name → bone name** |
-| cycle | optional | VASF-2: `{"repeat": N}` repeats ALL bone keyframes (period = last − first time) |
-| keyframes | optional | bone animation (see below) |
+| cycle | optional | VASF-2: `{"repeat": N}` repeats ALL bone keyframes (period = last − first time). v0.17: a bone-EMBEDDED `cycle` repeats THAT bone's own pattern and excludes it from the global cycle |
+| keyframes | optional | bone animation (see below). v0.17: may instead be EMBEDDED in each bone object (`keyframes` and `cycle` directly on the bone — `bone` field implied) |
 
 ### Keyframe (bone)
 
@@ -394,8 +395,11 @@ padded by repeating its last point (new segments grow out of it).
   whole path by 200 units.
 - As for colors, the FIRST keyframe must define the starting cloud (put the
   base `points` copy at `t: 0`), and a missing `points` in a later keyframe
-  carries the last posed cloud.
-- In-app: morphs come from imports only (no point editor yet).
+  carries the last posed cloud — before the first posed cloud the app shows
+  the BASE points.
+- In-app: since v0.16 the shape editor edits morph clouds directly (point
+  handles, editor time cursor, auto-key morph, add/remove points) — agents
+  still author the whole morph in the JSON.
 
 ## Bone translation — `move` in a bone keyframe
 
@@ -413,16 +417,58 @@ padded by repeating its last point (new segments grow out of it).
   the playhead (auto-key). On an unanimated bone the ✥ drag keeps the
   historical rest-move behavior.
 
+# v0.17 app — strict import, `bone` shortcut, embedded & per-bone cycles
+
+Accepted by the v0.17 importer and the Python validator. The exporter never
+emits them (cycles are developed into plain keyframes on export).
+
+## Unknown fields are REJECTED
+
+The importer refuses any unknown field at every level (document root,
+`canvas`, shapes, bones) with a French error naming the field and its path.
+Previously unknown fields were silently ignored — which could drop a binding
+or freeze an animation without any warning. Check spellings against the field
+tables of this document.
+
+## Shape `bone` — binding shortcut
+
+A shape may carry `"bone": "OsName"` as a whole-shape binding shortcut
+(equivalent to one `skeleton.bind` entry). The bone must exist; a conflict
+with a `skeleton.bind` entry for the same shape (different bone) is an error;
+`bone` without a `skeleton` section is an error. Per-layer bindings keep
+using the `"Forme/Couche"` keys of `skeleton.bind`.
+
+## Keyframes & cycle embedded in a bone
+
+A bone object may carry its own `"keyframes": [...]` and `"cycle":
+{"repeat": N}`. Semantics are identical to `skeleton.keyframes` (world
+absolute angles, partial poses, `move`, easing) — the `bone` field is
+implied and must be omitted. This lets each bone repeat ITS OWN pattern,
+e.g. walk bones: a 5-key pattern over 1.2 s with `{"repeat": 9}` → a full
+12 s walk (41 keyframes after expansion), while a root bone carries its own
+12 s linear rotation with NO cycle.
+
+## Per-bone cycle — different periods on different bones
+
+`skeleton.cycle.repeat` (vasf-2) repeats ONE pattern for ALL bones. A bone
+with its own embedded `cycle` repeats its own pattern (period = last − first
+time of its keyframes) and is EXCLUDED from the global `skeleton.cycle`,
+which still applies to every bone without its own cycle (period computed
+over those bones only). A bone cycle with fewer than 2 keyframes (or a zero
+period) is ignored; `repeat` must be an integer ≥ 1. End the pattern with
+the pose it started with for a clean loop.
+
 # Limitations
 
 - VASF-2 layer pose is static: a layer's x/y/rotation/scale/opacity cannot be
-  keyframed — only the group pose animates (layer-level animation is planned).
+  keyframed — the group pose animates, and (v3) so do layer COLORS and layer
+  POINT morphs (layer-level x/y animation is still planned).
 - No nested project instances.
 - `pivot` is static (not keyframable); `scaleX`/`scaleY` ARE animatable.
 - Layer bindings ARE supported (`"Forme/Couche"` keys, vasf-2).
 - VASF-3 morphs a full point LIST only: no per-point keys, no bezier handles
-  in the morph (straight polyline interpolation between clouds); morph
-  keyframes are authored in imports (no in-app point editor yet).
+  in the morph (straight polyline interpolation between clouds); morphs are
+  authored in imports or edited in-app since v0.16 (point editor).
 - VASF-3 bone `move` ignores the parent's stretch/squash when converting the
   world delta (tiny drift on stretched parents — the drag-✥ path converts
   against the parent's CURRENT world angle, not its stretch).

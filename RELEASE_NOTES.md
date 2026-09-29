@@ -1,26 +1,44 @@
-# Vector Anim Studio 0.16.3
+# Vector Anim Studio 0.17.0
 
-## Correction (le curseur de l'éditeur démarre au playhead du studio)
+## Pipeline agents : aperçu headless officiel, import strict, cycles par os
 
-- **Symptôme** : le snack affichait toujours « Pose à 0,00 s enregistrée
-  (morph) », même en éditant à 2 s — et les poses s'accumulaient à 0 s
-  au lieu de se répartir sur la timeline.
+### Aperçu headless officiel (le VRAI moteur, sans appareil)
 
-- **Cause** : le curseur du preview de l'éditeur de forme était initialisé
-  au début de la fenêtre de la forme (0 s), indépendamment de la position
-  de la tête de lecture du studio. Scrubber le studio à 2 s puis ouvrir
-  l'éditeur remettait le curseur à 0 : chaque glisser de point écrivait
-  donc sa pose à 0 s. C'était aussi la cause racine du « pas de
-  morphing » signalé en 0.16.2.
+- Nouveau `test/vasf_preview_test.dart` : rend un JSON vasf avec le vrai
+  `ScenePainter` et écrit une planche PNG + les frames pleine résolution.
+  À la demande par variables d'environnement (la CI normale le saute) :
+  `VASF_PREVIEW_INPUT=/work/tmp/preview_input.json
+  scripts/flutter_docker.sh test test/vasf_preview_test.dart`
+  (+ `VASF_PREVIEW_OUT`, `VASF_PREVIEW_TIMES`, `VASF_PREVIEW_SCALE`).
+- `scripts/flutter_docker.sh` transmet ces variables au conteneur.
+- Un import qui échoue fait échouer le test avec la liste française des
+  erreurs — même diagnostic que le dialogue « Import impossible ».
 
-- **Fix** : l'éditeur démarre maintenant à l'instant affiché par le
-  studio (borné à la fenêtre de la forme). Scrubber → ◆ → éditer garde
-  le même instant, l'auto-key écrit la pose à CET instant et le snack
-  l'affiche correctement (« Pose à 2,00 s »).
+### Import strict
 
-- Validation : **215/215 tests** (dont 1 nouveau : pose écrite à 2000 ms
-  après scrub studio), `flutter analyze` 0 problème.
+- Tout champ inconnu (racine, `canvas`, forme, os) est REFUSÉ avec un
+  message français nommant le champ et son chemin — auparavant il était
+  ignoré en silence (liage perdu, animation immobile, sans avertissement).
+- Champ `bone` sur une forme = raccourci de liage (bind de la forme
+  entière) : conflit avec `skeleton.bind` → erreur explicite ; `bone`
+  sans section `skeleton` → erreur claire.
 
-Version précédente (0.16.2) : premier glisser de point = première pose
-pour une pièce squelette sans keyframe, ◆ dans la ligne du curseur de
-l'éditeur, snack de confirmation, aide contextuelle du morph.
+### Keyframes/cycle embarqués dans un os + cycle par os
+
+- Un os peut porter ses `keyframes` (angles monde, poses partielles,
+  `move`, easing — sémantique de `skeleton.keyframes`, champ `bone`
+  implicite) et son `cycle` : auparavant ignorés en silence (une planète
+  ne tournait pas).
+- `cycle` PAR OS : chaque os répète SON propre motif (période = dernier −
+  premier temps de ses keyframes) ; `skeleton.cycle.repeat` reste le
+  cycle global et épargne les os à cycle propre → une marche ×9 et une
+  rotation lente coexistent (42 keyframes au lieu de 330 sur l'exemple
+  Petit Prince).
+- Spec `docs/vasf-1-format.md` (section v0.17) et validateur Python du
+  skill `generer-animation-json` alignés (champs inconnus refusés,
+  nouvelles formes acceptées — exemples officiels revalidés).
+
+### Tests
+
+- +8 tests (import strict, raccourci `bone`, fusion embarquée, cycle par
+  os, cohabitation cycle par os / global) — 224/224, analyze 0 problème.

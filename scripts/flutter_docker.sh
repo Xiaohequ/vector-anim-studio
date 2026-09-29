@@ -29,8 +29,19 @@ else
   CMD=(flutter "$@")
 fi
 
+# Variables de l'aperçu headless (test/vasf_preview_test.dart) : passées au
+# conteneur seulement quand elles sont définies (chemins CONTENEUR, /work =
+# racine du projet).
+ENV_FLAGS=()
+for var in VASF_PREVIEW_INPUT VASF_PREVIEW_OUT VASF_PREVIEW_TIMES VASF_PREVIEW_SCALE; do
+  if [ -n "${!var:-}" ]; then
+    ENV_FLAGS+=(-e "$var=${!var}")
+  fi
+done
+
 exec docker run --rm -i \
   -e GRADLE_OPTS="-Dorg.gradle.jvmargs=-Xmx512m -Dorg.gradle.daemon=false -Dorg.gradle.workers.max=1" \
+  "${ENV_FLAGS[@]}" \
   -v "${PROJECT_DIR}":/work \
   -v "${PUB_CACHE_DIR}":/root/.pub-cache \
   -v "${GRADLE_CACHE_DIR}":/root/.gradle \
