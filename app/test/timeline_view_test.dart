@@ -119,6 +119,32 @@ void main() {
     expect(rec.ended, shape.id);
   });
 
+  testWidgets('une forme sans keyframe a un segment pleine durée (v0.18.1)',
+    (tester) async {
+    final project = AnimationProject.blank();
+    final statique = VectorShape(name: 'Statique');
+    statique.layers.add(ShapeLayer(name: 'L', kind: ShapeKind.rect));
+    project.shapes.add(statique);
+    final rec = _Rec();
+    await tester.pumpWidget(
+      _host(project, TimelineZoomState(durationOf: () => 4000), rec),
+    );
+
+    // Durée de rendu par défaut : [0, 4 s] → barre pleine vue (800 px).
+    expect(_barWidths(tester), contains(800.0));
+
+    // Appui long : rien à décaler sans keyframe → aucun callback de move
+    // (pas d'undo fantôme), mais le tap sélectionne toujours.
+    final g = await tester.startGesture(const Offset(112, 27));
+    await tester.pump(const Duration(milliseconds: 600));
+    await g.moveBy(const Offset(200, 0));
+    await tester.pump();
+    await g.up();
+    await tester.pump();
+    expect(rec.moved, isEmpty);
+    expect(rec.ended, isNull);
+  });
+
   testWidgets('le pincement à deux doigts zoome la vue', (tester) async {
     final project = _project();
     final rec = _Rec();

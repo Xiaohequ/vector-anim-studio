@@ -569,7 +569,13 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 ## 🔜 Ce qui doit être fait (roadmap)
 
-### v0.18.0 (en CI — à valider sur appareil)
+### v0.18.1 (bugfix retours appareil — en CI, à valider sur appareil)
+- **Segment de rendu par défaut restauré** : ajouter une forme affiche un
+  segment sur la timeline (retour v0.18.0 : aucun segment ne s'affichait) ;
+  sans keyframe → `[0, 4 s]` étendu à la durée du projet ; l'UI start/end
+  reste supprimée ; appui long sans keyframe = rien (pas d'undo fantôme).
+
+### v0.18.0 (en CI run #39 — à valider sur appareil)
 - **Fenêtres start/end supprimées** : les formes s'affichent pendant tout le
   projet (l'œil `visible` reste le seul interrupteur) ; le vasf accepte
   `start`/`end` (validés ≥ 0) mais les IGNORE, l'export ne les émet plus ;

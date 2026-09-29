@@ -170,6 +170,9 @@ class _TimelineViewState extends State<TimelineView> {
 
   void _handleMoveStart(VectorShape shape) {
     if (_pinching) return;
+    // Sans keyframe il n'y a rien à décaler (les fenêtres d'affichage ont
+    // été supprimées) : l'appui long ne fait rien — pas d'undo fantôme.
+    if (shape.keyframes.isEmpty) return;
     // Snapshot d'annulation avant la moindre modification.
     widget.onGestureStart(shape);
     HapticFeedback.mediumImpact();
@@ -546,8 +549,10 @@ class _ShapeBar extends StatelessWidget {
     final width = this.width;
     final msPerPx = zoom.msPerPixel(width);
     // Barre = span du CONTENU (1re → dernière keyframe) : les fenêtres
-    // d'affichage ont été supprimées (v0.18). Sans keyframe, seule une
-    // INSTANCE garde une barre — pleine durée (elle s'anime en boucle).
+    // d'affichage ont été supprimées (v0.18). Sans keyframe (forme
+    // statique ou instance), la barre couvre la durée de rendu
+    // [0, fullSpanMs] — 4 s par défaut, étendu à la durée du projet
+    // (v0.18.1 : le segment par défaut revient sur la timeline).
     final hasKeys = shape.keyframes.isNotEmpty;
     final spanStart = hasKeys ? shape.spanStartMs : 0;
     final spanEnd = hasKeys ? shape.spanEndMs : fullSpanMs;

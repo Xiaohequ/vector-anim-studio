@@ -14,12 +14,12 @@ class TimelineLayout {
     List<VectorShape> shapes, {
     int fullSpanMs = 4000,
   }) {
-    // Formes ANIMÉES + instances (une instance s'anime en boucle même sans
-    // keyframe hôte → barre pleine durée) ; les formes statiques sans
-    // keyframe n'ont pas de barre (sélection au canvas).
-    final animated = shapes
-        .where((s) => s.keyframes.isNotEmpty || s.isInstance)
-        .toList()
+    // TOUTES les formes ont une barre (v0.18.1, retours appareil : ajouter
+    // une forme doit montrer un segment — sa « durée de rendu ») ; sans
+    // keyframe, la barre couvre [0, fullSpanMs] (4 s par défaut, étendu à
+    // la durée du projet). Une instance s'anime en boucle même sans
+    // keyframe hôte → même barre pleine durée.
+    final animated = shapes.toList()
       ..sort((a, b) {
         final byStart = _spanStart(
           a,

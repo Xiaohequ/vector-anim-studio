@@ -59,14 +59,23 @@ void main() {
       expect(TimelineLayout.laneIndexOf(lanes, b), 1);
     });
 
-    test('les formes sans keyframe sont ignorées (statiques)', () {
+    test('les formes sans keyframe ont une barre pleine durée (v0.18.1)', () {
       final staticShape = VectorShape(name: 'Statique');
       final lanes = TimelineLayout.packLanes(<VectorShape>[
         shape('A', 0, 1000),
         staticShape,
       ]);
-      expect(lanes.length, 1);
-      expect(lanes.single.map((s) => s.name), <String>['A']);
+      // Le span par défaut [0, fullSpanMs] chevauche tout → sa propre ligne.
+      expect(lanes.length, 2);
+      expect(TimelineLayout.laneIndexOf(lanes, staticShape), 1);
+    });
+
+    test('deux formes statiques sans keyframe : deux lignes', () {
+      final lanes = TimelineLayout.packLanes(<VectorShape>[
+        VectorShape(name: 'S1'),
+        VectorShape(name: 'S2'),
+      ]);
+      expect(lanes.length, 2);
     });
   });
 
