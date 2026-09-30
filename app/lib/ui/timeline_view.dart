@@ -259,10 +259,7 @@ class _TimelineViewState extends State<TimelineView> {
     // Barres de pièces toujours affichées, barres d'os (si rig) posées en
     // dessous : v0.9.0 masquait les pièces dès qu'un os existait.
     final fullSpanMs = math.max(widget.project.durationMs, 4000);
-    final lanes = TimelineLayout.packLanes(
-      widget.project.shapes,
-      fullSpanMs: fullSpanMs,
-    );
+    final lanes = TimelineLayout.packLanes(widget.project.shapes);
     final boneLanes = rig == null
         ? const <List<RigBone>>[]
         : TimelineLayout.packBoneLanes(rig);
@@ -304,8 +301,12 @@ class _TimelineViewState extends State<TimelineView> {
                   right: 0,
                   top: 0,
                   height: TimelineView.rulerHeight,
-                  child: CustomPaint(
-                    painter: _RulerPainter(zoom: zoom, width: width),
+                  // Décorative : les taps de la règle scrubben le fond
+                  // (les barres pleine durée couvrent les lignes).
+                  child: IgnorePointer(
+                    child: CustomPaint(
+                      painter: _RulerPainter(zoom: zoom, width: width),
+                    ),
                   ),
                 ),
                 for (var lane = 0; lane < laneCount; lane++)
@@ -492,9 +493,10 @@ class _RulerPainter extends CustomPainter {
       oldDelegate.width != width;
 }
 
-/// Rectangle d'une forme animée : sélection, keyframes supprimables près
-/// de la tête de lecture et décalage de tout le span par appui long +
-/// glisser horizontal (fenêtre de visibilité supprimée).
+/// Rectangle d'une forme : sélection au tap, scrub au glisser, keyframes
+/// supprimables près de la tête de lecture ; appui long = décale les
+/// keyframes (v0.18.2 : la barre reste pleine durée, seuls les losanges
+/// se déplacent sous le doigt).
 class _ShapeBar extends StatelessWidget {
   const _ShapeBar({
     required this.shape,
@@ -523,8 +525,7 @@ class _ShapeBar extends StatelessWidget {
   final double laneTop;
   final double width;
 
-  /// Durée de référence des barres sans keyframe (instances) :
-  /// max(durée du projet, 4 s).
+  /// Durée de rendu des barres (v0.18.2) : max(durée du projet, 4 s).
   final int fullSpanMs;
 
   /// Pincement en cours : les gestes de la barre (déplacement, scrub) sont
@@ -548,23 +549,23 @@ class _ShapeBar extends StatelessWidget {
     final zoom = this.zoom;
     final width = this.width;
     final msPerPx = zoom.msPerPixel(width);
-    // Barre = span du CONTENU (1re → dernière keyframe) : les fenêtres
-    // d'affichage ont été supprimées (v0.18). Sans keyframe (forme
-    // statique ou instance), la barre couvre la durée de rendu
-    // [0, fullSpanMs] — 4 s par défaut, étendu à la durée du projet
-    // (v0.18.1 : le segment par défaut revient sur la timeline).
-    final hasKeys = shape.keyframes.isNotEmpty;
-    final spanStart = hasKeys ? shape.spanStartMs : 0;
-    final spanEnd = hasKeys ? shape.spanEndMs : fullSpanMs;
-    final left = zoom.xFor(spanStart, width);
-    // Bornée à la vue : une barre plus large est coupée, pas débordante.
-    final barWidth = math.min(
-      math.max(24.0, (spanEnd - spanStart) / msPerPx),
-      width,
-    );
-    // Épinglée au bord droit : une barre plus large que son minimum doit
-    // rester visible quand sa fin touche le bord droit de la vue.
-    final pinnedLeft = math.min(left, math.max(0.0, width - 24));
+    // Barre = durée de rendu de l'élément [0, fullSpanMs] (v0.18.2) : 4 s
+    // par défaut, étendue à la durée du projet, INDÉPENDANTE des
+    // keyframes — ajouter une keyframe ne rétrécit plus le segment
+    // (comportement v0.17 ; v0.18.1 repliait le span sur les keyframes).
+    final x0 = zoom.xFor(0, width);
+    final x1 = zoom.xFor(fullSpanMs, width);
+    // Coupée à la vue : un segment plus large que la vue couvre tout le
+    // viewport (l'ancien clamp à `width` avec une ancre x0 négative
+    // rendait la barre entièrement invisible au zoom).
+    final left = x0.clamp(0.0, math.max(0.0, width - 24.0)).toDouble();
+    final right = math.max(left + 24.0, x1.clamp(0.0, width)).toDouble();
+    final barWidth = right - left;
+    final pinnedLeft = left;
+    // Plage visible dans la barre : les losanges s'y positionnent en
+    // relatif (la barre peut être coupée par la vue).
+    final visibleStart = zoom.timeFor(left, width);
+    final visibleEnd = zoom.timeFor(right, width);
     final color = shape.isInstance
         ? const Color(0xFFC084FC)
         : Theme.of(context).colorScheme.primary;
@@ -640,8 +641,8 @@ class _ShapeBar extends StatelessWidget {
             for (final keyTime in keyTimes)
               Align(
                 alignment: Alignment(
-                  ((keyTime - spanStart) /
-                                  math.max(1, spanEnd - spanStart))
+                  ((keyTime - visibleStart) /
+                                  math.max(1, visibleEnd - visibleStart))
                               .clamp(0.0, 1.0) *
                           2 -
                       1,
@@ -738,13 +739,28 @@ class _BoneBar extends StatelessWidget {
     final first = track.first.timeMs;
     final last = track.last.timeMs;
     final msPerPx = zoom.msPerPixel(width);
-    final left = zoom.xFor(first, width);
-    // Bornée à la vue : une barre plus large est coupée, pas débordante.
-    final barWidth = math.min(
-      math.max(24.0, (last - first) / msPerPx),
-      width,
-    );
-    final pinnedLeft = math.min(left, math.max(0.0, width - 24));
+    final x0 = zoom.xFor(first, width);
+    final x1 = zoom.xFor(last, width);
+    // Coupée à la vue (v0.18.2, même fix que les barres de formes) : la
+    // barre couvre tout le viewport quand la piste est plus large que la
+    // vue — l'ancien clamp à `width` avec ancre x0 négative rendait la
+    // barre invisible au zoom. Piste hors vue → barre vide.
+    if (x1 <= 0 || x0 >= width) {
+      return Positioned(
+        left: 0,
+        top: laneTop + 3,
+        width: 0,
+        height: TimelineView.laneHeight - 8,
+        child: const SizedBox.shrink(),
+      );
+    }
+    final left = x0.clamp(0.0, math.max(0.0, width - 24.0)).toDouble();
+    final right = math.max(left + 24.0, x1.clamp(0.0, width)).toDouble();
+    final barWidth = right - left;
+    final pinnedLeft = left;
+    // Plage visible dans la barre (les losanges s'y positionnent).
+    final visibleStart = zoom.timeFor(left, width);
+    final visibleEnd = zoom.timeFor(right, width);
 
     return Positioned(
       left: pinnedLeft,
@@ -810,10 +826,9 @@ class _BoneBar extends StatelessWidget {
             for (final key in track)
               Align(
                 alignment: Alignment(
-                  ((key.timeMs - first) / math.max(1, last - first)).clamp(
-                            0.0,
-                            1.0,
-                          ) *
+                  ((key.timeMs - visibleStart) /
+                                  math.max(1, visibleEnd - visibleStart))
+                              .clamp(0.0, 1.0) *
                           2 -
                       1,
                   0.75,

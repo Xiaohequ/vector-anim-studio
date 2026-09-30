@@ -509,7 +509,7 @@ void main() {
       expect(project.durationMs, 7000);
     });
 
-    test('spans espacés tiennent sur la même ligne', () {
+    test('formes espacées : une ligne chacune (barres = durée de rendu)', () {
       final project = AnimationProject.blank(name: 'P');
       final shape = VectorShape(name: 'A');
       shape.layers.add(ShapeLayer(name: 'L', kind: ShapeKind.rect));
@@ -517,14 +517,15 @@ void main() {
       shape.upsertKeyframe(2000, shape.poseAt(0));
       project.shapes.add(shape);
 
-      // Un trou reste possible : deux formes espacées tiennent sur la même
-      // ligne (l'empilement glouton réutilise une ligne après un trou).
       final b = VectorShape(name: 'B');
       b.layers.add(ShapeLayer(name: 'L', kind: ShapeKind.rect));
       b.upsertKeyframe(6000, b.poseAt(0));
       b.upsertKeyframe(7000, b.poseAt(0));
       project.shapes.add(b);
-      expect(TimelineLayout.packLanes(project.shapes).length, 1);
+
+      // v0.18.2 : la barre de chaque forme couvre [0, fullSpan] — plus
+      // de réutilisation de ligne après un trou, une ligne par forme.
+      expect(TimelineLayout.packLanes(project.shapes).length, 2);
     });
   });
 

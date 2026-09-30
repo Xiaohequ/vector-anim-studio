@@ -1,64 +1,23 @@
 import '../models/animation.dart';
 import '../models/skeleton.dart';
 
-/// Empilement des formes ANIMÉES sur la timeline : une ligne par « piste ».
+/// Empilement des formes sur la timeline : une ligne par « piste ».
 ///
-/// La barre d'une forme couvre le span de son contenu (1re → dernière
-/// keyframe) : les fenêtres d'affichage ont été supprimées (v0.18). Deux
-/// formes dont les spans se chevauchent occupent deux lignes parallèles ;
-/// une forme dont le span ne croise aucune autre réutilise la ligne libre.
+/// v0.18.2 : la barre d'une forme = sa durée de rendu [0, fullSpanMs],
+/// indépendante des keyframes — ajouter une keyframe ne rétrécit plus le
+/// segment (comportement v0.17 retrouvé). Toutes les barres couvrent donc
+/// la même plage et se chevauchent : chaque forme occupe sa propre ligne,
+/// triée par nom (l'ancien tri par début de span n'a plus de sens).
+/// Les barres d'OS (packBoneLanes) restent au span de leur piste.
 class TimelineLayout {
   const TimelineLayout._();
 
-  static List<List<VectorShape>> packLanes(
-    List<VectorShape> shapes, {
-    int fullSpanMs = 4000,
-  }) {
-    // TOUTES les formes ont une barre (v0.18.1, retours appareil : ajouter
-    // une forme doit montrer un segment — sa « durée de rendu ») ; sans
-    // keyframe, la barre couvre [0, fullSpanMs] (4 s par défaut, étendu à
-    // la durée du projet). Une instance s'anime en boucle même sans
-    // keyframe hôte → même barre pleine durée.
-    final animated = shapes.toList()
-      ..sort((a, b) {
-        final byStart = _spanStart(
-          a,
-          fullSpanMs,
-        ).compareTo(_spanStart(b, fullSpanMs));
-        return byStart != 0 ? byStart : a.name.compareTo(b.name);
-      });
-
-    final lanes = <List<VectorShape>>[];
-    final laneEnds = <int>[];
-
-    for (final shape in animated) {
-      final start = _spanStart(shape, fullSpanMs);
-      var placed = false;
-      for (var i = 0; i < lanes.length; i++) {
-        if (laneEnds[i] <= start) {
-          lanes[i].add(shape);
-          laneEnds[i] = _spanEnd(shape, fullSpanMs);
-          placed = true;
-          break;
-        }
-      }
-      if (!placed) {
-        lanes.add(<VectorShape>[shape]);
-        laneEnds.add(_spanEnd(shape, fullSpanMs));
-      }
-    }
-    return lanes;
+  static List<List<VectorShape>> packLanes(List<VectorShape> shapes) {
+    final sorted = shapes.toList()..sort((a, b) => a.name.compareTo(b.name));
+    return <List<VectorShape>>[
+      for (final shape in sorted) <VectorShape>[shape],
+    ];
   }
-
-  /// Début du span affiché : 1re keyframe, ou 0 pour une instance sans
-  /// keyframe (barre pleine durée).
-  static int _spanStart(VectorShape shape, int fullSpanMs) =>
-      shape.keyframes.isEmpty ? 0 : shape.spanStartMs;
-
-  /// Fin du span affiché : dernière keyframe, ou [fullSpanMs] pour une
-  /// instance sans keyframe.
-  static int _spanEnd(VectorShape shape, int fullSpanMs) =>
-      shape.keyframes.isEmpty ? fullSpanMs : shape.spanEndMs;
 
   static int laneIndexOf(List<List<VectorShape>> lanes, VectorShape shape) {
     for (var i = 0; i < lanes.length; i++) {

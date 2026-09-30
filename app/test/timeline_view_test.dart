@@ -10,6 +10,7 @@ class _Rec {
   int? seeked;
   final List<(String, int)> moved = <(String, int)>[];
   String? ended;
+  String? selected;
 }
 
 AnimationProject _project() {
@@ -29,7 +30,7 @@ Widget _host(AnimationProject project, TimelineZoomState zoom, _Rec rec) {
         timeMs: 0,
         zoom: zoom,
         selectedShapeId: null,
-        onSelect: (_) {},
+        onSelect: (shape) => rec.selected = shape.id,
         onMoveChanged: (shape, target) {
           rec.moved.add((shape.id, target));
           shape.shiftBy(target - shape.spanStartMs);
@@ -46,49 +47,89 @@ Widget _host(AnimationProject project, TimelineZoomState zoom, _Rec rec) {
 
 /// Largeur de mise en page des enfants positionnés du Stack de la timeline
 /// (les barres y sont posées avec une width explicite).
-List<double> _barWidths(WidgetTester tester) {
-  final widths = <double>[];
+List<double> _barWidths(WidgetTester tester) =>
+    [for (final (_, width) in _barRects(tester)) width];
+
+/// (offset.dx, largeur) des enfants positionnés du Stack de la timeline.
+List<(double, double)> _barRects(WidgetTester tester) {
+  final rects = <(double, double)>[];
   tester.renderObject<RenderStack>(find.byType(Stack).first).visitChildren((
     child,
   ) {
-    final width = (child.parentData as StackParentData?)?.width;
-    if (width != null) widths.add(width);
+    final data = child.parentData as StackParentData?;
+    if (data?.width != null) rects.add((data!.offset.dx, data.width!));
   });
-  return widths;
+  return rects;
 }
 
 void main() {
-  testWidgets('la largeur des barres = durée × pixels/ms (pas le contraire)', (
+  testWidgets('le segment couvre la durée de rendu, même zoomé (v0.18.2)', (
     tester,
   ) async {
     final project = _project();
     final rec = _Rec();
-    // Span 500–1500 ms (2 keyframes) pour tester la largeur du span.
+    // Keyframes 500–1500 ms : sous v0.18.x la barre se repliait sur ce
+    // span ; depuis v0.18.2 elle reste la durée de rendu [0, 4 s].
     project.shapes.first.upsertKeyframe(1500, project.shapes.first.poseAt(1500));
     await tester.pumpWidget(
       _host(project, TimelineZoomState(durationOf: () => 4000), rec),
     );
 
-    // Vue 4000 ms sur 800 px : span 500–1500 ms → 200 px (le bug v0.6.0
-    // donnait durée × ms/px = 5000 px, une barre qui couvre tout l'écran).
-    expect(_barWidths(tester), contains(200.0));
+    // Vue 4000 ms sur 800 px : barre 800 px (PAS le span 200 px des
+    // keyframes — le repli v0.18.x est corrigé ; le bug v0.6.0 d'unité
+    // inversée reste exclu : durée × px/ms, pas ms/px).
+    expect(_barWidths(tester), contains(800.0));
 
-    // Zoom ×4 (vue 1000 ms) : le même segment occupe toute la largeur.
+    // Zoom ×4 (vue 1000 ms, offset 1500 ms) : le segment couvre encore
+    // tout le viewport (le clamp v0.18.0 avec ancre x0 = -1200 px rendait
+    // la barre entièrement invisible).
     final zoom = TimelineZoomState(durationOf: () => 4000)..zoomAt(4, 0.5);
     await tester.pumpWidget(_host(project, zoom, rec));
     expect(zoom.viewMs, 1000);
     expect(_barWidths(tester), contains(800.0));
+    for (final (dx, w) in _barRects(tester)) {
+      if (w < 100) continue; // tête de lecture, barre hors vue…
+      expect(dx, greaterThanOrEqualTo(0.0));
+    }
   });
 
-  testWidgets('un tap sur le fond déplace la tête de lecture', (tester) async {
+  testWidgets('ajouter une keyframe ne rétrécit pas le segment (v0.18.2)', (
+    tester,
+  ) async {
+    final project = AnimationProject.blank();
+    final statique = VectorShape(name: 'Statique');
+    statique.layers.add(ShapeLayer(name: 'L', kind: ShapeKind.rect));
+    project.shapes.add(statique);
+    final rec = _Rec();
+    final zoom = TimelineZoomState(durationOf: () => 4000);
+    await tester.pumpWidget(_host(project, zoom, rec));
+    expect(_barWidths(tester), contains(800.0));
+
+    // Keyframe à 500 ms : la barre GARDE sa pleine durée (v0.18.1 la
+    // repliait sur le span des keyframes → 24 px à x = 100).
+    statique.upsertKeyframe(500, statique.poseAt(500));
+    await tester.pumpWidget(_host(project, zoom, rec));
+    expect(_barWidths(tester), contains(800.0));
+    expect(statique.spanStartMs, 500);
+  });
+
+  testWidgets('un tap sur la règle scrubbe ; un tap sur la barre sélectionne', (
+    tester,
+  ) async {
     final project = _project();
     final rec = _Rec();
     await tester.pumpWidget(
       _host(project, TimelineZoomState(durationOf: () => 4000), rec),
     );
 
-    // Hors de la barre (x > 200) : le tap tombe sur le fond → scrub.
+    // La barre pleine durée couvre la ligne : le scrub au tap passe par
+    // la RÈGLE (IgnorePointer, v0.18.2).
+    await tester.tapAt(const Offset(400, 10));
+    expect(rec.seeked, 2000);
+
+    // Un tap sur la barre sélectionne la forme (et ne scrubbe pas).
     await tester.tapAt(const Offset(400, 30));
+    expect(rec.selected, project.shapes.first.id);
     expect(rec.seeked, 2000);
   });
 
@@ -102,9 +143,9 @@ void main() {
       _host(project, TimelineZoomState(durationOf: () => 4000), rec),
     );
 
-    // Appui long au MILIEU de la barre (span = keyframe unique à 500 ms →
-    // barre 24 px à x = 100..124) puis glisser de 200 px : ms/px = 4000/800
-    // = 5 → cible = origine (500) + 1000 = 1500.
+    // Appui long sur la barre pleine durée (x = 112 tombe dessus) puis
+    // glisser de 200 px : ms/px = 4000/800 = 5 → cible = origine (500)
+    // + 1000 = 1500. La barre reste pleine durée, les keyframes bougent.
     final gesture = await tester.startGesture(const Offset(112, 27));
     await tester.pump(const Duration(milliseconds: 600));
     await gesture.moveBy(const Offset(200, 0));
@@ -177,8 +218,8 @@ void main() {
       _host(project, TimelineZoomState(durationOf: () => 4000), rec),
     );
 
-    // Glisser au milieu de la barre (span 500→barre x = 100..124) : scrub
-    // en espace vue, pas de déplacement. x final 232 px × 5 ms/px = 1160.
+    // Glisser sur la barre pleine durée (ancre x = 0) : scrub en espace
+    // vue, pas de déplacement. x final 232 px × 5 ms/px = 1160.
     await tester.dragFrom(const Offset(112, 27), const Offset(120, 0));
     await tester.pump();
 

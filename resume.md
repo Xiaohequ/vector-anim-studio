@@ -83,6 +83,10 @@ v0.9.0, l'**animation squelette** (rig maître).
   keyframes d'os (opacité/étirement/écrasement/move portés comme sur les
   formes), scrub de barre corrigé (position locale → espace vue), barres
   timeline = span de contenu (instances pleine durée).
+- **v0.18.1** : le segment de rendu par défaut revient sur la timeline —
+  TOUTES les formes ont une barre ; sans keyframe → `[0, max(durée, 4 s)]`
+  ; UI start/end toujours absente ; appui long inerte sans keyframe (pas
+  d'undo fantôme) — **validé appareil 30/09** (retours → v0.18.2).
 
 ### Historique détaillé
 
@@ -569,11 +573,20 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 ## 🔜 Ce qui doit être fait (roadmap)
 
-### v0.18.1 (bugfix retours appareil — CI run #40, à valider sur appareil)
-- **Segment de rendu par défaut restauré** : ajouter une forme affiche un
-  segment sur la timeline (retour v0.18.0 : aucun segment ne s'affichait) ;
-  sans keyframe → `[0, 4 s]` étendu à la durée du projet ; l'UI start/end
-  reste supprimée ; appui long sans keyframe = rien (pas d'undo fantôme).
+### v0.18.2 (bugfix retours appareil v0.18.1 — CI run #41, à valider sur appareil)
+- **Le segment garde sa durée quand on ajoute une keyframe** (retour
+  v0.18.1 : la barre se repliait sur le span des keyframes, un segment
+  d'un seul losange) : la barre de TOUTES les formes = la durée de rendu
+  `[0, max(durée projet, 4 s)]`, indépendante des keyframes (comportement
+  v0.17) ; une keyframe qui étend la durée du projet allonge le segment.
+- **Appui long = décale les keyframes** : la barre reste pleine durée,
+  les losanges suivent le doigt (l'ancien « déplacement de segment »)
+  ; une ligne par forme, triées par nom.
+- **Fix barres invisibles au zoom** : une barre plus large que la vue
+  couvre tout le viewport (intersection) — le clamp v0.18.0 avec ancre
+  x0 négative rendait la barre entièrement invisible au zoom avant ;
+  même fix sur les barres d'os (piste hors vue → barre vide) ; la règle
+  est traversée par les taps (tap règle = scrub, tap barre = sélection).
 
 ### v0.18.0 (CI run #39 verte, release `v0.18.0-build39` — testée appareil 30/09, retours corrigés en v0.18.1)
 - **Fenêtres start/end supprimées** : les formes s'affichent pendant tout le

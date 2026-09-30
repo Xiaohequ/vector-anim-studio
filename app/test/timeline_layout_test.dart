@@ -13,42 +13,17 @@ void main() {
   }
 
   group('TimelineLayout.packLanes', () {
-    test('place deux spans qui ne se chevauchent pas sur la même ligne', () {
-      final lanes = TimelineLayout.packLanes(<VectorShape>[
-        shape('A', 0, 1000),
-        shape('B', 1000, 2000),
-      ]);
-      expect(lanes.length, 1);
-      expect(lanes.first.map((s) => s.name), <String>['A', 'B']);
-    });
-
-    test('empile deux spans qui se chevauchent sur deux lignes', () {
-      final lanes = TimelineLayout.packLanes(<VectorShape>[
-        shape('A', 0, 2000),
-        shape('B', 500, 1500),
-      ]);
-      expect(lanes.length, 2);
-      expect(lanes[0].first.name, 'A');
-      expect(lanes[1].first.name, 'B');
-    });
-
-    test('réutilise la première ligne libre', () {
-      final lanes = TimelineLayout.packLanes(<VectorShape>[
-        shape('A', 0, 1000),
-        shape('B', 0, 3000),
-        shape('C', 1200, 2000),
-      ]);
-      expect(lanes.length, 2);
-      expect(lanes[0].map((s) => s.name), <String>['A', 'C']);
-      expect(lanes[1].map((s) => s.name), <String>['B']);
-    });
-
-    test('trie les formes par début de span', () {
+    test('chaque forme occupe sa propre ligne, triée par nom (v0.18.2)', () {
       final lanes = TimelineLayout.packLanes(<VectorShape>[
         shape('B', 1000, 2000),
+        VectorShape(name: 'Statique'),
         shape('A', 0, 500),
       ]);
-      expect(lanes.first.map((s) => s.name), <String>['A', 'B']);
+      // Barre = durée de rendu [0, fullSpan] pour TOUTES les formes
+      // (keyframes ou pas — v0.18.2) : chevauchement total → une ligne
+      // par forme, ordre alphabétique.
+      expect(lanes.length, 3);
+      expect(lanes.map((l) => l.single.name), <String>['A', 'B', 'Statique']);
     });
 
     test('laneIndexOf retrouve la ligne d’une forme', () {
@@ -59,18 +34,7 @@ void main() {
       expect(TimelineLayout.laneIndexOf(lanes, b), 1);
     });
 
-    test('les formes sans keyframe ont une barre pleine durée (v0.18.1)', () {
-      final staticShape = VectorShape(name: 'Statique');
-      final lanes = TimelineLayout.packLanes(<VectorShape>[
-        shape('A', 0, 1000),
-        staticShape,
-      ]);
-      // Le span par défaut [0, fullSpanMs] chevauche tout → sa propre ligne.
-      expect(lanes.length, 2);
-      expect(TimelineLayout.laneIndexOf(lanes, staticShape), 1);
-    });
-
-    test('deux formes statiques sans keyframe : deux lignes', () {
+    test('deux formes statiques sans keyframe : deux lignes (v0.18.1)', () {
       final lanes = TimelineLayout.packLanes(<VectorShape>[
         VectorShape(name: 'S1'),
         VectorShape(name: 'S2'),
