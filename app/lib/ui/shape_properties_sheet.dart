@@ -172,28 +172,50 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                 if (widget.onMirror != null &&
                     !shape.isInstance &&
                     shape.layers.isNotEmpty)
-                  Row(children: <Widget>[
-                    TextButton.icon(
-                      onPressed: () {
-                        widget.onMirror!(true);
-                        _refresh();
-                      },
-                      icon: const Icon(Icons.flip, size: 16),
-                      label: const Text('Miroir H'),
-                    ),
-                    const SizedBox(width: 4),
-                    TextButton.icon(
-                      onPressed: () {
-                        widget.onMirror!(false);
-                        _refresh();
-                      },
-                      icon: Transform.rotate(
-                        angle: math.pi / 2,
-                        child: const Icon(Icons.flip, size: 16),
+                  Row(
+                    children: <Widget>[
+                      TextButton.icon(
+                        onPressed: () {
+                          widget.onMirror!(true);
+                          _refresh();
+                        },
+                        icon: const Icon(Icons.flip, size: 16),
+                        label: const Text('Miroir H'),
                       ),
-                      label: const Text('Miroir V'),
+                      const SizedBox(width: 4),
+                      TextButton.icon(
+                        onPressed: () {
+                          widget.onMirror!(false);
+                          _refresh();
+                        },
+                        icon: Transform.rotate(
+                          angle: math.pi / 2,
+                          child: const Icon(Icons.flip, size: 16),
+                        ),
+                        label: const Text('Miroir V'),
+                      ),
+                    ],
+                  ),
+                // v0.19.1 : forme PORTÉE par un os → transformations
+                // verrouillées au doigt ET dans les sliders (translation,
+                // rotation, échelle) — seul l'os la bouge, ou une
+                // dissociation (Squelettes ▸ Délier la pièce). Placé AVANT
+                // les sliders : le message reste visible même si la liste
+                // est paresseuse sous la hauteur max de la sheet.
+                if (widget.skeletonRig != null &&
+                    widget.skeletonRig!.isAttached(shape.id))
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2, bottom: 2),
+                    child: Text(
+                      '« ${shape.name} » est liée à l’os « '
+                      '${_carrierName(shape)} » : transformations bloquées '
+                      '— bougez l’os (Squelettes ▸ Délier pour libérer).',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Color(0xFFF2C94C),
+                      ),
                     ),
-                  ]),
+                  ),
                 for (final property in AnimatableProperty.values)
                   if (property != AnimatableProperty.strokeWidth ||
                       !shape.isInstance)
@@ -468,6 +490,26 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
     ];
   }
 
+  /// Nom de l’os qui porte [shape] (liaison de la forme entière, sinon
+  /// d’une de ses couches) — pour les messages de transformation bloquée.
+  String _carrierName(VectorShape shape) {
+    final rig = widget.skeletonRig!;
+    return rig.boneById(rig.carrierBoneId(shape.id))?.name ?? '?';
+  }
+
+  /// Propriétés de TRANSFORMATION verrouillées pour une pièce portée par un
+  /// os (v0.19.1) : translation, rotation et échelle (facteurs d'axe
+  /// compris). Opacité et épaisseur de trait restent libres : elles ne
+  /// déplacent pas la pièce.
+  static const Set<AnimatableProperty> _transformProperties = {
+    AnimatableProperty.x,
+    AnimatableProperty.y,
+    AnimatableProperty.rotation,
+    AnimatableProperty.scale,
+    AnimatableProperty.scaleX,
+    AnimatableProperty.scaleY,
+  };
+
   Widget _buildPropertyRow(
     VectorShape shape,
     AnimatableProperty property,
@@ -485,6 +527,14 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
       AnimatableProperty.strokeWidth => (0.0, 6.0, 0.05),
     };
     final animated = shape.isAnimated(property);
+    // v0.19.1 : transformations verrouillées pour une forme portée par un
+    // os — translation, rotation ET échelle : les gestes canvas sont
+    // bloqués du même coup (cf. StudioScreen).
+    final rig = widget.skeletonRig;
+    final transformLocked =
+        rig != null &&
+        rig.isAttached(shape.id) &&
+        _transformProperties.contains(property);
     return Row(
       children: <Widget>[
         SizedBox(
@@ -500,10 +550,12 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
             max: max,
             divisions: ((max - min) / step).round().clamp(1, 2000),
             value: value.clamp(min, max),
-            onChanged: (next) {
-              widget.onPropertyChanged(property, next);
-              _refresh();
-            },
+            onChanged: transformLocked
+                ? null
+                : (next) {
+                    widget.onPropertyChanged(property, next);
+                    _refresh();
+                  },
           ),
         ),
         SizedBox(

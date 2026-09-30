@@ -6,10 +6,13 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Repo : https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`)
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
-- Dernière version : **0.19.0** (miroir H/V d'un groupe de couches —
-  drapeaux `flipH`/`flipV`, schéma DB v7, format vasf v4 ; 236/236 tests ;
-  CI run #42 verte, release `v0.19.0-build42`, APK 54,1 Mo —
-  **VALIDÉE APPAREIL (miroir OK)**).
+- Dernière version : **0.19.1** (pièce portée par un os = plus aucune
+  manipulation au doigt : **non sélectionnable** au tap, déplacement /
+  rotation / échelle bloqués, sliders X/Y/rotation/échelle verrouillés ;
+  seul l'os, ou une dissociation, la bouge ; 247/247 tests).
+- v0.19.0 (miroir H/V d'un groupe de couches — drapeaux `flipH`/`flipV`,
+  schéma DB v7, format vasf v4 ; CI run #42 verte, release
+  `v0.19.0-build42`, APK 54,1 Mo — **VALIDÉE APPAREIL : miroir OK**).
   v0.17.0 (pipeline agents — aperçu headless officiel via le vrai moteur,
   import strict, cycles par os). v0.16.3 (bugfix — le curseur de l'éditeur
   démarre au playhead du STUDIO) **VALIDÉE APPAREIL 28/09 : le morphing
@@ -193,6 +196,50 @@ v0.9.0, l'**animation squelette** (rig maître).
   foyer DÉJÀ déplacé : premier move de 22 px écran (< slop IK 26) puis move de
   correction ; rig initial JAMAIS tendu à fond (L1+L2 > distance joint→effecteur)
   sinon toute cible est hors de portée (le solveur clampe, tip ≠ cible).
+
+### v0.19.1 (pièce portée par un os : plus aucune manipulation au doigt)
+- **Demande utilisateur** : « ne pas déplacer une forme quand la forme est
+  associée à un os — seul déplacement autorisé via l'os ou après
+  dissociation », puis « verrouiller aussi la rotation et échelle,
+  rendre la forme non sélectionnable ».
+- **Détection** : `SkeletonRig.isAttached(shapeId)` + `carrierBoneId`
+  (liaison de la forme entière, sinon la 1ʳᵉ couche liée de cette forme).
+- **Geste canvas** : garde UNIQUE dans `_onCanvasGestureStart`, placée
+  AVANT les branches échelle / rotation / déplacement → tout geste de
+  transformation est refusé (`_gesture = none`, aucun snapshot d'undo).
+  `_snack` nommant l'os seulement si le doigt est SUR la pièce. Les
+  gestes d'os (IK, poignée ✥, rotation d'os) sont traités AU-DESSUS et
+  restent libres.
+- **Non sélectionnable** : dans `_onCanvasTapUp`, le tap sur une pièce
+  liée n'élève pas la sélection + message « non sélectionnable » ; le menu
+  Formes la choisit quand même (passerelle obligatoire pour la sheet ⚙ et
+  pour Squelettes ▸ Délier, sinon dead-end).
+- **Sheet ⚙** : `transformLocked` (jeu `_transformProperties`) désactive
+  Position X/Y, Rotation, Échelle, Échelle X/Y ; rappel ambre AU-DESSUS
+  des sliders (construit avant → visible même avec la liste paresseuse).
+  Opacité et Épaisseur restent libres.
+- **Changement de comportement** : le glisser d'une pièce liée AU REPOS ne
+  déplace plus l'ancrage de l'os (v0.9.5 « l'os suit la pièce ») — le
+  verrou prime ; déplacer l'ancrage = poignée ✥ de l'os.
+- **Tests : 247/247** (+11 : 7 dans `bound_shape_lock_test.dart` = 3
+  modèle + 4 sheet, 4 dans `widget_test.dart` = glisser bloqué + témoin
+  non lié, tap non sélectionnable, pincement bloqué, rotation par poignée
+  bloquée), analyze 0.
+- **Pièges harnais (les 4 tombés en debug)** : ① la preview du studio est
+  clamped à ~200 px en fenêtre 800×600 (échelle 0,159) → mettre
+  `tester.view.physicalSize` en HAUTEUR (800×1400 → ~366 px, échelle
+  0,286) ET une pièce assez grande (400×300) pour que le pointeur reste
+  dedans après la slop (18 px) — sinon `SelectionGeometry.hit` est faux
+  et « rien ne se passe » sans erreur ; ② `_load()` AUTO-SÉLECTIONNE la
+  dernière forme au chargement → un test de « non sélectionnable » doit
+  d'abord désélectionner (tap sur l'OS, sélection exclusive) ; ③ le
+  SnackBar apparaît en BAS et recouvre la barre d'outils → pomper 5 s
+  avant d'utiliser un menu (sinon le tap tombe sur le message, et
+  `find.textContaining('Bloc')` matche même le texte du snack) ; ④ l'os
+  de test doit être LOIN de la pièce (`segmentTouchSlop` 13 px,
+  `tipTouchSlop` 26 px : sinon le tap sur la pièce est absorbé par l'os).
+- Hors périmètre (à décider) : les couches d'une pièce liée restent
+  déplaçables dans l'éditeur de forme (X/Y de couche).
 
 ### v0.19.0 (miroir H/V d'un groupe de couches)
 - **Boutons « Miroir H » / « Miroir V »** dans la sheet ⚙ de la forme

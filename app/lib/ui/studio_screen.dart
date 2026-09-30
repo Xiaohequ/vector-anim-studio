@@ -1361,6 +1361,24 @@ class _StudioScreenState extends State<StudioScreen>
       controller.timeMs,
       _gestureBoneFrame,
     );
+    // v0.19.1 : pièce PORTÉE par un os → AUCUN geste de transformation
+    // (déplacement, rotation, échelle) : seul l'os la bouge, ou une
+    // dissociation (Squelettes ▸ Délier). Le message n'apparaît que si le
+    // doigt est posé SUR la pièce (ailleurs = geste ignoré, comme avant).
+    // Les gestes d'os (IK, poignée de rotation) sont traités AU-DESSUS et
+    // restent libres.
+    if (rig != null && rig.isAttached(shape.id)) {
+      _gesture = _CanvasGesture.none;
+      if (SelectionGeometry.hit(bounds, pose, geo, details.localFocalPoint)) {
+        final bone = rig.boneById(rig.carrierBoneId(shape.id));
+        _snack(
+          '« ${shape.name} » est liée à l’os « ${bone?.name ?? '?'} » : '
+          'transformations bloquées — bougez l’os, ou dissociez la pièce '
+          '(Squelettes ▸ Délier).',
+        );
+      }
+      return;
+    }
     if (_activePointers >= 2) {
       // Pinch : échelle de la forme sélectionnée.
       _gesture = _CanvasGesture.scale;
@@ -1381,7 +1399,8 @@ class _StudioScreenState extends State<StudioScreen>
       geo,
       details.localFocalPoint,
     )) {
-      // Corps de la forme : déplacement.
+      // Corps de la forme : déplacement (le verrou des pièces liées est
+      // traité plus haut, avant les gestes d'échelle et de rotation).
       _gesture = _CanvasGesture.move;
     } else {
       _gesture = _CanvasGesture.none;
@@ -1765,6 +1784,18 @@ class _StudioScreenState extends State<StudioScreen>
     }
     final hit = _hitShapeAt(project, controller, geo, details.localPosition);
     if (hit != null) {
+      // v0.19.1 : une pièce PORTÉE par un os n'est plus sélectionnable au
+      // doigt (aucune manipulation possible) — elle reste choisissable via
+      // le menu Formes pour l'ouvrir dans la sheet ⚙ ou la délier.
+      if (rig != null && rig.isAttached(hit.id)) {
+        final bone = rig.boneById(rig.carrierBoneId(hit.id));
+        _snack(
+          '« ${hit.name} » est liée à l’os « ${bone?.name ?? '?'} » : '
+          'non sélectionnable — bougez l’os, ou choisissez-la dans le menu '
+          'Formes (Squelettes ▸ Délier pour libérer).',
+        );
+        return;
+      }
       setState(() {
         _selectedId = hit.id;
         _selectedBoneId = null;

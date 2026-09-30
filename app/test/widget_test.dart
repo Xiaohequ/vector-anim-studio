@@ -789,6 +789,206 @@ void main() {
       expect(summaries.map((s) => s.name), isNot(contains('Importé')));
     },
   );
+
+  // ------------------------------------- v0.19.1 : forme portée par un os
+
+  /// Pièce squelette 720×1280 au CENTRE du canvas ; [bind] la lie à l'os.
+  /// La pièce est VOLONTAIREMENT grande (400×300) : le canvas du studio est
+  /// limité en hauteur (~366 px → échelle 0,29), une petite pièce ne
+  /// laisserait pas le pointeur rester dedans pendant la slop du geste.
+  AnimationProject lockedPiece({required bool bind}) {
+    final project = AnimationProject.blank(
+      name: 'Film',
+      type: ProjectType.skeleton,
+    );
+    project.width = 720;
+    project.height = 1280;
+    final shape = VectorShape(name: 'Bloc', x: 360, y: 640);
+    shape.layers.add(
+      ShapeLayer(name: 'L', kind: ShapeKind.rect, width: 400, height: 300),
+    );
+    project.shapes.add(shape);
+    final rig = SkeletonRig();
+    // Os LOIN de la pièce (sc. y 150→230 vs pièce à y 640) : le tap de test
+    // sur la pièce ne doit pas être absorbé par l'os (segmentTouchSlop 13 px,
+    // tipTouchSlop 26 px) — sinon c'est l'OS qui se sélectionne.
+    final bone = RigBone(name: 'Tronc', offsetX: 360, offsetY: 150, length: 80);
+    rig.addBone(bone);
+    if (bind) rig.bindShape(shape.id, bone.id);
+    project.skeleton = rig;
+    return project;
+  }
+
+  /// Sélectionne la pièce via le menu Formes (le TAP au canvas est ignoré
+  /// pour une pièce liée — v0.19.1) et vérifie que le bouton ⚙ apparaît.
+  Future<void> selectPieceViaMenu(WidgetTester tester) async {
+    await tester.tap(find.byTooltip('Formes'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('Bloc').last);
+    await tester.pumpAndSettle();
+    // Sélection confirmée : le bouton ⚙ n'existe que pour une forme
+    // sélectionnée (sinon, la suite ne prouve rien).
+    expect(
+      find.byTooltip('Propriétés de la forme'),
+      findsOneWidget,
+      reason: 'la pièce doit être sélectionnée avant le geste',
+    );
+  }
+
+  /// Sélectionne la pièce puis la glisse de [dx] px écran (deux moves :
+  /// le recognizer Scale ne démarre qu'après ~18 px de slop).
+  Future<void> dragSelectedPiece(
+    WidgetTester tester,
+    Offset from,
+    double dx,
+  ) async {
+    await selectPieceViaMenu(tester);
+
+    final gesture = await tester.startGesture(from);
+    await tester.pump();
+    await gesture.moveBy(Offset(dx, 0));
+    await tester.pump();
+    await gesture.moveBy(const Offset(6, 0));
+    await tester.pump();
+    await gesture.up();
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets(
+    'forme liée à un os : le glisser ne la déplace pas (avertissement)',
+    (tester) async {
+      final repository = _MemoryRepository();
+      // Fenêtre HAUTE : la preview du studio est clampée à ~200 px en 800×600
+      // (échelle 0,159) — même une pièce de 400 px ne laisserait pas le
+      // pointeur rester dedans pendant la slop du geste (18 px).
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final project = lockedPiece(bind: true);
+      await pumpStudio(tester, repository, project);
+      final (topLeft, geo) = canvasHarness(tester, project);
+      final center = topLeft + geo.sceneToCanvas(const Offset(360, 640));
+
+      await dragSelectedPiece(tester, center, 30);
+
+      expect(
+        project.shapes.first.x,
+        360,
+        reason: 'la pièce portée par un os ne bouge pas au doigt',
+      );
+      expect(project.shapes.first.y, 640);
+      expect(find.textContaining('transformations bloquées'), findsOneWidget);
+      expect(project.shapes.first.keyframes, isEmpty);
+    },
+  );
+
+  testWidgets('pièce liée : le tap au canvas ne la sélectionne pas', (
+    tester,
+  ) async {
+    final repository = _MemoryRepository();
+    tester.view.physicalSize = const Size(800, 1400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final project = lockedPiece(bind: true);
+    await pumpStudio(tester, repository, project);
+    final (topLeft, geo) = canvasHarness(tester, project);
+    final center = topLeft + geo.sceneToCanvas(const Offset(360, 640));
+
+    // Piège : _load() AUTO-SÉLECTIONNE la dernière forme au chargement —
+    // il faut d'abord désélectionner (sélection exclusive : un tap sur l'OS
+    // désélectionne la pièce).
+    final bonePoint = topLeft + geo.sceneToCanvas(const Offset(360, 190));
+    await tester.tapAt(bonePoint);
+    await tester.pumpAndSettle();
+    expect(
+      find.byTooltip('Propriétés de la forme'),
+      findsNothing,
+      reason: 'le tap sur l’os doit désélectionner la pièce',
+    );
+
+    // Tap sur la pièce : toujours pas sélectionnée + message explicatif.
+    await tester.tapAt(center);
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Propriétés de la forme'), findsNothing);
+    expect(find.textContaining('non sélectionnable'), findsOneWidget);
+
+    // Le SnackBar pèse en bas et recouvre la barre d'outils : le laisser se
+    // fermer (4 s) avant d'utiliser le menu, sinon le tap tombe dessus.
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+
+    // Passerelle : le menu Formes la choisit quand même (sheet + Délier).
+    await selectPieceViaMenu(tester);
+  });
+
+  testWidgets('pièce liée sélectionnée : pincement et rotation bloqués', (
+    tester,
+  ) async {
+    final repository = _MemoryRepository();
+    tester.view.physicalSize = const Size(800, 1400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final project = lockedPiece(bind: true);
+    await pumpStudio(tester, repository, project);
+    final (topLeft, geo) = canvasHarness(tester, project);
+    final center = topLeft + geo.sceneToCanvas(const Offset(360, 640));
+    await selectPieceViaMenu(tester);
+
+    // Pincement 2 pointeurs : sans verrou, le bras scale s'applique sans
+    // aucun hit test → l'échelle bougerait. Ici : rien.
+    final left = await tester.startGesture(center - const Offset(60, 0));
+    final right = await tester.startGesture(center + const Offset(60, 0));
+    await left.moveBy(const Offset(-40, 0));
+    await right.moveBy(const Offset(40, 0));
+    await tester.pump();
+    await left.up();
+    await right.up();
+    await tester.pumpAndSettle();
+    expect(project.shapes.first.scale, 1.0);
+
+    // Rotation via la POIGNÉE (position calculée comme l'appli : pose
+    // rig-aware + bounds de la pièce) : la pièce ne pivote pas.
+    final shape = project.shapes.first;
+    final rig = project.skeleton!;
+    final frame = SkeletonPose.evaluate(
+      rig,
+      0,
+    ).frameOf(rig.boneIdForShape(shape.id));
+    final pose = SelectionGeometry.shapePoseWithRig(shape, 0, frame);
+    final bounds = ScenePainter.shapeBounds(shape, 0)!;
+    final handle =
+        topLeft + SelectionGeometry.rotationHandle(bounds, pose, geo);
+    final grip = await tester.startGesture(handle);
+    await grip.moveBy(const Offset(40, 0));
+    await tester.pump();
+    await grip.up();
+    await tester.pumpAndSettle();
+    expect(shape.rotation, 0.0);
+    expect(shape.scale, 1.0);
+    expect(find.textContaining('transformations bloquées'), findsOneWidget);
+  });
+
+  testWidgets('forme NON liée : le glisser la déplace (témoin)', (
+    tester,
+  ) async {
+    final repository = _MemoryRepository();
+    tester.view.physicalSize = const Size(800, 1400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final project = lockedPiece(bind: false);
+    await pumpStudio(tester, repository, project);
+    final (topLeft, geo) = canvasHarness(tester, project);
+    final center = topLeft + geo.sceneToCanvas(const Offset(360, 640));
+
+    await dragSelectedPiece(tester, center, 30);
+
+    expect(
+      project.shapes.first.x,
+      greaterThan(360),
+      reason: 'une pièce libre se déplace normalement',
+    );
+    expect(find.textContaining('est liée à'), findsNothing);
+  });
 }
 
 /// Faux fichier choisi dans le sélecteur : contenu EN MÉMOIRE (aucune I/O

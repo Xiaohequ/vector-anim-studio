@@ -291,6 +291,24 @@ class SkeletonRig {
 
   bool isBound(String shapeId) => bindingForShape(shapeId) != null;
 
+  /// Os qui porte [shapeId] : liaison de la FORME ENTIÈRE, sinon la
+  /// première couche de cette forme qui est liée ; null si rien n'est lié.
+  String? carrierBoneId(String? shapeId) {
+    if (shapeId == null) return null;
+    final whole = bindingForShape(shapeId);
+    if (whole != null) return whole.boneId;
+    for (final binding in bindings) {
+      if (binding.shapeId == shapeId) return binding.boneId;
+    }
+    return null;
+  }
+
+  /// La forme est-elle PORTÉE par le rig — liaison de la forme entière OU
+  /// d'au moins une de ses couches ? v0.19.1 : un tel groupe ne se déplace
+  /// plus au doigt ; seul l'os le transporte, ou une dissociation
+  /// (menu Squelettes ▸ Délier la pièce).
+  bool isAttached(String? shapeId) => carrierBoneId(shapeId) != null;
+
   /// Profondeur dans l'arbre (racine = 0), pour l'indentation de l'UI.
   int depthOf(String boneId) {
     var depth = 0;
