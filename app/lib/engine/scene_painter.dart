@@ -362,6 +362,12 @@ class ScenePainter extends CustomPainter {
     canvas.translate(layer.x, layer.y);
     canvas.rotate(layer.rotation);
     canvas.scale(layer.scale <= 0 ? 0.0001 : layer.scale);
+    // Miroir (v0.19) : réflexion du contenu autour de l'origine de la
+    // couche — primitive ou path, points de base comme nuages de morph
+    // sont dessinés à travers cette transformée.
+    if (layer.flipH || layer.flipV) {
+      canvas.scale(layer.flipH ? -1 : 1, layer.flipV ? -1 : 1);
+    }
 
     switch (layer.kind) {
       case ShapeKind.rect:

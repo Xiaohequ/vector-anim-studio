@@ -293,7 +293,16 @@ class SelectionGeometry {
     final oy = -layer.height / 2;
     return <Offset>[
       for (final p in cloud)
-        localToCanvas(Offset(p.dx + ox, p.dy + oy), pose, geo),
+        // Miroir (v0.19) : le contenu dessiné est reflété autour de
+        // l'origine de la couche — les poignées suivent le RENDU.
+        localToCanvas(
+          Offset(
+            (p.dx + ox) * (layer.flipH ? -1 : 1),
+            (p.dy + oy) * (layer.flipV ? -1 : 1),
+          ),
+          pose,
+          geo,
+        ),
     ];
   }
 

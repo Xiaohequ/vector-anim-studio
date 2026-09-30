@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../engine/timeline_controller.dart';
@@ -28,6 +30,7 @@ class ShapePropertiesSheet extends StatefulWidget {
     this.skeletonRig,
     this.onBindLayer,
     this.onUnbindLayer,
+    this.onMirror,
   });
 
   final AnimationProject project;
@@ -60,6 +63,10 @@ class ShapePropertiesSheet extends StatefulWidget {
 
   /// Délie une couche de son os.
   final Future<void> Function(ShapeLayer layer)? onUnbindLayer;
+
+  /// Miroir du groupe de couches (v0.19) : [horizontal] = miroir d'axe
+  /// vertical (gauche ↔ droite), sinon d'axe horizontal (haut ↔ bas).
+  final void Function(bool horizontal)? onMirror;
 
   /// Écrit le pivot de rotation (offset dx/dy depuis le centre, unités
   /// scène) — v0.13. Statique (non animable) : pas d'auto-key.
@@ -159,6 +166,34 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                   style: const TextStyle(fontSize: 11, color: Colors.white70),
                 ),
                 const SizedBox(height: 4),
+                // Miroir (v0.19) : reflète le groupe de couches — contenu
+                // dessiné (flag de flip), position et rotation de chaque
+                // couche. Non proposé pour les instances (pas de couches).
+                if (widget.onMirror != null &&
+                    !shape.isInstance &&
+                    shape.layers.isNotEmpty)
+                  Row(children: <Widget>[
+                    TextButton.icon(
+                      onPressed: () {
+                        widget.onMirror!(true);
+                        _refresh();
+                      },
+                      icon: const Icon(Icons.flip, size: 16),
+                      label: const Text('Miroir H'),
+                    ),
+                    const SizedBox(width: 4),
+                    TextButton.icon(
+                      onPressed: () {
+                        widget.onMirror!(false);
+                        _refresh();
+                      },
+                      icon: Transform.rotate(
+                        angle: math.pi / 2,
+                        child: const Icon(Icons.flip, size: 16),
+                      ),
+                      label: const Text('Miroir V'),
+                    ),
+                  ]),
                 for (final property in AnimatableProperty.values)
                   if (property != AnimatableProperty.strokeWidth ||
                       !shape.isInstance)

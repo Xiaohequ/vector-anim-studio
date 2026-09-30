@@ -30,6 +30,9 @@ class SimpleAnimationFormat {
   /// lourd) : couleur animée, morph de points, translation d'os.
   static const int version3 = 3;
 
+  /// v4 (v0.19) : miroir du contenu par couche (`flipH` / `flipV`).
+  static const int version4 = 4;
+
   // Défauts (canvas validé utilisateur : 720×1280, 25 fps).
   static const double defaultWidth = 720;
   static const double defaultHeight = 1280;
@@ -50,6 +53,7 @@ class SimpleAnimationFormat {
     final shapes = <Map<String, Object?>>[];
     var usesV2 = false;
     var usesV3 = false;
+    var usesV4 = false;
     // Une forme avec une liaison de COUCHE est exportée en layers[] (avec
     // une seule couche si besoin) : le nom de couche doit survivre au
     // round-trip pour que « Forme/Couche » reste importable.
@@ -66,6 +70,7 @@ class SimpleAnimationFormat {
         usesV2 = true;
       }
       if (_shapeUsesV3(shape)) usesV3 = true;
+      if (_shapeUsesV4(shape)) usesV4 = true;
       shapes.add(_shapeToJson(shape, forceLayers: forceLayers));
     }
     final rig = project.skeleton;
@@ -79,7 +84,9 @@ class SimpleAnimationFormat {
       if (rig.bindings.any((b) => b.layerId != null)) usesV2 = true;
     }
     final json = <String, Object?>{
-      'version': usesV3
+      'version': usesV4
+          ? version4
+          : usesV3
           ? version3
           : usesV2
           ? version2
@@ -125,6 +132,8 @@ class SimpleAnimationFormat {
       'scale': shape.scale,
       'opacity': shape.opacity,
     };
+    if (layer.flipH) json['flipH'] = true;
+    if (layer.flipV) json['flipV'] = true;
     if (layer.kind == ShapeKind.path && layer.points.isNotEmpty) {
       json['points'] = _pointsToJson(layer);
     }
@@ -148,6 +157,14 @@ class SimpleAnimationFormat {
     for (final key in shape.keyframes) {
       if (key.layerColors.isNotEmpty) return true;
       if (key.layerPoints.isNotEmpty) return true;
+    }
+    return false;
+  }
+
+  /// La forme utilise-t-elle un flip de couche (miroir, v0.19) ?
+  static bool _shapeUsesV4(VectorShape shape) {
+    for (final layer in shape.layers) {
+      if (layer.flipH || layer.flipV) return true;
     }
     return false;
   }
@@ -198,6 +215,8 @@ class SimpleAnimationFormat {
     if (layer.rotation != 0) json['rotation'] = _radToDeg(layer.rotation);
     if (layer.scale != 1) json['scale'] = layer.scale;
     if (layer.opacity != 1) json['opacity'] = layer.opacity;
+    if (layer.flipH) json['flipH'] = true;
+    if (layer.flipV) json['flipV'] = true;
     if (layer.kind == ShapeKind.path && layer.points.isNotEmpty) {
       json['points'] = _pointsToJson(layer);
     }
@@ -686,6 +705,8 @@ class _Parse {
     'cycle',
     'ref',
     'bone',
+    'flipH',
+    'flipV',
   };
   static const _boneKnownKeys = {
     'name',
@@ -742,6 +763,8 @@ class _Parse {
     'width',
     'height',
     'points',
+    'flipH',
+    'flipV',
   ];
 
   void _parseTheme(Object? raw) {
@@ -784,8 +807,9 @@ class _Parse {
     final version = intAt('version', json['version'], fallback: 0);
     if (version != SimpleAnimationFormat.version &&
         version != SimpleAnimationFormat.version2 &&
-        version != SimpleAnimationFormat.version3) {
-      problem('version : 1, 2 ou 3 attendu (trouvé $version)');
+        version != SimpleAnimationFormat.version3 &&
+        version != SimpleAnimationFormat.version4) {
+      problem('version : 1, 2, 3 ou 4 attendu (trouvé $version)');
     }
     _checkUnknownFields('racine', json, _topKnownKeys);
     _parseTheme(json['theme']);
@@ -1013,6 +1037,10 @@ class _Parse {
       filled: boolAt('$path.filled', json['filled'], fallback: true),
       strokeWidth: numAt('$path.strokeWidth', json['strokeWidth'], fallback: 4),
     );
+    // Miroir (v0.19) : le contenu de la couche est reflété autour de son
+    // origine — accepté à plat (forme à une couche) comme dans layers[].
+    layer.flipH = boolAt('$path.flipH', json['flipH'], fallback: false);
+    layer.flipV = boolAt('$path.flipV', json['flipV'], fallback: false);
     if (localPose) {
       layer.x = numAt('$path.x', json['x'], fallback: 0);
       layer.y = numAt('$path.y', json['y'], fallback: 0);

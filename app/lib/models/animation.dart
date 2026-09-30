@@ -354,6 +354,8 @@ class ShapeLayer {
     this.filled = true,
     List<Offset>? points,
     this.visible = true,
+    this.flipH = false,
+    this.flipV = false,
   }) : id = id ?? generateId('layer'),
        // Normalisé en liste modifiable : des points passés const (littéraux
        // par défaut de l'éditeur) doivent accepter l'insertion/suppression
@@ -376,6 +378,14 @@ class ShapeLayer {
   bool filled;
   List<Offset> points;
   bool visible;
+
+  /// Miroir du contenu (v0.19) : le painter reflète la primitive ou le path
+  /// autour de l'origine de la couche. Posé par « Miroir H/V » de la sheet
+  /// de la forme (qui négue aussi x/y et la rotation de la couche) — jamais
+  /// animé (statique) ; la composition action ∘ flip de rendu redonne le
+  /// contenu d'origine, points et nuages de morph restent donc intacts.
+  bool flipH;
+  bool flipV;
 
   double baseOf(LayerProperty property) => switch (property) {
     LayerProperty.x => x,
@@ -425,6 +435,8 @@ class ShapeLayer {
     filled: filled,
     points: List<Offset>.from(points),
     visible: visible,
+    flipH: flipH,
+    flipV: flipV,
   );
 
   Map<String, Object?> toJson() => {
@@ -443,6 +455,8 @@ class ShapeLayer {
     'filled': filled,
     'points': points.map((p) => [p.dx, p.dy]).toList(),
     'visible': visible,
+    'flipH': flipH,
+    'flipV': flipV,
   };
 
   factory ShapeLayer.fromJson(Map<String, Object?> json) => ShapeLayer(
@@ -467,6 +481,8 @@ class ShapeLayer {
         .map((p) => Offset((p[0] as num).toDouble(), (p[1] as num).toDouble()))
         .toList(),
     visible: json['visible'] as bool? ?? true,
+    flipH: json['flipH'] as bool? ?? false,
+    flipV: json['flipV'] as bool? ?? false,
   );
 }
 
@@ -887,6 +903,28 @@ class VectorShape {
 
   void removeKeyframeAt(int timeMs) =>
       keyframes.removeWhere((k) => k.timeMs == timeMs);
+
+  /// Miroir du groupe de couches (v0.19) : réflexion du CONTENU autour de
+  /// l'origine de la forme. Par couche : drapeau de flip (le painter reflète
+  /// le contenu dessiné autour de l'origine de la couche), position et
+  /// rotation négées — la double réflexion (action ∘ flip de rendu) est
+  /// l'identité sur le contenu : les points de base et les nuages de morph
+  /// restent inchangés, tout comme les keyframes de la forme (poses de
+  /// scène). [horizontal] = miroir d'axe vertical (gauche ↔ droite), sinon
+  /// d'axe horizontal (haut ↔ bas). Deux appels identiques = retour à
+  /// l'original (le flip est auto-inverse).
+  void mirror({required bool horizontal}) {
+    for (final layer in layers) {
+      if (horizontal) {
+        layer.flipH = !layer.flipH;
+        layer.x = -layer.x;
+      } else {
+        layer.flipV = !layer.flipV;
+        layer.y = -layer.y;
+      }
+      layer.rotation = -layer.rotation;
+    }
+  }
 
   /// Remplace toutes les keyframes (presets).
   void setKeyframes(List<ShapeKeyframe> next) {

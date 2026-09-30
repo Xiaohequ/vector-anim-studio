@@ -1,4 +1,4 @@
-# VASF — Vector Anim Studio simple JSON format (v1 + extensions v2, v3)
+# VASF — Vector Anim Studio simple JSON format (v1 + extensions v2, v3, v4)
 
 VASF is a compact, LLM-friendly JSON format for describing a complete 2D vector
 animation (shapes, keyframes, optional skeleton rig) that the **Vector Anim Studio**
@@ -20,7 +20,7 @@ Rules of thumb for generating a valid file:
 - The importer collects ALL problems and reports them in French — fix them and retry.
 - Nested project instances are not representable in VASF-1 (ignored on export).
 - The VASF-2 and VASF-3 extensions (below) are optional: a `version: 1` file
-  stays valid. The importer accepts versions 1, 2 and 3.
+  stays valid. The importer accepts versions 1 to 4.
 
 # Top level
 
@@ -228,7 +228,9 @@ follows. An unknown alias is a collected error. Theme values must be literal
 
 Each layer accepts: `name` ("Couche"), `type`, `color` (alias OK), `filled`,
 `strokeWidth`, `width` / `height`, `points` (path), plus a LOCAL pose
-`x` / `y` (offset from the shape center), `rotation`, `scale`, `opacity`.
+`x` / `y` (offset from the shape center), `rotation`, `scale`, `opacity`,
+and (VASF-4) the content mirror flags `flipH` / `flipV` (see the
+"Mirror — flipH / flipV" section).
 Draw order = array order (last = front). When `layers` is present, the
 shape-level `type/color/filled/strokeWidth/width/height/points` are ignored;
 `x/y/rotation/scale/opacity/keyframes` remain the GROUP pose (the whole face
@@ -421,6 +423,27 @@ padded by repeating its last point (new segments grow out of it).
 
 Accepted by the v0.17 importer and the Python validator. The exporter never
 emits them (cycles are developed into plain keyframes on export).
+
+## Mirror — `flipH` / `flipV` (VASF-4)
+
+A layer may carry `"flipH": true` and/or `"flipV": true`: the painter reflects
+the layer CONTENT (primitive or path, base points like morph clouds) around
+the layer origin. On a single-layer shape the flags may be set at shape level
+(flat format — same meaning). The mirror action in the app (buttons Miroir H /
+Miroir V of the shape sheet) also negates each layer's `x` (H) or `y` (V) and
+rotation, mirroring the whole group around the shape center while it stays in
+place; keyframes are untouched. The app exports `flipH`/`flipV` only when true
+and bumps the file to `version: 4`.
+
+```json
+{
+  "version": 4,
+  "name": "Flipped arrow",
+  "shapes": [
+    {"name": "Flèche", "type": "arrow", "flipH": true, "x": 360, "y": 640, "end": 2}
+  ]
+}
+```
 
 ## Unknown fields are REJECTED
 

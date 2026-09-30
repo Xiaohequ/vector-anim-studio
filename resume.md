@@ -6,10 +6,12 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Repo : https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`)
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
-- Dernière version : **0.17.0** (pipeline agents — aperçu headless
-  officiel via le vrai moteur, import strict, cycles par os ; 224/224
-  tests). v0.16.3 (bugfix — le curseur de l'éditeur démarre au playhead
-  du STUDIO) **VALIDÉE APPAREIL 28/09 : le morphing marche**.
+- Dernière version : **0.19.0** (miroir H/V d'un groupe de couches —
+  drapeaux `flipH`/`flipV`, schéma DB v7, format vasf v4 ; 236/236 tests).
+  v0.17.0 (pipeline agents — aperçu headless officiel via le vrai moteur,
+  import strict, cycles par os). v0.16.3 (bugfix — le curseur de l'éditeur
+  démarre au playhead du STUDIO) **VALIDÉE APPAREIL 28/09 : le morphing
+  marche**.
   v0.16.2 (morph — 1ᵉʳ glisser = 1ʳᵉ pose, ◆ dans l'éditeur,
   snack, aide). v0.16.1 (bugfix — ◆ de la playbar anime la PIÈCE d'un
   projet squelette ; sheet ⚙ des pièces avec ◆ + Interpolation). v0.16.0 = éditeur de points
@@ -187,6 +189,43 @@ v0.9.0, l'**animation squelette** (rig maître).
   foyer DÉJÀ déplacé : premier move de 22 px écran (< slop IK 26) puis move de
   correction ; rig initial JAMAIS tendu à fond (L1+L2 > distance joint→effecteur)
   sinon toute cible est hors de portée (le solveur clampe, tip ≠ cible).
+
+### v0.19.0 (miroir H/V d'un groupe de couches)
+- **Boutons « Miroir H » / « Miroir V »** dans la sheet ⚙ de la forme
+  (`onMirror` → `_mirrorShape` : 1 pression = 1 entrée d'undo + save
+  différée ; pas d'instance — aucune couche) : `VectorShape.mirror()`
+  négue, par couche, `x` (H) ou `y` (V) ET la rotation, et bascule le
+  drapeau `flipH`/`flipV`.
+- **Rendu** : `ScenePainter` ajoute `scale(−1|1, −1|1)` après la pose de
+  la couche → le contenu (primitive, path, points de base ET nuages de
+  morph) est réfléchi autour de l'origine de la couche. La composition
+  action ∘ flip est l'identité sur le contenu → **points/keyframes
+  intacts**, auto-inverse au 2ᵉ appui. Testée par 3 sondes pixel
+  (centroid de masque : miroir H, miroir V, morph à travers le flip).
+- **Éditeur de points** : poignées reflétées (`pointHandlePositions`
+  multiplie par le flip) et delta de glisser / point inséré reconverti
+  dans le repère des données (réflexion auto-inverse).
+- **Persistance** : schéma **v7** (`flip_h`/`flip_v` sur `layers`, ALTER
+  additif) — leçon v0.13.2 appliquée dès le départ ; format **vasf-4**
+  (`flipH`/`flipV` à plat ou dans `layers[]`, émis seulement si vrais,
+  `version: 4` ; import 1→4, 5 → « version : 1, 2, 3 ou 4 attendu »).
+- **Docs/skill** : spec + section « Mirror — flipH/flipV », skill
+  `generer-animation-json` (SKILL.md + references + validateur
+  `validate_vasf.py` + `preview_vasf.py`) alignés.
+- Tests : **236/236** (+12 dans `test/mirror_test.dart`, test de version
+  de `simple_format_test.dart` passé de 4→5), analyze 0 problème.
+- **Numérotation (choix utilisateur)** : livré en **0.19.0**, PAS 0.18.0 —
+  les releases `v0.18.0/0.18.1/0.18.2` (branche `archive-v0.18x`, main
+  remise à 0.17 le 30/09) sont déjà publiées sur GitHub ; un second
+  0.18.0 aurait deux releases homonymes à contenu différent.
+- **Skill/validateur laissés « en avance » (choix utilisateur, option B)** :
+  `SKILL.md`, `validate_vasf.py` et `preview_vasf.py` décrivent encore la
+  v0.18 archivée (start/end supprimés, alpha `#AARRGGBB` honoré, carry des
+  keyframes d'os) que l'app NE fait pas → le validateur émet un
+  avertissement « start/end ignorés (supprimés en v0.18) » alors que
+  l'app les applique encore, et le preview n'est plus fidèle sur ces
+  points. À réaligner (ou à implémenter) au prochain lot ; seules les
+  mentions du MIROIR ont été renumérotées v0.19.
 
 ### v0.17.0 (29/09, pipeline agents : aperçu headless officiel + import strict + cycles par os)
 - **Aperçu headless OFFICIEL** (`test/vasf_preview_test.dart`) : rend un

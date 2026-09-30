@@ -655,9 +655,17 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
           pose,
           geo,
         );
+        // Miroir (v0.19) : le contenu dessiné est reflété autour de
+        // l'origine de la couche — le delta mesuré en espace dessiné est
+        // reconverti dans le repère des DONNÉES (réflexion auto-inverse).
+        final rawDelta = nowLocal - startLocal;
+        final dataDelta = Offset(
+          layer.flipH ? -rawDelta.dx : rawDelta.dx,
+          layer.flipV ? -rawDelta.dy : rawDelta.dy,
+        );
         final cloud = List<Offset>.from(_pointSeed);
         if (_pointIndex >= 0 && _pointIndex < cloud.length) {
-          cloud[_pointIndex] = cloud[_pointIndex] + (nowLocal - startLocal);
+          cloud[_pointIndex] = cloud[_pointIndex] + dataDelta;
         }
         setState(() {
           // Bugfix v0.16.2 : pièce d'un projet SQUELETTE sans AUCUNE
@@ -739,7 +747,10 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
         pose,
         geo,
       );
-      final stored = local + Offset(layer.width / 2, layer.height / 2);
+      final stored = Offset(
+        (layer.flipH ? -local.dx : local.dx) + layer.width / 2,
+        (layer.flipV ? -local.dy : local.dy) + layer.height / 2,
+      );
       if (handles.$1.length < 2) {
         setState(
           () => _draft.insertLayerPoint(layer, layer.points.length, stored),

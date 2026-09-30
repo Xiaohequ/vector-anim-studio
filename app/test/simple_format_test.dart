@@ -476,7 +476,7 @@ void main() {
   });
 
   group('vasf-2', () {
-    test('versions 1/2/3 acceptées, version 4 rejetée (v0.15)', () {
+    test('versions 1/2/3/4 acceptées, version 5 rejetée (v0.19)', () {
       final imported = SimpleAnimationFormat.fromJson(<String, Object?>{
         'version': 2,
         'shapes': <Object?>[
@@ -493,9 +493,18 @@ void main() {
         ],
       });
       expect(v3.shapes, hasLength(1));
+      // v0.19 : la version 4 (miroir flipH/flipV) est acceptée — même sans
+      // champ v4.
+      final v4 = SimpleAnimationFormat.fromJson(<String, Object?>{
+        'version': 4,
+        'shapes': <Object?>[
+          <String, Object?>{'name': 'Bloc', 'type': 'rect', 'end': 1},
+        ],
+      });
+      expect(v4.shapes, hasLength(1));
       expect(
         () => SimpleAnimationFormat.fromJson(<String, Object?>{
-          'version': 4,
+          'version': 5,
           'shapes': <Object?>[
             <String, Object?>{'name': 'Bloc', 'type': 'rect'},
           ],
@@ -504,14 +513,14 @@ void main() {
       );
       try {
         SimpleAnimationFormat.fromJson(<String, Object?>{
-          'version': 4,
+          'version': 5,
           'shapes': <Object?>[
             <String, Object?>{'name': 'Bloc', 'type': 'rect'},
           ],
         });
         fail('SimpleFormatException attendu');
       } on SimpleFormatException catch (error) {
-        expect(error.toString(), contains('version : 1, 2 ou 3 attendu'));
+        expect(error.toString(), contains('version : 1, 2, 3 ou 4 attendu'));
       }
     });
 

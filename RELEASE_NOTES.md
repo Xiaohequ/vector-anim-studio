@@ -1,44 +1,43 @@
-# Vector Anim Studio 0.17.0
+# Vector Anim Studio 0.19.0
 
-## Pipeline agents : aperçu headless officiel, import strict, cycles par os
+## Miroir : symétrie horizontale / verticale d'un groupe de couches
 
-### Aperçu headless officiel (le VRAI moteur, sans appareil)
+### Le geste
 
-- Nouveau `test/vasf_preview_test.dart` : rend un JSON vasf avec le vrai
-  `ScenePainter` et écrit une planche PNG + les frames pleine résolution.
-  À la demande par variables d'environnement (la CI normale le saute) :
-  `VASF_PREVIEW_INPUT=/work/tmp/preview_input.json
-  scripts/flutter_docker.sh test test/vasf_preview_test.dart`
-  (+ `VASF_PREVIEW_OUT`, `VASF_PREVIEW_TIMES`, `VASF_PREVIEW_SCALE`).
-- `scripts/flutter_docker.sh` transmet ces variables au conteneur.
-- Un import qui échoue fait échouer le test avec la liste française des
-  erreurs — même diagnostic que le dialogue « Import impossible ».
+- Deux nouveaux boutons **Miroir H** et **Miroir V** dans la feuille de
+  propriétés de la forme (⚙) : un appui retourne tout le groupe de
+  couches autour du centre de la forme, qui reste en place.
+- Par couche : le contenu dessiné (primitive ou path) est réfléchi autour
+  de l'origine de la couche (drapeaux `flipH`/`flipV`), la position `x`
+  (resp. `y`) et la rotation sont négées — la double réflexion
+  (action ∘ flip de rendu) est l'identité sur le contenu : **les points de
+  base, les nuages de morph et toutes les keyframes de la forme restent
+  intacts**.
+- Auto-inverse : un second appui sur le même bouton redonne la forme
+  d'origine.
+- Une pression = une entrée d'annulation (undo), sauvegarde différée
+  habituelle. Pas proposé pour les instances imbriquées (aucune couche).
+- Les poignées de points de l'éditeur suivent le rendu reflété, et les
+  glisser/insertions reconvertissent le delta dans le repère des données
+  — on édite un chemin miroir exactement comme un chemin normal.
 
-### Import strict
+### Persistance
 
-- Tout champ inconnu (racine, `canvas`, forme, os) est REFUSÉ avec un
-  message français nommant le champ et son chemin — auparavant il était
-  ignoré en silence (liage perdu, animation immobile, sans avertissement).
-- Champ `bone` sur une forme = raccourci de liage (bind de la forme
-  entière) : conflit avec `skeleton.bind` → erreur explicite ; `bone`
-  sans section `skeleton` → erreur claire.
-
-### Keyframes/cycle embarqués dans un os + cycle par os
-
-- Un os peut porter ses `keyframes` (angles monde, poses partielles,
-  `move`, easing — sémantique de `skeleton.keyframes`, champ `bone`
-  implicite) et son `cycle` : auparavant ignorés en silence (une planète
-  ne tournait pas).
-- `cycle` PAR OS : chaque os répète SON propre motif (période = dernier −
-  premier temps de ses keyframes) ; `skeleton.cycle.repeat` reste le
-  cycle global et épargne les os à cycle propre → une marche ×9 et une
-  rotation lente coexistent (42 keyframes au lieu de 330 sur l'exemple
-  Petit Prince).
-- Spec `docs/vasf-1-format.md` (section v0.17) et validateur Python du
-  skill `generer-animation-json` alignés (champs inconnus refusés,
-  nouvelles formes acceptées — exemples officiels revalidés).
+- Schéma SQLite **v7** : colonnes `flip_h` / `flip_v` sur `layers`
+  (migration additive `ALTER TABLE`, onCreate + onUpgrade) — sans elles
+  le flip mourrait silencieusement au rechargement (leçon v0.13.2).
+- Format **vasf-4** : `flipH`/`flipV` acceptés à plat (forme à une
+  couche) et dans `layers[]`, émis seulement quand vrais, fichier passé en
+  `version: 4` dès qu'un flip est présent ; l'import accepte les versions
+  1 à 4 (5 → message « version : 1, 2, 3 ou 4 attendu »).
+- Spec `docs/vasf-1-format.md` (section « Mirror — flipH / flipV »),
+  skill `generer-animation-json` + validateur Python et preview headless
+  `preview_vasf.py` alignés.
 
 ### Tests
 
-- +8 tests (import strict, raccourci `bone`, fusion embarquée, cycle par
-  os, cohabitation cycle par os / global) — 224/224, analyze 0 problème.
+- Nouveau `test/mirror_test.dart` (12 tests) : modèle (négations +
+  auto-inverse, keyframes intactes), poignées reflétées, round-trip base,
+  export/import vasf v4, 3 sondes de rendu mesurées par centroid de masque
+  (miroir H, miroir V, morph à travers le flip) et sheet ⚙.
+- Suite complète verte, `flutter analyze` 0 problème.

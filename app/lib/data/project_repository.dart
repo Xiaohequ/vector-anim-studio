@@ -48,7 +48,7 @@ class ProjectRepository {
   /// (vector/skeleton) + rig squelette sérialisé en JSON sur la ligne projet.
   /// v5 : facteurs d'axe + pivot + bezier. v6 (v0.15) : couleur animée et
   /// morph de points par keyframe (maps JSON layer_colors / layer_points).
-  static const int schemaVersion = 6;
+  static const int schemaVersion = 7;
 
   final DatabaseFactory _factory;
   final String? databasePath;
@@ -125,6 +125,8 @@ class ProjectRepository {
               filled INTEGER NOT NULL,
               points TEXT NOT NULL,
               visible INTEGER NOT NULL,
+              flip_h INTEGER NOT NULL DEFAULT 0,
+              flip_v INTEGER NOT NULL DEFAULT 0,
               z INTEGER NOT NULL,
               FOREIGN KEY (shape_id) REFERENCES shapes (id) ON DELETE CASCADE
             )
@@ -158,6 +160,7 @@ class ProjectRepository {
           if (oldVersion < 4) await _addTypeAndSkeletonColumns(db);
           if (oldVersion < 5) await _addAxisPivotAndBezierColumns(db);
           if (oldVersion < 6) await _addLayerKeyframeColumns(db);
+          if (oldVersion < 7) await _addLayerFlipColumns(db);
         },
       ),
     );
@@ -211,6 +214,19 @@ class ProjectRepository {
     );
     await db.execute(
       'ALTER TABLE shape_keyframes ADD COLUMN layer_points TEXT',
+    );
+  }
+
+  /// Schéma v6 → v7 : miroir H/V du contenu par couche (v0.19). Sans
+  /// colonne, le flip mourrait silencieusement au rechargement (leçon
+  /// v0.13.2 : tout nouveau champ de modèle passe par le schéma DB et un
+  /// round-trip save/load).
+  Future<void> _addLayerFlipColumns(Database db) async {
+    await db.execute(
+      'ALTER TABLE layers ADD COLUMN flip_h INTEGER NOT NULL DEFAULT 0',
+    );
+    await db.execute(
+      'ALTER TABLE layers ADD COLUMN flip_v INTEGER NOT NULL DEFAULT 0',
     );
   }
 
@@ -510,6 +526,8 @@ class ProjectRepository {
             filled: (layerRow['filled'] as num).toInt() == 1,
             points: _decodePoints(layerRow['points'] as String),
             visible: (layerRow['visible'] as num).toInt() == 1,
+            flipH: (layerRow['flip_h'] as num?)?.toInt() == 1,
+            flipV: (layerRow['flip_v'] as num?)?.toInt() == 1,
           ),
         );
       }
@@ -632,6 +650,8 @@ class ProjectRepository {
             'filled': layer.filled ? 1 : 0,
             'points': _encodePoints(layer.points),
             'visible': layer.visible ? 1 : 0,
+            'flip_h': layer.flipH ? 1 : 0,
+            'flip_v': layer.flipV ? 1 : 0,
             'z': j,
           });
         }

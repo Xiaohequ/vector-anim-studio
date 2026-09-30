@@ -600,6 +600,16 @@ class _StudioScreenState extends State<StudioScreen>
     await _flushSave();
   }
 
+  /// Miroir H/V du groupe de couches (v0.19) : une pression = une entrée
+  /// d'annulation (action discrète, pas de coalescing).
+  void _mirrorShape(bool horizontal) {
+    final shape = _selected;
+    if (shape == null) return;
+    _pushUndo();
+    setState(() => shape.mirror(horizontal: horizontal));
+    _scheduleSave();
+  }
+
   /// Ouvre la bottom sheet « Propriétés de la forme ».
   Future<void> _showPropertiesSheet() async {
     final project = _project;
@@ -629,6 +639,7 @@ class _StudioScreenState extends State<StudioScreen>
         skeletonRig: project.isSkeleton ? project.skeleton : null,
         onBindLayer: (layer) => _bindLayer(shape, layer),
         onUnbindLayer: (layer) => _unbindLayer(shape, layer),
+        onMirror: _mirrorShape,
       ),
     );
     if (mounted) setState(() {});
