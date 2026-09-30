@@ -9,7 +9,9 @@ v0.9.0, l'**animation squelette** (rig maître).
 - Dernière version : **0.19.1** (pièce portée par un os = plus aucune
   manipulation au doigt : **non sélectionnable** au tap, déplacement /
   rotation / échelle bloqués, sliders X/Y/rotation/échelle verrouillés ;
-  seul l'os, ou une dissociation, la bouge ; 247/247 tests).
+  seul l'os, ou une dissociation, la bouge ; 247/247 tests ; commit
+  `29b470e`, CI run #43 verte, release `v0.19.1-build43`, APK 54,1 Mo —
+  validation appareil en attente).
 - v0.19.0 (miroir H/V d'un groupe de couches — drapeaux `flipH`/`flipV`,
   schéma DB v7, format vasf v4 ; CI run #42 verte, release
   `v0.19.0-build42`, APK 54,1 Mo — **VALIDÉE APPAREIL : miroir OK**).
@@ -238,6 +240,9 @@ v0.9.0, l'**animation squelette** (rig maître).
   `find.textContaining('Bloc')` matche même le texte du snack) ; ④ l'os
   de test doit être LOIN de la pièce (`segmentTouchSlop` 13 px,
   `tipTouchSlop` 26 px : sinon le tap sur la pièce est absorbé par l'os).
+- **Livraison** : commit `29b470e`, CI run #43 VERTE, release
+  `v0.19.1-build43` (`vector-anim-studio-0.19.1.apk`, 54,1 Mo) —
+  **validation appareil en attente**.
 - Hors périmètre (à décider) : les couches d'une pièce liée restent
   déplaçables dans l'éditeur de forme (X/Y de couche).
 
