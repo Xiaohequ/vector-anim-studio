@@ -8,8 +8,8 @@ v0.9.0, l'**animation squelette** (rig maître).
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
 - Dernière version : **0.19.0** (miroir H/V d'un groupe de couches —
   drapeaux `flipH`/`flipV`, schéma DB v7, format vasf v4 ; 236/236 tests ;
-  CI run #42 verte, release `v0.19.0-build42`, APK 54,1 Mo — validation
-  appareil en attente).
+  CI run #42 verte, release `v0.19.0-build42`, APK 54,1 Mo —
+  **VALIDÉE APPAREIL (miroir OK)**).
   v0.17.0 (pipeline agents — aperçu headless officiel via le vrai moteur,
   import strict, cycles par os). v0.16.3 (bugfix — le curseur de l'éditeur
   démarre au playhead du STUDIO) **VALIDÉE APPAREIL 28/09 : le morphing
@@ -62,6 +62,8 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 ## ✅ Validé sur appareil
 
+- **v0.19.0 (30/09)** : miroir H/V — « miroir marche » (contenu reflété,
+  forme en place, keyframes/pivot intacts, double appui = retour).
 - **v0.10.1 (25/09)** : la chaîne rigging complète v0.9.1 → v0.9.5 ET la
   v0.10.1 (z d'os, opacité/étirement/écrasement par os, **IK 2 os
   opérationnel** — « Ça a marché »).
@@ -218,8 +220,8 @@ v0.9.0, l'**animation squelette** (rig maître).
   de `simple_format_test.dart` passé de 4→5), analyze 0 problème.
 - **Livraison** : commit `6c1c078`, CI run #42 VERTE, release
   `v0.19.0-build42` (`vector-anim-studio-0.19.0.apk`, 54,1 Mo) —
-  **validation appareil en attente**. (Les pushes de `.md`/`docs/**` ne
-  déclenchent pas la CI : `paths-ignore` du workflow.)
+  **VALIDÉE APPAREIL : « miroir marche »**. (Les pushes de `.md`/`docs/**`
+  ne déclenchent pas la CI : `paths-ignore` du workflow.)
 - **Numérotation (choix utilisateur)** : livré en **0.19.0**, PAS 0.18.0 —
   les releases `v0.18.0/0.18.1/0.18.2` (branche `archive-v0.18x`, main
   remise à 0.17 le 30/09) sont déjà publiées sur GitHub ; un second
