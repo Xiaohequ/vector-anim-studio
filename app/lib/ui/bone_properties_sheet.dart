@@ -32,6 +32,7 @@ class BonePropertiesSheet extends StatefulWidget {
     this.onAnimatableChanged,
     this.onToggleIk,
     this.onFlipBend,
+    this.onOpenEditor,
   });
 
   final SkeletonRig rig;
@@ -57,6 +58,10 @@ class BonePropertiesSheet extends StatefulWidget {
   /// IK 2 os (v0.10) : bascule + inversion du coude.
   final VoidCallback? onToggleIk;
   final VoidCallback? onFlipBend;
+
+  /// Ouvre l'éditeur d'os (dessin/pivot sur la forme) — v0.20.2, demandé
+  /// pour ne pas repasser par la feuille de la FORME.
+  final VoidCallback? onOpenEditor;
 
   @override
   State<BonePropertiesSheet> createState() => _BonePropertiesSheetState();
@@ -167,6 +172,25 @@ class _BonePropertiesSheetState extends State<BonePropertiesSheet> {
                     ),
                   ],
                 ),
+                // v0.20.2 : accès direct à l'éditeur d'os depuis les
+                // propriétés de l'os (demande utilisateur) — le même
+                // écran que « Ajouter un os… » de la feuille de la forme,
+                // ouvert sur la pièce portée par cet os.
+                if (widget.onOpenEditor != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2, bottom: 2),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          widget.onOpenEditor!();
+                        },
+                        icon: const Icon(Icons.brush, size: 16),
+                        label: const Text('Ouvrir l’éditeur d’os…'),
+                      ),
+                    ),
+                  ),
                 Text(
                   'Angle de repos ${degrees.toStringAsFixed(0)}°'
                   ' · à ${((controller.timeMs) / 1000).toStringAsFixed(2)} s : '

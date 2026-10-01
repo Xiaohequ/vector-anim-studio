@@ -760,6 +760,30 @@ class _StudioScreenState extends State<StudioScreen>
     _snack('« ${shape.name} » liée à l’os « ${bone?.name ?? '?'} »');
   }
 
+  /// Ouvre l'éditeur d'os depuis la feuille des PROPRIÉTÉS D'OS (v0.20.2) :
+  /// retrouve la forme portée par cet os (racine ou descendance) puis ouvre
+  /// le même écran que « Ajouter un os… » de la feuille de la forme.
+  Future<void> _editBoneInEditor() async {
+    final project = _project;
+    final rig = _rig;
+    final bone = _selectedBone;
+    if (project == null || rig == null || bone == null) return;
+    VectorShape? shape;
+    for (final candidate in project.shapes) {
+      final carrierId = rig.carrierBoneId(candidate.id);
+      if (carrierId == null) continue;
+      if (rig.chainFrom(carrierId).any((b) => b.id == bone.id)) {
+        shape = candidate;
+        break;
+      }
+    }
+    if (shape == null) {
+      _snack('« ${bone.name} » n’est lié à aucune forme');
+      return;
+    }
+    await _editShapeBone(shape);
+  }
+
   /// « Supprimer l'os » (sheet ⚙, v0.20) : confirmation, puis l'os porteur,
   /// TOUTE sa descendance et la totalité de leurs keyframes partent avec le
   /// lien (la pièce redevient libre et sélectionnable).
@@ -991,6 +1015,7 @@ class _StudioScreenState extends State<StudioScreen>
         onAnimatableChanged: _setBoneAnimatable,
         onToggleIk: _toggleIk,
         onFlipBend: _flipBend,
+        onOpenEditor: _editBoneInEditor,
       ),
     );
     if (mounted) setState(() {});

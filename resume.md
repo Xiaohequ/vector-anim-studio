@@ -6,11 +6,15 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Repo : https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`)
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
-- Dernière version : **0.20.1** (bugfix — la section os de la feuille ⚙
-  était conditionnée à l'existence du rig, donc INVISIBLE sur un projet
-  squelette neuf : désormais conditionnée au type de projet ; 254/254
-  tests ; commit `9b85334`, CI run #45 verte, release
-  `v0.20.1-build45`, APK 54,1 Mo — validation appareil en attente).
+- Dernière version : **0.20.2** (retours v0.20.1 : **pivot de l'os** dans
+  l'éditeur (glisser l'EXTRÉMITÉ = pivoter, le MILIEU = déplacer),
+  **sélecteur de forme masqué** dans l'éditeur, bouton **« Ouvrir l'éditeur
+  d'os… »** ajouté à la feuille Propriétés de l'os ; 257/257 tests).
+- v0.20.1 (bugfix — la section os de la feuille ⚙ était conditionnée à
+  l'existence du rig, donc INVISIBLE sur un projet squelette neuf :
+  désormais conditionnée au type de projet ; 254/254 tests ; commit
+  `9b85334`, CI run #45 verte, release `v0.20.1-build45`, APK 54,1 Mo —
+  **retour appareil : accès éditeur ok, glisser sans bouger la forme ok**).
 - v0.20.0 (vague 1 — « l'os n'existe que par une forme » : **nouvel éditeur
   d'os** (forme seule centrée, dessin en 2 taps, déplacement de l'os sans
   bouger la forme), boutons **Ajouter / Modifier / Supprimer l'os** dans la
@@ -213,6 +217,23 @@ v0.9.0, l'**animation squelette** (rig maître).
   foyer DÉJÀ déplacé : premier move de 22 px écran (< slop IK 26) puis move de
   correction ; rig initial JAMAIS tendu à fond (L1+L2 > distance joint→effecteur)
   sinon toute cible est hors de portée (le solveur clampe, tip ≠ cible).
+
+### v0.20.2 (retours v0.20.1 — pivot, sélecteur, accès feuille d'os)
+- **Retour** : « Éditeur os : os possible de pivoter » → le glisser est
+  devenu AMBIGU selon le point de départ : **extrémité** (dans
+  `tipTouchSlop` 26 px) = pivot (`_rotating`, `restAngle += delta` avec
+  delta incrémental normalisé ±π — relatif au parent, donc FK correcte),
+  **segment** = déplacement (inchangé). Indice sous le preview à jour.
+- **Retour** : « ne pas afficher le sélecteur de la forme » →
+  `selectedShapeId` retiré + `showFrame: false` dans l'éditeur.
+- **Retour** : bouton dans la **feuille Propriétés de l'os** →
+  `onOpenEditor` (nouveau paramètre de `BonePropertiesSheet`) →
+  `_editBoneInEditor()` retrouve la forme portée par l'os (racine OU
+  descendance via `chainFrom`) puis enchaîne sur `_editShapeBone` ; os sans
+  forme → snack explicite.
+- **Tests : 257/257** (+3 : aucun sélecteur, pivot articulation fixe +
+  forme immobile, bouton de la feuille d'os → éditeur), analyze 0.
+- **Validé v0.20.1** : accès éditeur ok, glisser os sans bouger la forme ok.
 
 ### v0.20.1 (bugfix : bouton « Ajouter un os… » introuvable)
 - **Retour appareil v0.20.0** : « pas de bouton pour ajouter un os sur une

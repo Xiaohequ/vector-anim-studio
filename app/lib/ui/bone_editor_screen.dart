@@ -82,6 +82,20 @@ class _BoneEditorScreenState extends State<BoneEditorScreen> {
   RigBone? _dragBone;
   Offset? _dragLast;
 
+  /// Pivot (v0.20.2) : le glisser a démarré sur l'EXTRÉMITÉ de l'os → on
+  /// tourne autour de l'articulation au lieu de translater.
+  bool _rotating = false;
+
+  /// Angle scène (doigt → articulation) au dernier update : delta incrémental
+  /// pour éviter le saut de ±2π.
+  double _lastPointerAngle = 0;
+
+  /// Position BRUTE de l'appui (avant la slop) : c'est elle qui décide du
+  /// mode (pivot si appui sur l'extrémité, déplacement sinon) — le foyer de
+  /// `onScaleStart` est déjà déplacé de ~18-45 px et sortirait de la zone
+  /// de l'extrémité (piège v0.10.1).
+  Offset? _downPos;
+
   @override
   void initState() {
     super.initState();
@@ -215,28 +229,76 @@ class _BoneEditorScreenState extends State<BoneEditorScreen> {
   }
 
   /// Glisser un os : il bouge, la forme reste ancrée au centre.
+  /// Glisser : sur l'EXTRÉMITÉ = pivot de l'os, sur le MILIEU = déplacer
+  /// (la forme reste ancrée au centre). Le MODE se décide sur la position
+  /// d'appui ([_downPos]) ; l'angle de référence est pris au foyer courant
+  /// pour absorber la slop (pas de saut au démarrage).
   void _onDragStart(Offset point, SceneGeometry geo) {
+    // Le HIT et le MODE se décident sur la position d'appui (brute) : le
+    // foyer de `onScaleStart` est déjà déplacé par la slop et sortirait de
+    // l'os (surtout à l'extrémité).
+    final anchor = _downPos ?? point;
     final rig = _previewRig;
     final pose = SkeletonPose.evaluate(rig, 0);
-    final hitId = RigOverlayPainter.hitBone(pose, rig, geo, point);
+    final hitId = RigOverlayPainter.hitBone(pose, rig, geo, anchor);
     if (hitId == null) return;
+    final frame = pose.frameOf(hitId);
+    if (frame == null) return;
     _dragBone = rig.boneById(hitId);
-    _dragLast = point;
+    final tipAnchor = geo.sceneToCanvas(frame.tip);
+    if ((anchor - tipAnchor).distance <= RigOverlayPainter.tipTouchSlop) {
+      final scene = geo.canvasToScene(point);
+      _rotating = true;
+      _dragLast = null;
+      _lastPointerAngle = math.atan2(
+        scene.dy - frame.joint.dy,
+        scene.dx - frame.joint.dx,
+      );
+    } else {
+      _rotating = false;
+      _dragLast = point;
+    }
   }
 
   void _onDragUpdate(Offset point, SceneGeometry geo) {
     final bone = _dragBone;
-    final last = _dragLast;
-    if (bone == null || last == null) return;
-    // Delta CANVAS → SCÈNE : `translateBoneRest` travaille en repère projet.
-    final delta = geo.canvasToScene(point) - geo.canvasToScene(last);
-    if (delta == Offset.zero) return;
-    // `_previewRig` partage les objets de `_bones` : la translation est écrite
+    if (bone == null) return;
+    // `_previewRig` partage les objets de `_bones` : la mutation est écrite
     // directement dans la chaîne en cours d'édition.
     final rig = _previewRig;
     final pose = SkeletonPose.evaluate(rig, 0);
     final live = rig.boneById(bone.id);
     if (live == null) return;
+
+    // --- Pivot : rotation autour de l'articulation, longueur inchangée.
+    if (_rotating) {
+      final frame = pose.frameOf(live.id);
+      if (frame == null) return;
+      final scene = geo.canvasToScene(point);
+      final target = math.atan2(
+        scene.dy - frame.joint.dy,
+        scene.dx - frame.joint.dx,
+      );
+      var delta = target - _lastPointerAngle;
+      while (delta > math.pi) {
+        delta -= 2 * math.pi;
+      }
+      while (delta < -math.pi) {
+        delta += 2 * math.pi;
+      }
+      // `restAngle` est RELATIF au parent : le parent ne bouge pas pendant ce
+      // geste, donc ajouter delta au repos ajoute delta au monde (FK : les
+      // descendants suivent).
+      setState(() => live.restAngle += delta);
+      _lastPointerAngle = target;
+      return;
+    }
+
+    // --- Déplacement : delta CANVAS → SCÈNE (repère projet).
+    final last = _dragLast;
+    if (last == null) return;
+    final delta = geo.canvasToScene(point) - geo.canvasToScene(last);
+    if (delta == Offset.zero) return;
     // SANS carryBoundPieces : la forme ne bouge pas (elle est ancrée au
     // centre de l'écran), seul l'os se déplace.
     rig.translateBoneRest(live, pose, delta);
@@ -247,6 +309,8 @@ class _BoneEditorScreenState extends State<BoneEditorScreen> {
   void _onDragEnd() {
     _dragBone = null;
     _dragLast = null;
+    _rotating = false;
+    _downPos = null;
   }
 
   // --------------------------------------------------------- validation
@@ -284,8 +348,8 @@ class _BoneEditorScreenState extends State<BoneEditorScreen> {
   @override
   Widget build(BuildContext context) {
     final hint = _pendingJoint == null
-        ? 'Tap : articulation puis extrémité — tape près d’un os pour '
-              'l’enchaîner, glisse un os pour le déplacer'
+        ? 'Tap : articulation puis extrémité — glisser au MILIEU d’un os = '
+              'le déplacer, sur son EXTRÉMITÉ = le pivoter'
         : 'Tap : extrémité de l’os — ✕ pour annuler l’articulation';
     return Scaffold(
       appBar: AppBar(
@@ -320,32 +384,43 @@ class _BoneEditorScreenState extends State<BoneEditorScreen> {
                   return Stack(
                     children: <Widget>[
                       Positioned.fill(
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTapUp: (details) =>
-                              _onTapUp(details.localPosition, geo),
-                          onScaleStart: (details) =>
-                              _onDragStart(details.localFocalPoint, geo),
-                          onScaleUpdate: (details) {
-                            if (_dragBone != null) {
-                              _onDragUpdate(details.localFocalPoint, geo);
-                            }
-                          },
-                          onScaleEnd: (_) => _onDragEnd(),
-                          child: CustomPaint(
-                            painter: ScenePainter(
-                              project: _editor,
-                              timeMs: widget.timeMs,
-                              selectedShapeId: widget.shape.id,
-                              showFrame: true,
+                        child: Listener(
+                          // Appui brut (avant la slop) : sert à choisir le
+                          // mode pivot / déplacement.
+                          onPointerDown: (event) =>
+                              _downPos = event.localPosition,
+                          onPointerUp: (_) => _downPos = null,
+                          onPointerCancel: (_) => _downPos = null,
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTapUp: (details) =>
+                                _onTapUp(details.localPosition, geo),
+                            onScaleStart: (details) =>
+                                _onDragStart(details.localFocalPoint, geo),
+                            onScaleUpdate: (details) {
+                              if (_dragBone != null) {
+                                _onDragUpdate(details.localFocalPoint, geo);
+                              }
+                            },
+                            onScaleEnd: (_) => _onDragEnd(),
+                            child: CustomPaint(
+                              painter: ScenePainter(
+                                project: _editor,
+                                timeMs: widget.timeMs,
+                                // Pas de sélecteur de forme ici (v0.20.2) :
+                                // on dessine SUR la pièce, le cadre de
+                                // sélection ne fait que gêner.
+                                showFrame: false,
+                              ),
+                              foregroundPainter: RigOverlayPainter(
+                                rig: rig,
+                                pose: pose,
+                                geo: geo,
+                                selectedBoneId:
+                                    _dragBone?.id ?? _pendingParentId,
+                              ),
+                              child: const SizedBox.expand(),
                             ),
-                            foregroundPainter: RigOverlayPainter(
-                              rig: rig,
-                              pose: pose,
-                              geo: geo,
-                              selectedBoneId: _dragBone?.id ?? _pendingParentId,
-                            ),
-                            child: const SizedBox.expand(),
                           ),
                         ),
                       ),

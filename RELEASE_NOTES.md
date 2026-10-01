@@ -1,41 +1,38 @@
-# Vector Anim Studio 0.20.1
+# Vector Anim Studio 0.20.2
 
-## Bugfix : le bouton « Ajouter un os… » était introuvable
+## Retours v0.20.1 : pivot de l'os, sélecteur masqué, accès depuis la feuille d'os
 
-### Cause
+### 1. L'os se pivote dans l'éditeur
 
-- La section « os » de la feuille ⚙ n'était affichée **que si le projet
-  avait déjà un rig** (`skeletonRig != null`) — or sur un **projet squelette
-  neuf**, `project.skeleton` est `null` : le rig naît seulement à la
-  validation (✓) de l'éditeur d'os.
-- Résultat : aucun bouton pour ajouter un os sur une forme, donc parcours
-  bloqué dès la première utilisation.
+- **Glisser l'EXTRÉMITÉ** d'un os = le **pivoter** autour de son
+  articulation (longueur inchangée ; les descendants suivent en FK, le
+  repère du parent est respecté).
+- **Glisser le MILIEU** d'un os = le **déplacer** (comportement précédent :
+  la forme reste ancrée au milieu de l'écran).
+- Delta incrémental d'angle (normalisé ±π) : aucun saut de ±200° au
+  passage de la coupure.
+- Indice sous le preview mis à jour : *« glisser au MILIEU d'un os = le
+  déplacer, sur son EXTRÉMITÉ = le pivoter »*.
 
-### Correction
+### 2. Plus de sélecteur de forme dans l'éditeur d'os
 
-- La section est désormais conditionnée au **type de projet** (squelette),
-  plus à l'existence du rig : elle affiche **« Aucun os » + « Ajouter un
-  os… »** dès l'ouverture de la feuille.
-- « Modifier l'os… » et « Supprimer l'os » n'apparaissent toujours que si
-  la forme porte réellement un os.
-- Le rig est créé à la validation de l'éditeur (inchangé).
+- Le cadre de sélection de la pièce n'est plus affiché : on dessine
+  **sur** la forme, le cadre ne faisait que gêner.
+
+### 3. Bouton « Ouvrir l'éditeur d'os… » dans les propriétés de l'os
+
+- La feuille **Propriétés de l'os** (⚙ de l'os sélectionné sur le
+  preview) gagne un bouton qui ouvre directement le même éditeur, sur la
+  forme portée par cet os (racine **ou** descendance).
+- Aucune forme liée → message explicite au lieu d'un écran vide.
 
 ### Tests
 
-- +1 test de non-régression : projet squelette neuf (sans rig) → feuille ⚙
-  → « Ajouter un os… » présent → l'éditeur s'ouvre, le rig naît au ✓.
-  **254/254**, `flutter analyze` 0 problème.
+- +3 (aucun sélecteur de forme, pivot avec articulation fixe + forme
+  immobile, bouton de la feuille d'os qui ouvre l'éditeur) — **257/257**,
+  `flutter analyze` 0 problème.
 
-## Note — le bouton « Squelette » a bien été remplacé par « Animations »
+## Ce qui n'a pas bougé (validé v0.20.1)
 
-C'est **normal** (choix validé, D.4 du plan v0.20.0) : le menu « Squelette »
-a été supprimé, donc le bas de barre affiche **Formes + Animations** dans
-les projets squelette aussi (ce qui rend enfin accessible le menu
-Animations — effacer les animations, presets — auparavant masqué).
-
-Les actions sur les os ont changé d'endroit :
-
-- **Feuille ⚙ de la forme** : Ajouter / Modifier / Supprimer l'os.
-- **Canvas** : tap sur un os = le sélectionner (⚙ et ✥ apparaissent),
-  ✥ / rotation / IK pour l'animer.
-- **Playbar** : ◆ cible l'os sélectionné.
+- Accès à l'éditeur depuis la feuille ⚙ de la forme : **ok**.
+- Glisser un os sans bouger la forme : **ok**.

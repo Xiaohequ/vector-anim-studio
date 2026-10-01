@@ -212,4 +212,67 @@ void main() {
     expect(save.onPressed, isNull);
     expect(captured, isNull);
   });
+
+  testWidgets('aucun sélecteur de forme dans l’éditeur d’os', (tester) async {
+    final project = _project();
+    await openEditor(tester, project, (result) {});
+    final paint = tester.widget<CustomPaint>(
+      find.byWidgetPredicate(
+        (w) => w is CustomPaint && w.painter is ScenePainter,
+      ),
+    );
+    final painter = paint.painter! as ScenePainter;
+    expect(
+      painter.selectedShapeId,
+      isNull,
+      reason: 'pas de pièce sélectionnée',
+    );
+    expect(painter.showFrame, isFalse, reason: 'pas de cadre de sélection');
+  });
+
+  testWidgets('pivot : glisser l’EXTRÉMITÉ tourne l’os, l’articulation fixe', (
+    tester,
+  ) async {
+    final project = _project();
+    final shape = project.shapes.single;
+    BoneEditorResult? captured;
+    final center = await openEditor(
+      tester,
+      project,
+      (result) => captured = result,
+    );
+
+    // Os horizontal : articulation au centre, extrémité à droite.
+    await tester.tapAt(center);
+    await tester.pump();
+    await tester.tapAt(center + const Offset(70, 0));
+    await tester.pumpAndSettle();
+
+    // Glisser l'EXTRÉMITÉ vers le bas (le 1ᵉʳ move avale la slop).
+    final tip = center + const Offset(70, 0);
+    final gesture = await tester.startGesture(tip);
+    await tester.pump();
+    await gesture.moveBy(const Offset(0, 45));
+    await tester.pump();
+    await gesture.moveBy(const Offset(0, 30));
+    await tester.pump();
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Enregistrer l’os'));
+    await tester.pumpAndSettle();
+
+    expect(captured, isNotNull);
+    final bone = captured!.bones.single;
+    expect(
+      bone.restAngle,
+      greaterThan(0.1),
+      reason: 'l’os a pivote autour de son articulation (y vers le bas)',
+    );
+    expect(bone.offsetX, closeTo(360, 2), reason: 'articulation fixe (x)');
+    expect(bone.offsetY, closeTo(640, 2), reason: 'articulation fixe (y)');
+    // La forme n'a pas bougé (ancre au milieu de l'écran).
+    expect(shape.x, 360);
+    expect(shape.y, 640);
+  });
 }

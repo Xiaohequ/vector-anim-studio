@@ -1154,6 +1154,47 @@ void main() {
     expect(find.textContaining('Os de « Bloc »'), findsOneWidget);
     expect(project.skeleton, isNull);
   });
+
+  testWidgets('sheet os : « Ouvrir l’éditeur d’os… » ouvre l’éditeur', (
+    tester,
+  ) async {
+    final repository = _MemoryRepository();
+    final project = AnimationProject.blank(
+      name: 'Film',
+      type: ProjectType.skeleton,
+    );
+    project.width = 720;
+    project.height = 1280;
+    final shape = VectorShape(name: 'Bloc', x: 360, y: 640);
+    shape.layers.add(
+      ShapeLayer(name: 'L', kind: ShapeKind.rect, width: 300, height: 200),
+    );
+    project.shapes.add(shape);
+    final rig = SkeletonRig(name: 'Squelette');
+    final root = RigBone(name: 'Tronc', offsetX: 360, offsetY: 500, length: 90);
+    rig.addBone(root);
+    rig.bindShape(shape.id, root.id);
+    project.skeleton = rig;
+
+    await pumpStudio(tester, repository, project);
+
+    // Sélectionner l'os en tapant dessus (segment AU-DESSUS de la pièce :
+    // y 500 vs pièce de 540 à 740 — pas d'ambiguïté).
+    final (topLeft, geo) = canvasHarness(tester, project);
+    await tester.tapAt(topLeft + geo.sceneToCanvas(const Offset(400, 500)));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Propriétés de l’os'), findsOneWidget);
+
+    // Feuille des propriétés de l'OS → bouton vers l'éditeur (v0.20.2).
+    await tester.tap(find.byTooltip('Propriétés de l’os'));
+    await tester.pumpAndSettle();
+    expect(find.text('Ouvrir l’éditeur d’os…'), findsOneWidget);
+
+    await tester.tap(find.text('Ouvrir l’éditeur d’os…'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Os de « Bloc »'), findsOneWidget);
+    expect(find.textContaining('EXTRÉMITÉ'), findsOneWidget);
+  });
 }
 
 /// Faux fichier choisi dans le sélecteur : contenu EN MÉMOIRE (aucune I/O
