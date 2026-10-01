@@ -8,8 +8,8 @@ v0.9.0, l'**animation squelette** (rig maître).
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
 - Dernière version : **0.21.1** (corrections timeline/preview : la visibilité
   respecte `startMs → endMs` même pour les pièces liées à un os, une forme
-  sélectionnée désélectionne l'os précédent ; 257/257 tests ; release en
-  cours de publication depuis `main`).
+  sélectionnée désélectionne l'os précédent ; 257/257 tests ; CI run #49
+  verte ; release `v0.21.1-build49`, APK 54,1 Mo publiée).
 - **v0.20.3 VALIDÉE APPAREIL (01/10)** — retour : « je valide v0.20.3 ».
   (un seul os par forme dans l'éditeur, pivot, bouton feuille d'os).
 - v0.20.2 (retours v0.20.1 : **pivot de l'os** dans l'éditeur (glisser
