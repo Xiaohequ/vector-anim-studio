@@ -9,7 +9,8 @@ v0.9.0, l'**animation squelette** (rig maître).
 - Dernière version : **0.20.1** (bugfix — la section os de la feuille ⚙
   était conditionnée à l'existence du rig, donc INVISIBLE sur un projet
   squelette neuf : désormais conditionnée au type de projet ; 254/254
-  tests).
+  tests ; commit `9b85334`, CI run #45 verte, release
+  `v0.20.1-build45`, APK 54,1 Mo — validation appareil en attente).
 - v0.20.0 (vague 1 — « l'os n'existe que par une forme » : **nouvel éditeur
   d'os** (forme seule centrée, dessin en 2 taps, déplacement de l'os sans
   bouger la forme), boutons **Ajouter / Modifier / Supprimer l'os** dans la
@@ -228,6 +229,8 @@ v0.9.0, l'**animation squelette** (rig maître).
   ✥/rotation/IK = animation, ◆ de la playbar cible l'os).
 - **Tests : 254/254** (+1 non-régression : projet squelette neuf → bouton
   présent → éditeur ouvert, rig créé au ✓), analyze 0.
+- **Livraison** : commit `9b85334`, CI run #45 VERTE, release
+  `v0.20.1-build45` (`vector-anim-studio-0.20.1.apk`, 54,1 Mo).
 
 ### v0.20.0 (vague 1 — l'os n'existe que par une forme)
 - **Demande utilisateur** : os affiché via la forme, éditeur d'os dédié,
