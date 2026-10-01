@@ -112,7 +112,7 @@ void main() {
     expect(captured!.replacedIds, isEmpty);
   });
 
-  testWidgets('chaîne : tap sur le poignet → os 2 attaché à l’os 1', (
+  testWidgets('un seul os : dessiné, les taps n’en ajoutent plus (v0.20.3)', (
     tester,
   ) async {
     final project = _project();
@@ -129,24 +129,19 @@ void main() {
     await tester.tapAt(center + const Offset(70, 0));
     await tester.pumpAndSettle();
 
-    // Os 2 : on repart DU POIGNET de l'os 1 (aimantation) → chaîne.
+    // Tentative d'un 2ᵉ os → REFUSÉ (retour v0.20.3), avec un indice.
     await tester.tapAt(center + const Offset(70, 0));
     await tester.pump();
     await tester.tapAt(center + const Offset(70, 60));
     await tester.pumpAndSettle();
+    expect(find.textContaining('déjà son os'), findsOneWidget);
 
     await tester.tap(find.byTooltip('Enregistrer l’os'));
     await tester.pumpAndSettle();
 
     expect(captured, isNotNull);
-    expect(captured!.bones, hasLength(2));
-    expect(captured!.bones[1].parentId, captured!.bones[0].id);
-    // Porteur = la racine (os 1).
-    expect(captured!.carrierBoneId, captured!.bones[0].id);
-    // L'os 2 démarre pile sur le POIGNET de l'os 1 — offsets d'enfant
-    // exprimés dans le repère du parent (longueur le long de l'os 1).
-    expect(captured!.bones[1].offsetX, closeTo(captured!.bones[0].length, 2));
-    expect(captured!.bones[1].offsetY, closeTo(0, 2));
+    expect(captured!.bones, hasLength(1), reason: 'un seul os par forme');
+    expect(captured!.carrierBoneId, captured!.bones.single.id);
   });
 
   testWidgets('glisser un os le déplace SANS déplacer la forme', (

@@ -38,9 +38,9 @@ class BoneEditorResult {
 /// centre d'un canvas calé sur sa boîte englobante, et les os racines sont
 /// retranslatés en coordonnées projet à la validation).
 ///
-/// - **Dessin** : tap ① = articulation, tap ② = extrémité. Un tap ① près
-///   d'un os existant (poignet ou segment) attache le nouvel os dessus →
-///   chaînes et IK restent possibles.
+/// - **Dessin** : tap ① = articulation, tap ② = extrémité — **un seul os
+///   par forme** (retour v0.20.3) : dès qu'un os existe, les taps ne
+///   créent plus rien, seuls le déplacement et le pivot restent actifs.
 /// - **Déplacement** : glisser un os le déplace SANS déplacer la forme
 ///   (`translateBoneRest`, sans `carryBoundPieces` — la forme est ancrée au
 ///   milieu de l'écran).
@@ -185,7 +185,11 @@ class _BoneEditorScreenState extends State<BoneEditorScreen> {
   /// Tap : ① articulation (aimantée sur un os existant) ② extrémité.
   /// [point] est en coordonnées CANVAS (local du geste) ; les os vivent en
   /// coordonnées SCÈNE (espace d'éditeur) — conversion par [geo].
+  ///
+  /// **Un seul os** (retour v0.20.3) : la forme a déjà SON os → plus
+  /// d'ajout, seul le déplacement / le pivot restent possibles.
   void _onTapUp(Offset point, SceneGeometry geo) {
+    if (_bones.isNotEmpty) return; // un seul os par forme
     final scenePoint = geo.canvasToScene(point);
     final rig = _previewRig;
     final pose = SkeletonPose.evaluate(rig, 0);
@@ -347,7 +351,10 @@ class _BoneEditorScreenState extends State<BoneEditorScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final hint = _pendingJoint == null
+    final hint = _bones.isNotEmpty
+        ? 'La forme a déjà son os — glisser au MILIEU = le déplacer, sur '
+              'son EXTRÉMITÉ = le pivoter'
+        : _pendingJoint == null
         ? 'Tap : articulation puis extrémité — glisser au MILIEU d’un os = '
               'le déplacer, sur son EXTRÉMITÉ = le pivoter'
         : 'Tap : extrémité de l’os — ✕ pour annuler l’articulation';

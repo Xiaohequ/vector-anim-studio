@@ -1,38 +1,26 @@
-# Vector Anim Studio 0.20.2
+# Vector Anim Studio 0.20.3
 
-## Retours v0.20.1 : pivot de l'os, sélecteur masqué, accès depuis la feuille d'os
+## Un seul os par forme dans l'éditeur
 
-### 1. L'os se pivote dans l'éditeur
+- **Retour v0.20.2** : « Éditeur os : ne pas autoriser d'ajouter plusieurs
+  os ».
+- Dès qu'un os existe, **les taps ne créent plus rien** dans l'éditeur :
+  l'indice sous le preview devient *« La forme a déjà son os — glisser au
+  MILIEU = le déplacer, sur son EXTRÉMITÉ = le pivoter »*.
+- **Déplacement et pivot restent pleinement actifs** sur l'os (et sur
+  chaque os d'un projet importé qui porte une chaîne).
+- L'enregistrement (✓) porte toujours l'**unique** os de la forme, déjà
+  lié automatiquement.
 
-- **Glisser l'EXTRÉMITÉ** d'un os = le **pivoter** autour de son
-  articulation (longueur inchangée ; les descendants suivent en FK, le
-  repère du parent est respecté).
-- **Glisser le MILIEU** d'un os = le **déplacer** (comportement précédent :
-  la forme reste ancrée au milieu de l'écran).
-- Delta incrémental d'angle (normalisé ±π) : aucun saut de ±200° au
-  passage de la coupure.
-- Indice sous le preview mis à jour : *« glisser au MILIEU d'un os = le
-  déplacer, sur son EXTRÉMITÉ = le pivoter »*.
+### Conséquence à connaître
 
-### 2. Plus de sélecteur de forme dans l'éditeur d'os
-
-- Le cadre de sélection de la pièce n'est plus affiché : on dessine
-  **sur** la forme, le cadre ne faisait que gêner.
-
-### 3. Bouton « Ouvrir l'éditeur d'os… » dans les propriétés de l'os
-
-- La feuille **Propriétés de l'os** (⚙ de l'os sélectionné sur le
-  preview) gagne un bouton qui ouvre directement le même éditeur, sur la
-  forme portée par cet os (racine **ou** descendance).
-- Aucune forme liée → message explicite au lieu d'un écran vide.
+- On ne **crée** plus de chaîne d'os depuis l'éditeur : la règle « 1 forme
+  = 1 os » prime (D.1 revu par ce retour). Un fichier importé qui contient
+  déjà une chaîne reste entièrement modifiable (déplacer / pivoter chaque
+  os) ; la création d'os enfants est à redéfinir si tu en as besoin.
 
 ### Tests
 
-- +3 (aucun sélecteur de forme, pivot avec articulation fixe + forme
-  immobile, bouton de la feuille d'os qui ouvre l'éditeur) — **257/257**,
-  `flutter analyze` 0 problème.
-
-## Ce qui n'a pas bougé (validé v0.20.1)
-
-- Accès à l'éditeur depuis la feuille ⚙ de la forme : **ok**.
-- Glisser un os sans bouger la forme : **ok**.
+- Le test « chaîne : tap sur le poignet → os 2 » devient **« un seul os :
+  dessiné, les taps n'en ajoutent plus »** (2ᵉ tentative refusée + indice,
+  résultat = 1 os lié). **257/257**, `flutter analyze` 0 problème.

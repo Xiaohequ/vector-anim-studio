@@ -6,12 +6,14 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Repo : https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`)
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
-- Dernière version : **0.20.2** (retours v0.20.1 : **pivot de l'os** dans
-  l'éditeur (glisser l'EXTRÉMITÉ = pivoter, le MILIEU = déplacer),
-  **sélecteur de forme masqué** dans l'éditeur, bouton **« Ouvrir l'éditeur
-  d'os… »** ajouté à la feuille Propriétés de l'os ; 257/257 tests ; commit
-  `e1752b8`, CI run #46 verte, release `v0.20.2-build46`, APK 54,1 Mo —
-  validation appareil en attente).
+- Dernière version : **0.20.3** (retour v0.20.2 : **un seul os par
+  forme** dans l'éditeur — les taps ne créent plus rien dès qu'un os
+  existe, déplacement + pivot restent actifs ; 257/257 tests).
+- v0.20.2 (retours v0.20.1 : **pivot de l'os** dans l'éditeur (glisser
+  l'EXTRÉMITÉ = pivoter, le MILIEU = déplacer), **sélecteur de forme
+  masqué**, bouton **« Ouvrir l'éditeur d'os… »** dans la feuille
+  Propriétés de l'os ; 257/257 tests ; commit `e1752b8`, CI run #46
+  verte, release `v0.20.2-build46`, APK 54,1 Mo).
 - v0.20.1 (bugfix — la section os de la feuille ⚙ était conditionnée à
   l'existence du rig, donc INVISIBLE sur un projet squelette neuf :
   désormais conditionnée au type de projet ; 254/254 tests ; commit
@@ -219,6 +221,20 @@ v0.9.0, l'**animation squelette** (rig maître).
   foyer DÉJÀ déplacé : premier move de 22 px écran (< slop IK 26) puis move de
   correction ; rig initial JAMAIS tendu à fond (L1+L2 > distance joint→effecteur)
   sinon toute cible est hors de portée (le solveur clampe, tip ≠ cible).
+
+### v0.20.3 (retour v0.20.2 — un seul os par forme)
+- **Retour** : « Éditeur os : ne pas autoriser d'ajouter plusieurs os » →
+  `_onTapUp` rend dès que `_bones.isNotEmpty` : la forme a SON os, plus
+  aucun ajout ; indice dédié (« La forme a déjà son os — glisser au MILIEU
+  = le déplacer, sur son EXTRÉMITÉ = le pivoter »).
+- **Déplacement et pivot inchangés** (gestes d'échelle, pas des taps) ;
+  ✓ livre toujours l'unique os lié.
+- **Conséquence D.1** : on ne CRÉE plus de chaîne d'os depuis l'éditeur
+  (la règle 1 forme = 1 os prime) — une chaîne importée reste éditable
+  (déplacer/pivoter chaque os). **Création d'os enfants à redéfinir** si
+  besoin (choix utilisateur à demander).
+- **Tests : 257/257** (le test « chaîne » devient « un seul os » :
+  2ᵉ tentative refusée + indice, résultat = 1 os lié), analyze 0.
 
 ### v0.20.2 (retours v0.20.1 — pivot, sélecteur, accès feuille d'os)
 - **Retour** : « Éditeur os : os possible de pivoter » → le glisser est
