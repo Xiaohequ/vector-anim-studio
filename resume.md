@@ -233,8 +233,14 @@ v0.9.0, l'**animation squelette** (rig maître).
   ✓ livre toujours l'unique os lié.
 - **Conséquence D.1** : on ne CRÉE plus de chaîne d'os depuis l'éditeur
   (la règle 1 forme = 1 os prime) — une chaîne importée reste éditable
-  (déplacer/pivoter chaque os). **Création d'os enfants à redéfinir** si
-  besoin (choix utilisateur à demander).
+  (déplacer/pivoter chaque os).
+- **Résolution du chaînage (choix utilisateur 01/10)** : l'option 2
+  (bouton explicite « + os enfant ») est **ANNULÉE — rien à développer**.
+  Le chaînage passe par la propriété **« Os parent »** de la feuille
+  Propriétés de l'os, DÉJÀ LIVRÉE : avec ≥ 2 formes (1 os chacune), le
+  listbox propose tous les os sauf soi-même et ses descendants →
+  `reparentBone` (ancrage préservé, liaisons intactes), couvert par 2
+  tests `reparentBone` (racine / autre os).
 - **Tests : 257/257** (le test « chaîne » devient « un seul os » :
   2ᵉ tentative refusée + indice, résultat = 1 os lié), analyze 0.
 - **Livraison** : commit `58d17fe`, CI run #47 VERTE, release
