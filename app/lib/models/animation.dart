@@ -904,6 +904,53 @@ class VectorShape {
   void removeKeyframeAt(int timeMs) =>
       keyframes.removeWhere((k) => k.timeMs == timeMs);
 
+  /// Propriétés de TRANSFORMATION keyframables (v0.20) : à la liaison avec
+  /// un os, la pièce ne se déplace plus par elle-même — ce sont elles que
+  /// [clearTransformKeyframes] efface. Morph, couleurs et opacité ne sont
+  /// PAS dans la liste (conservées).
+  static const List<AnimatableProperty> transformProperties =
+      <AnimatableProperty>[
+        AnimatableProperty.x,
+        AnimatableProperty.y,
+        AnimatableProperty.rotation,
+        AnimatableProperty.scale,
+        AnimatableProperty.scaleX,
+        AnimatableProperty.scaleY,
+      ];
+
+  /// Nombre d'entrées de transformation keyframées — affiché dans le
+  /// dialogue de confirmation qui précède l'effacement (v0.20).
+  int get transformKeyframeCount {
+    var count = 0;
+    for (final key in keyframes) {
+      for (final property in transformProperties) {
+        if (key.values.containsKey(property)) count++;
+      }
+    }
+    return count;
+  }
+
+  /// Efface les keyframes de TRANSFORMATION (v0.20, à la liaison avec un
+  /// os) : position, rotation et échelle disparaissent ; les keyframes de
+  /// morph, de couleur et d'opacité sont CONSERVÉES. Une keyframe qui ne
+  /// porte plus rien (ni valeur, ni couleur, ni morph) est supprimée.
+  /// Retourne le nombre de transformations retirées.
+  int clearTransformKeyframes() {
+    var cleared = 0;
+    for (final key in keyframes) {
+      for (final property in transformProperties) {
+        if (key.values.remove(property) != null) cleared++;
+      }
+    }
+    keyframes.removeWhere(
+      (key) =>
+          key.values.isEmpty &&
+          key.layerColors.isEmpty &&
+          key.layerPoints.isEmpty,
+    );
+    return cleared;
+  }
+
   /// Miroir du groupe de couches (v0.19) : réflexion du CONTENU autour de
   /// l'origine de la forme. Par couche : drapeau de flip (le painter reflète
   /// le contenu dessiné autour de l'origine de la couche), position et

@@ -1,59 +1,68 @@
-# Vector Anim Studio 0.19.1
+# Vector Anim Studio 0.20.0
 
-## Pièce liée à un os : plus aucune manipulation au doigt
+## L'os n'existe plus que par une forme (vague 1 : parcours os/forme)
 
-### Au canvas
+### Nouvel éditeur d'os
 
-- **Non sélectionnable** : taper une pièce portée par un os ne la
-  sélectionne plus (aucun bouton ⚙, aucun geste possible). Le message
-  nomme l'os porteur et rappelle la passerelle : menu Formes (pour ouvrir
-  la sheet ⚙ ou la délier).
-- **Tous les gestes de transformation bloqués** quand une telle pièce est
-  sélectionnée via le menu : déplacement, **rotation** ET **échelle**
-  (pincement). La garde est posée AVANT les branches de geste — un seul
-  point de contrôle. Message « transformations bloquées » si le doigt est
-  posé sur la pièce (ailleurs : geste ignoré en silence, comme avant).
-- **Restent libres** : les gestes d'os (poignée ✥, rotation d'os, IK) —
-  c'est le seul moyen de la déplacer, avec la dissociation
-  (menu Squelettes ▸ Délier la pièce).
+- Boutons **« Ajouter un os… »** et **« Modifier l'os… »** dans la feuille ⚙
+  de la forme : ils ouvrent un écran dédié qui contient **la seule forme
+  sélectionnée**, **centrée et ancrée au milieu de l'écran** (canvas calé
+  sur la boîte englobante ×1,6 pour dessiner précisément).
+- **Dessin** : tap ① = articulation, tap ② = extrémité. Un tap ① près d'un
+  os existant (poignet ou segment) l'attache → **les chaînes et l'IK restent
+  possibles** (D.1).
+- **Déplacement** : glisser un os le déplace **sans déplacer la forme**
+  (`translateBoneRest`, sans emport des pièces) — la forme reste ancrée au
+  centre.
+- ✓ renvoie les os **reconvertis en coordonnées projet** ; bouton désactivé
+  tant qu'aucun os n'est dessiné.
 
-### Feuille de propriétés ⚙
+### Liaison avec effacement contrôlé (D.2)
 
-- Sliders **Position X/Y, Rotation, Échelle, Échelle X/Y désactivés** pour
-  une pièce liée, avec un rappel en ambre placé au-dessus des sliders.
-- **Opacité** et **Épaisseur** restent libres : elles ne déplacent pas la
-  pièce. Pièce non liée : aucun verrou, aucun avertissement.
+- Le ✓ lie la forme à l'os **racine** dessiné (sélection exclusive : c'est
+  l'os qui porte la pièce désormais).
+- **Confirmation AVANT** : si la forme porte des keyframes de
+  **TRANSFORMATION**, un dialogue annonce leur suppression avant même
+  d'ouvrir l'éditeur. Seules position/rotation/échelle sont effacées —
+  **morph, couleurs de couche et opacité sont conservées** ; une keyframe
+  devenue vide disparaît.
+
+### « Supprimer l'os »
+
+- Nouveau bouton **« Supprimer l'os »** dans la feuille ⚙ (couleur
+  d'avertissement) : dialogue de confirmation annonçant le décompte
+  (n os, m keyframes) puis suppression de l'os porteur, de **toute sa
+  descendance**, de leurs pistes de keyframes et du lien. La pièce
+  redevient libre et sélectionnable.
+
+### Menus (D.4) et studio (D.5)
+
+- **Menu « Squelette » supprimé** (ajout d'os, liaison/délier, renommer ou
+  supprimer le rig, liste des os) : le bas de barre garde **Formes +
+  Animations** dans les projets squelette.
+- Le **mode rig 2-taps sur le canvas du studio** est retiré (remplacé par
+  l'éditeur) ; **✦, rotation et IK restent dans le studio** pour animer.
+- Les lignes **« Couches liées au rig »** (Lier…/Délier par couche) sortent
+  de la feuille : la liaison est au niveau forme.
+- Sélection d'os maintenue en tapant dessus sur le canvas.
 
 ### Modèle
 
-- `SkeletonRig.isAttached(shapeId)` + `carrierBoneId(shapeId)` : détecte
-  la liaison de la forme **entière**, sinon la première **couche** liée de
-  cette forme.
+- `SkeletonRig.chainFrom()` + `removeBoneForShape()` : suppression d'une
+  chaîne entière (os, descendance, pistes, liaisons).
+- `VectorShape.transformKeyframeCount` / `clearTransformKeyframes()` :
+  effacement ciblé des transformations.
 
-### Changement de comportement
+### Tests — 253/253, `flutter analyze` 0 problème
 
-- Le glisser d'une pièce liée **au repos** ne déplace plus l'ancrage de
-  l'os (comportement v0.9.5 « l'os suit la pièce ») : le verrou a la
-  priorité. Déplacer l'ancrage se fait par la poignée ✥ de l'os.
-
-### Tests
-
-- **247/247**, `flutter analyze` 0 problème. +11 tests :
-  `test/bound_shape_lock_test.dart` (7 : 3 modèle, 4 sheet ⚙) et
-  `widget_test.dart` (4 : glisser bloqué + témoin non lié, tap non
-  sélectionnable, pincement bloqué, rotation par poignée bloquée).
-- **Pièges de harnais rencontrés** :
-  - la preview du studio est clamped à ~200 px en fenêtre 800×600
-    (échelle 0,159) : un test de glisser doit donner au canvas une fenêtre
-    haute (800×1400 → ~366 px, échelle 0,286) ET une pièce assez grande
-    (400×300) pour que le pointeur reste dedans pendant la slop du
-    recognizer (18 px) — sinon `SelectionGeometry.hit` est faux et « rien
-    ne se passe » sans aucun message d'erreur ;
-  - `_load()` **auto-sélectionne la dernière forme** au chargement : un
-    test de « non sélectionnable » doit d'abord désélectionner (tap sur
-    l'os, sélection exclusive) ;
-  - le **SnackBar** apparaît en bas et recouvre la barre d'outils : le
-    laisser se fermer (pomper 5 s) avant d'utiliser un menu ;
-  - l'os de test doit être **loin** de la pièce : `segmentTouchSlop` 13 px
-    et `tipTouchSlop` 26 px font que le tap sur la pièce est absorbé par
-    l'os s'il est trop proche.
+- +6 : `test/bone_editor_test.dart` (4 — dessin en 2 taps avec conversion en
+  coordonnées projet, chaîne par aimantation au poignet, glisser d'os sans
+  bouger la forme, bouton d'enregistrement désactivé) et 2 dans
+  `widget_test.dart` (confirmation avant effacement des keyframes,
+  suppression complète os + descendance + keyframes + lien).
+- **Pièges de harnais rencontrés** : `find.byTooltip` renvoie le `RawTooltip`
+  et non l'`IconButton` → `find.widgetWithIcon` ; la liste `const` des os
+  refuse l'ajout au premier dessin (`List.of`) ; les taps arrivent en
+  coordonnées **canvas** alors que les os vivent en coordonnées **scène**
+  (`canvasToScene`) ; le premier move d'un geste est avalé par la slop
+  (18 px) — il faut un second move pour voir le déplacement.

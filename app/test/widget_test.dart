@@ -135,6 +135,25 @@ void main() {
     return project;
   }
 
+  /// Point GLOBAL du canvas + géométrie scène↔canvas réelle de l'app.
+  /// Déclaré en tête : les tests d'os (tap sur l'os) l'utilisent avant les
+  /// tests IK qui suivent.
+  (Offset topLeft, SceneGeometry geo) canvasHarness(
+    WidgetTester tester,
+    AnimationProject project,
+  ) {
+    final paint = tester.widget<CustomPaint>(
+      find.byWidgetPredicate(
+        (w) => w is CustomPaint && w.painter is ScenePainter,
+      ),
+    );
+    final box = tester.renderObject<RenderBox>(find.byWidget(paint));
+    return (
+      box.localToGlobal(Offset.zero),
+      SceneGeometry.fitFor(project, box.size),
+    );
+  }
+
   testWidgets('undo annule la suppression d’une forme', (tester) async {
     final repository = _MemoryRepository();
     final project = seededProject();
@@ -206,8 +225,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Rat rig'), findsWidgets);
-    expect(find.byTooltip('Squelettes'), findsOneWidget);
-    expect(find.byTooltip('Animations'), findsNothing);
+    // Menu Squelette SUPPRIMÉ (v0.20) : l'os se dessine dans l'éditeur d'os
+    // (bouton de la sheet ⚙), le bas de barre garde Formes + Animations.
+    expect(find.byTooltip('Squelettes'), findsNothing);
+    expect(find.byTooltip('Animations'), findsOneWidget);
   });
 
   testWidgets('le ◆ du playbar anime l’os sélectionné (projet squelette)', (
@@ -228,11 +249,16 @@ void main() {
 
     await pumpStudio(tester, repository, project);
 
-    // Sélectionner l'os via le menu Squelettes.
-    await tester.tap(find.byTooltip('Squelettes'));
+    // Sélectionner l'os en TAPANT dessus (le menu Squelette n'existe plus :
+    // la sélection d'os passe par le canvas ou la sélection de segment).
+    final (topLeft, geo) = canvasHarness(tester, project);
+    await tester.tapAt(topLeft + geo.sceneToCanvas(const Offset(180, 320)));
     await tester.pumpAndSettle();
-    await tester.tap(find.textContaining('Queue').last);
-    await tester.pumpAndSettle();
+    expect(
+      find.byTooltip('Glisser pour déplacer l’os'),
+      findsOneWidget,
+      reason: 'le tap sur l’os doit le sélectionner',
+    );
 
     // ◆ au curseur (0 s) : la piste de l'os reçoit sa première keyframe.
     await tester.tap(
@@ -498,11 +524,16 @@ void main() {
 
     await pumpStudio(tester, repository, project);
 
-    // Sélectionner l'os via le menu Squelettes.
-    await tester.tap(find.byTooltip('Squelettes'));
+    // Sélectionner l'os en TAPANT dessus (le menu Squelette n'existe plus :
+    // la sélection d'os passe par le canvas ou la sélection de segment).
+    final (topLeft, geo) = canvasHarness(tester, project);
+    await tester.tapAt(topLeft + geo.sceneToCanvas(const Offset(180, 320)));
     await tester.pumpAndSettle();
-    await tester.tap(find.textContaining('Queue').last);
-    await tester.pumpAndSettle();
+    expect(
+      find.byTooltip('Glisser pour déplacer l’os'),
+      findsOneWidget,
+      reason: 'le tap sur l’os doit le sélectionner',
+    );
 
     // Glisser LE BOUTON ✥ : l'ancrage de l'os suit le doigt (v0.9.4
     // armait un mode — choix utilisateur : plus de mode, le bouton
@@ -552,23 +583,6 @@ void main() {
     rig.addBone(child);
     project.skeleton = rig;
     return project;
-  }
-
-  /// Point GLOBAL du canvas + géométrie scène↔canvas réelle de l'app.
-  (Offset topLeft, SceneGeometry geo) canvasHarness(
-    WidgetTester tester,
-    AnimationProject project,
-  ) {
-    final paint = tester.widget<CustomPaint>(
-      find.byWidgetPredicate(
-        (w) => w is CustomPaint && w.painter is ScenePainter,
-      ),
-    );
-    final box = tester.renderObject<RenderBox>(find.byWidget(paint));
-    return (
-      box.localToGlobal(Offset.zero),
-      SceneGeometry.fitFor(project, box.size),
-    );
   }
 
   /// Glisser depuis [from] (global) de [sceneDelta] px scène : un premier
@@ -988,6 +1002,119 @@ void main() {
       reason: 'une pièce libre se déplace normalement',
     );
     expect(find.textContaining('est liée à'), findsNothing);
+  });
+
+  // ------------------------------------------- v0.20 : parcours os/forme
+
+  testWidgets('sheet ⚙ : « Ajouter un os… » prévient des keyframes effacées', (
+    tester,
+  ) async {
+    final repository = _MemoryRepository();
+    final project = AnimationProject.blank(
+      name: 'Film',
+      type: ProjectType.skeleton,
+    );
+    project.width = 720;
+    project.height = 1280;
+    final shape = VectorShape(name: 'Bloc', x: 360, y: 640);
+    shape.layers.add(
+      ShapeLayer(name: 'L', kind: ShapeKind.rect, width: 300, height: 200),
+    );
+    project.shapes.add(shape);
+    // 2 keyframes de TRANSFORM (seront effacées) + morph sur la 2ᵉ.
+    final pose = shape.poseAt(0);
+    shape.setKeyframes(<ShapeKeyframe>[
+      ShapeKeyframe(
+        timeMs: 0,
+        values: Map<AnimatableProperty, double>.from(pose),
+      ),
+      ShapeKeyframe(
+        timeMs: 800,
+        values: <AnimatableProperty, double>{
+          ...pose,
+          AnimatableProperty.x: 500,
+        },
+        layerPoints: <String, List<Offset>>{
+          shape.layers.first.id: const <Offset>[Offset(0, 0), Offset(30, 10)],
+        },
+      ),
+    ]);
+    project.skeleton = SkeletonRig(name: 'Squelette');
+
+    await pumpStudio(tester, repository, project);
+    // La pièce est auto-sélectionnée au chargement → bouton ⚙ visible.
+    await tester.tap(find.byTooltip('Propriétés de la forme'));
+    await tester.pumpAndSettle();
+    expect(find.text('Ajouter un os…'), findsOneWidget);
+
+    await tester.tap(find.text('Ajouter un os…'));
+    await tester.pumpAndSettle();
+    // Confirmation AVANT l'effacement (2 transformations keyframées).
+    expect(find.text('Lier la pièce à un os ?'), findsOneWidget);
+    expect(find.textContaining('2 transformation'), findsOneWidget);
+    expect(find.textContaining('conservées'), findsOneWidget);
+
+    // Annuler : ni éditeur, ni effacement.
+    await tester.tap(find.widgetWithText(TextButton, 'Annuler'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Os de « Bloc »'), findsNothing);
+    expect(shape.keyframes, hasLength(2));
+    expect(project.skeleton!.bones, isEmpty);
+  });
+
+  testWidgets('sheet ⚙ : « Supprimer l’os » efface os, keyframes et lien', (
+    tester,
+  ) async {
+    final repository = _MemoryRepository();
+    final project = AnimationProject.blank(
+      name: 'Film',
+      type: ProjectType.skeleton,
+    );
+    project.width = 720;
+    project.height = 1280;
+    final shape = VectorShape(name: 'Bloc', x: 360, y: 640);
+    shape.layers.add(
+      ShapeLayer(name: 'L', kind: ShapeKind.rect, width: 300, height: 200),
+    );
+    project.shapes.add(shape);
+    final rig = SkeletonRig(name: 'Squelette');
+    final root = RigBone(name: 'Tronc', offsetX: 360, offsetY: 500, length: 90);
+    final child = RigBone(
+      name: 'Bras',
+      parentId: root.id,
+      offsetX: 90,
+      offsetY: 0,
+      length: 70,
+    );
+    rig.addBone(root);
+    rig.addBone(child);
+    rig.bindShape(shape.id, root.id);
+    rig.tracks[root.id] = <BoneKeyframe>[
+      BoneKeyframe(timeMs: 0),
+      BoneKeyframe(timeMs: 1000),
+    ];
+    rig.tracks[child.id] = <BoneKeyframe>[BoneKeyframe(timeMs: 500)];
+    project.skeleton = rig;
+
+    await pumpStudio(tester, repository, project);
+    await tester.tap(find.byTooltip('Propriétés de la forme'));
+    await tester.pumpAndSettle();
+    expect(find.text('Os « Tronc »'), findsOneWidget);
+    expect(find.text('Supprimer l’os'), findsOneWidget);
+
+    await tester.tap(find.text('Supprimer l’os'));
+    await tester.pumpAndSettle();
+    // Confirmation : chaîne + total des keyframes annoncés.
+    expect(find.text('Supprimer l’os ?'), findsOneWidget);
+    expect(find.textContaining('2 os'), findsOneWidget);
+    expect(find.textContaining('3 keyframes'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Supprimer'));
+    await tester.pumpAndSettle();
+    expect(project.skeleton!.bones, isEmpty);
+    expect(project.skeleton!.bindings, isEmpty);
+    expect(project.skeleton!.tracks, isEmpty);
+    expect(project.skeleton!.isAttached(shape.id), isFalse);
   });
 }
 

@@ -28,8 +28,8 @@ class ShapePropertiesSheet extends StatefulWidget {
     this.skeletonPiece = false,
     this.skeletonNote,
     this.skeletonRig,
-    this.onBindLayer,
-    this.onUnbindLayer,
+    this.onOpenBoneEditor,
+    this.onDeleteBone,
     this.onMirror,
   });
 
@@ -54,15 +54,17 @@ class ShapePropertiesSheet extends StatefulWidget {
   /// État de liaison au rig (projet squelette), affiché sous le titre.
   final String? skeletonNote;
 
-  /// Rig du projet (projet squelette) : active la section « Couches liées
-  /// au rig » (liaison au niveau couche, v0.9.6).
+  /// Rig du projet (projet squelette) : active la section « Os de la
+  /// forme » (l'os n'existe que par une forme, v0.20).
   final SkeletonRig? skeletonRig;
 
-  /// Lie une couche à un os (dialogue de sélection côté écran).
-  final Future<void> Function(ShapeLayer layer)? onBindLayer;
+  /// Ouvre l'éditeur d'os (dessin + déplacement) — création ou
+  /// modification de la chaîne de cette forme.
+  final VoidCallback? onOpenBoneEditor;
 
-  /// Délie une couche de son os.
-  final Future<void> Function(ShapeLayer layer)? onUnbindLayer;
+  /// « Supprimer l'os » : efface l'os, sa descendance et toutes leurs
+  /// keyframes (dialogue de confirmation côté studio).
+  final VoidCallback? onDeleteBone;
 
   /// Miroir du groupe de couches (v0.19) : [horizontal] = miroir d'axe
   /// vertical (gauche ↔ droite), sinon d'axe horizontal (haut ↔ bas).
@@ -166,6 +168,61 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                   style: const TextStyle(fontSize: 11, color: Colors.white70),
                 ),
                 const SizedBox(height: 4),
+                // Os de la forme (v0.20) : l'os n'existe que par une forme.
+                // « Ajouter » ouvre l'éditeur d'os (dessin sur la forme,
+                // forme ancrée au milieu de l'écran) ; « Supprimer » part
+                // avec la descendance et toutes les keyframes de l'os.
+                if (widget.skeletonRig != null &&
+                    widget.onOpenBoneEditor != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 2),
+                    child: Row(
+                      children: <Widget>[
+                        Expanded(
+                          child: Text(
+                            _boneName(shape) == null
+                                ? 'Aucun os'
+                                : 'Os « ${_boneName(shape)} »',
+                            style: const TextStyle(fontSize: 12),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        TextButton.icon(
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                            widget.onOpenBoneEditor!();
+                          },
+                          icon: Icon(
+                            _boneName(shape) == null ? Icons.add : Icons.edit,
+                            size: 16,
+                          ),
+                          label: Text(
+                            _boneName(shape) == null
+                                ? 'Ajouter un os…'
+                                : 'Modifier l’os…',
+                          ),
+                        ),
+                        if (_boneName(shape) != null &&
+                            widget.onDeleteBone != null)
+                          TextButton.icon(
+                            onPressed: () {
+                              Navigator.of(context).pop();
+                              widget.onDeleteBone!();
+                            },
+                            icon: const Icon(
+                              Icons.delete_outline,
+                              size: 16,
+                              color: Color(0xFFF2949A),
+                            ),
+                            label: const Text(
+                              'Supprimer l’os',
+                              style: TextStyle(color: Color(0xFFF2949A)),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                 // Miroir (v0.19) : reflète le groupe de couches — contenu
                 // dessiné (flag de flip), position et rotation de chaque
                 // couche. Non proposé pour les instances (pas de couches).
@@ -209,7 +266,8 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                     child: Text(
                       '« ${shape.name} » est liée à l’os « '
                       '${_carrierName(shape)} » : transformations bloquées '
-                      '— bougez l’os (Squelettes ▸ Délier pour libérer).',
+                      '— seule l’os la bouge (« Supprimer l’os » pour '
+                      'libérer).',
                       style: const TextStyle(
                         fontSize: 11,
                         color: Color(0xFFF2C94C),
@@ -228,10 +286,6 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                 // est un réglage de forme qui s'applique aussi aux pièces
                 // d'un projet squelette (ex. porte non liée de l'exemple G2).
                 if (widget.onPivotChanged != null) ..._buildPivotRows(shape),
-                if (widget.skeletonPiece &&
-                    widget.skeletonRig != null &&
-                    shape.layers.isNotEmpty)
-                  ..._buildRigLayerRows(),
                 // Bugfix v0.16.1 : l'interpolation et l'astuce ◆ valent pour
                 // les pièces — leurs poses s'interpolent comme les formes.
                 Row(
@@ -385,59 +439,13 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
   /// Section « Couches liées au rig » (projet squelette) : une ligne par
   /// couche avec son os porteur et une action Lier…/Délier. La liaison de
   /// couche prend le pas sur la liaison de forme entière.
-  List<Widget> _buildRigLayerRows() {
-    final rig = widget.skeletonRig!;
-    final shape = widget.shape;
-    final rows = <Widget>[
-      Padding(
-        padding: const EdgeInsets.only(top: 6, bottom: 2),
-        child: Text(
-          'Couches liées au rig',
-          style: TextStyle(fontSize: 11, color: Colors.white70),
-        ),
-      ),
-    ];
-    for (final layer in shape.layers) {
-      final bone = rig.boneById(
-        rig.bindingForLayer(shape.id, layer.id)?.boneId,
-      );
-      rows.add(
-        Row(
-          children: <Widget>[
-            Expanded(
-              child: Text(
-                layer.name,
-                style: const TextStyle(fontSize: 12),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            Text(
-              bone?.name ?? (rig.bones.isEmpty ? 'aucun os' : '—'),
-              style: TextStyle(
-                fontSize: 11,
-                color: bone == null ? Colors.white24 : const Color(0xFFC084FC),
-              ),
-            ),
-            TextButton(
-              onPressed: bone == null
-                  ? (rig.bones.isEmpty
-                        ? null
-                        : () async {
-                            await widget.onBindLayer?.call(layer);
-                            _refresh();
-                          })
-                  : () async {
-                      await widget.onUnbindLayer?.call(layer);
-                      _refresh();
-                    },
-              child: Text(bone == null ? 'Lier…' : 'Délier'),
-            ),
-          ],
-        ),
-      );
-    }
-    return rows;
+  /// Nom de l'os porteur de la forme (null = aucun os).
+  String? _boneName(VectorShape shape) {
+    final rig = widget.skeletonRig;
+    if (rig == null) return null;
+    final id = rig.carrierBoneId(shape.id);
+    if (id == null) return null;
+    return rig.boneById(id)?.name;
   }
 
   /// Sliders du pivot de rotation (statique, unités scène, offset depuis le

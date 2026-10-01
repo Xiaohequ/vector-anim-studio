@@ -6,12 +6,18 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Repo : https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`)
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
-- Dernière version : **0.19.1** (pièce portée par un os = plus aucune
-  manipulation au doigt : **non sélectionnable** au tap, déplacement /
-  rotation / échelle bloqués, sliders X/Y/rotation/échelle verrouillés ;
-  seul l'os, ou une dissociation, la bouge ; 247/247 tests ; commit
-  `29b470e`, CI run #43 verte, release `v0.19.1-build43`, APK 54,1 Mo —
-  **VALIDÉE APPAREIL : déplacement / rotation / échelle verrouillés OK**).
+- Dernière version : **0.20.0** (vague 1 — « l'os n'existe que par une
+  forme » : **nouvel éditeur d'os** (forme seule centrée, dessin en 2 taps,
+  déplacement de l'os sans bouger la forme), boutons **Ajouter / Modifier /
+  Supprimer l'os** dans la sheet ⚙, **confirmation avant effacement** des
+  keyframes de transform (morph/couleurs/opacité conservés), **menu
+  Squelette supprimé** ; 253/253 tests).
+- v0.19.1 (pièce portée par un os = plus aucune manipulation au doigt :
+  **non sélectionnable** au tap, déplacement / rotation / échelle bloqués,
+  sliders X/Y/rotation/échelle verrouillés ; seul l'os, ou une
+  dissociation, la bouge ; 247/247 tests ; commit `29b470e`, CI run #43
+  verte, release `v0.19.1-build43`, APK 54,1 Mo — **VALIDÉE APPAREIL :
+  déplacement / rotation / échelle verrouillés OK**).
 - v0.19.0 (miroir H/V d'un groupe de couches — drapeaux `flipH`/`flipV`,
   schéma DB v7, format vasf v4 ; CI run #42 verte, release
   `v0.19.0-build42`, APK 54,1 Mo — **VALIDÉE APPAREIL : miroir OK**).
@@ -200,6 +206,49 @@ v0.9.0, l'**animation squelette** (rig maître).
   foyer DÉJÀ déplacé : premier move de 22 px écran (< slop IK 26) puis move de
   correction ; rig initial JAMAIS tendu à fond (L1+L2 > distance joint→effecteur)
   sinon toute cible est hors de portée (le solveur clampe, tip ≠ cible).
+
+### v0.20.0 (vague 1 — l'os n'existe que par une forme)
+- **Demande utilisateur** : os affiché via la forme, éditeur d'os dédié,
+  keyframes de forme remplacées par celles de l'os, segment coloré,
+  menus ajustés, suppression d'os, sélection par segment, effacement avec
+  confirmation. **Décisions** : D.1 chaînes d'os conservées, D.2 effacer
+  les TRANSFORMS seul, D.3 import vasf inchangé (autre version), D.4 menu
+  Squelette supprimé, D.5 ✥/rotation/IK gardés dans le studio.
+- **Nouvel éditeur d'os** (`ui/bone_editor_screen.dart`) : ouvert depuis la
+  sheet ⚙ (« Ajouter un os… » / « Modifier l'os… ») ; contient la SEULE
+  forme, **centrée/ancrée au milieu de l'écran** (canvas = bbox ×1,6 de la
+  pièce, forme recopiée au centre du canvas éditeur) ; tap ① articulation
+  (aimantée au poignet/segment d'un os existant → chaînes/IK ✓) puis tap ②
+  extrémité ; glisser un os = `translateBoneRest` **SANS** `carryBoundPieces`
+  → l'os bouge, la forme reste ancrée ; ✓ = `BoneEditorResult` (os en
+  coords PROJET — conversion par `_shift` sur les RACINES recalculées à la
+  sauvegarde, pas à l'ouverture).
+- **Liaison + effacement contrôlé** : `_editShapeBone` montre le dialogue
+  « Lier la pièce à un os ? » AVANT d'ouvrir l'éditeur si
+  `transformKeyframeCount > 0` ; à la liaison, `clearTransformKeyframes()`
+  efface position/rotation/échelle et garde morph/couleurs/opacité (les
+  keyframes vides sont supprimées) ; sélection exclusive → l'OS porte la
+  pièce.
+- **« Supprimer l'os »** (sheet ⚙) : dialogue annonçant n os + m
+  keyframes, puis `SkeletonRig.removeBoneForShape()` = os porteur +
+  TOUTE descendance + `tracks` + `bindings` (la pièce redevient
+  sélectionnable).
+- **Menus/studio** : `_skeletonsMenu` supprimé (le bas de barre affiche
+  Formes + Animations en projet squelette), mode rig 2-taps du canvas
+  supprimé (`_startAddBone`/`_finishAddBone`/`_addBoneMode`/…), liaisons de
+  couche sorties de la sheet (`_buildRigLayerRows` retiré, callbacks
+  `onBindLayer`/`onUnbindLayer` remplacés par `onOpenBoneEditor` /
+  `onDeleteBone`), `_renameRig`/`_deleteRig` supprimés (rig = interne).
+- **Tests : 253/253** (+6 : `bone_editor_test.dart` ×4, `widget_test` ×2),
+  analyze 0. **Pièges harnais** : `find.byTooltip` renvoie `RawTooltip` →
+  `find.widgetWithIcon(IconButton, Icons.check)` ; la liste `const` d'os
+  refuse l'ajout (`List.of`) ; taps en coords CANVAS vs os en coords SCÈNE
+  (`geo.canvasToScene`) ; le 1ᵉʳ move d'un geste est avalé par la slop
+  (18 px) — il faut un 2ᵉ move pour voir le déplacement ; `canvasHarness`
+  doit être déclaré AVANT les tests qui l'utilisent (fonction locale).
+- **Vague 2 (prochaine release)** : timeline — pistes d'os supprimées,
+  losanges d'os sur le segment de la forme liée, segment coloré,
+  sélection du segment → os sélectionné.
 
 ### v0.19.1 (pièce portée par un os : plus aucune manipulation au doigt)
 - **Demande utilisateur** : « ne pas déplacer une forme quand la forme est

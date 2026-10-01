@@ -662,6 +662,46 @@ class SkeletonRig {
     tracks.remove(boneId);
   }
 
+  /// Os de la chaîne issue de [rootBoneId] (l'os lui-même + toute sa
+  /// descendance) — l'ordre n'est pas garanti.
+  List<RigBone> chainFrom(String rootBoneId) {
+    final ids = <String>{rootBoneId};
+    var grew = true;
+    while (grew) {
+      grew = false;
+      for (final bone in bones) {
+        if (bone.parentId != null &&
+            ids.contains(bone.parentId) &&
+            !ids.contains(bone.id)) {
+          ids.add(bone.id);
+          grew = true;
+        }
+      }
+    }
+    return [
+      for (final bone in bones)
+        if (ids.contains(bone.id)) bone,
+    ];
+  }
+
+  /// « Supprimer l'os » (v0.20) : supprime l'os porteur de [shapeId], TOUTE
+  /// sa descendance, leurs pistes de keyframes et tous les liens (forme
+  /// entière et couches). Retourne le nombre d'os supprimés (0 = rien n'était
+  /// lié).
+  int removeBoneForShape(String shapeId) {
+    final rootId = carrierBoneId(shapeId);
+    if (rootId == null) return 0;
+    final ids = <String>{for (final bone in chainFrom(rootId)) bone.id};
+    bones.removeWhere((bone) => ids.contains(bone.id));
+    for (final id in ids) {
+      tracks.remove(id);
+      bindings.removeWhere((binding) => binding.boneId == id);
+    }
+    // Filet de sécurité : plus aucun lien ne doit pointer cette forme.
+    bindings.removeWhere((binding) => binding.shapeId == shapeId);
+    return ids.length;
+  }
+
   SkeletonRig copy() => SkeletonRig(
     name: name,
     bones: [for (final bone in bones) bone.copy()],
