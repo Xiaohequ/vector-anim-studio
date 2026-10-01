@@ -9,7 +9,9 @@ v0.9.0, l'**animation squelette** (rig maître).
 - Dernière version : **0.20.2** (retours v0.20.1 : **pivot de l'os** dans
   l'éditeur (glisser l'EXTRÉMITÉ = pivoter, le MILIEU = déplacer),
   **sélecteur de forme masqué** dans l'éditeur, bouton **« Ouvrir l'éditeur
-  d'os… »** ajouté à la feuille Propriétés de l'os ; 257/257 tests).
+  d'os… »** ajouté à la feuille Propriétés de l'os ; 257/257 tests ; commit
+  `e1752b8`, CI run #46 verte, release `v0.20.2-build46`, APK 54,1 Mo —
+  validation appareil en attente).
 - v0.20.1 (bugfix — la section os de la feuille ⚙ était conditionnée à
   l'existence du rig, donc INVISIBLE sur un projet squelette neuf :
   désormais conditionnée au type de projet ; 254/254 tests ; commit
@@ -233,6 +235,14 @@ v0.9.0, l'**animation squelette** (rig maître).
   forme → snack explicite.
 - **Tests : 257/257** (+3 : aucun sélecteur, pivot articulation fixe +
   forme immobile, bouton de la feuille d'os → éditeur), analyze 0.
+- **Piège de geste (corrigé)** : le hit ET le mode (pivot/déplacement) se
+  décident sur la position d'appui BRUTE (`Listener.onPointerDown` →
+  `_downPos`) — le foyer de `onScaleStart` est déjà déplacé par la slop
+  (18-45 px) et sortait à la fois de la zone d'extrémité (pas de pivot) et
+  de l'os (hit nul) ; l'ANGLE de référence, lui, est pris au foyer courant
+  pour absorber la slop (pas de saut au démarrage).
+- **Livraison** : commit `e1752b8`, CI run #46 VERTE, release
+  `v0.20.2-build46` (`vector-anim-studio-0.20.2.apk`, 54,1 Mo).
 - **Validé v0.20.1** : accès éditeur ok, glisser os sans bouger la forme ok.
 
 ### v0.20.1 (bugfix : bouton « Ajouter un os… » introuvable)
