@@ -1236,6 +1236,57 @@ void main() {
   });
 
   testWidgets(
+    'un os lié à une forme masquée disparaît du preview et du keyframe',
+    (tester) async {
+      final repository = _MemoryRepository();
+      final project = AnimationProject.blank(
+        name: 'Rat',
+        type: ProjectType.skeleton,
+      );
+      final piece = VectorShape(name: 'Bloc', startMs: 0, endMs: 1000);
+      piece.layers.add(ShapeLayer(name: 'L', kind: ShapeKind.rect));
+      project.shapes.add(piece);
+      final rig = SkeletonRig();
+      final bone = RigBone(
+        name: 'Os lié',
+        offsetX: 180,
+        offsetY: 320,
+        length: 50,
+      );
+      rig.addBone(bone);
+      rig.bindShape(piece.id, bone.id);
+      project.skeleton = rig;
+      await pumpStudio(tester, repository, project);
+
+      final (topLeft, geo) = canvasHarness(tester, project);
+      await tester.tapAt(topLeft + geo.sceneToCanvas(const Offset(180, 320)));
+      await tester.pumpAndSettle();
+      expect(
+        find.byTooltip('Ajouter une keyframe d’angle à l’os au curseur'),
+        findsOneWidget,
+      );
+
+      final timeline = tester.getRect(find.byType(TimelineView));
+      await tester.tapAt(
+        timeline.bottomLeft + Offset(timeline.width * 0.9, -2),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byTooltip('Keyframe d’os indisponible hors du segment'),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<IconButton>(
+              find.widgetWithIcon(IconButton, Icons.diamond_outlined),
+            )
+            .onPressed,
+        isNull,
+      );
+    },
+  );
+
+  testWidgets(
     'sélectionner une autre forme dans la timeline désélectionne l’os',
     (tester) async {
       final repository = _MemoryRepository();

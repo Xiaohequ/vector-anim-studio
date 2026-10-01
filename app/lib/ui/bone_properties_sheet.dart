@@ -33,6 +33,7 @@ class BonePropertiesSheet extends StatefulWidget {
     this.onToggleIk,
     this.onFlipBend,
     this.onOpenEditor,
+    this.onKeyframeAllowed,
   });
 
   final SkeletonRig rig;
@@ -62,6 +63,10 @@ class BonePropertiesSheet extends StatefulWidget {
   /// Ouvre l'éditeur d'os (dessin/pivot sur la forme) — v0.20.2, demandé
   /// pour ne pas repasser par la feuille de la FORME.
   final VoidCallback? onOpenEditor;
+
+  /// Autorise l'ajout/retrait d'une keyframe selon la fenêtre de la forme
+  /// portée par l'os.
+  final bool Function(int timeMs)? onKeyframeAllowed;
 
   @override
   State<BonePropertiesSheet> createState() => _BonePropertiesSheetState();
@@ -109,6 +114,8 @@ class _BonePropertiesSheetState extends State<BonePropertiesSheet> {
       animation: controller,
       builder: (context, _) {
         final keyframe = controller.nearestBoneKeyframe(rig, bone);
+        final keyframeAllowed =
+            widget.onKeyframeAllowed?.call(controller.timeMs) ?? true;
         final hasKeyframes = rig.hasKeyframes(bone.id);
         final deltaDegrees =
             rig.angleDeltaAt(bone.id, controller.timeMs) *
@@ -157,10 +164,12 @@ class _BonePropertiesSheetState extends State<BonePropertiesSheet> {
                             : Icons.diamond,
                         color: hasKeyframes ? const Color(0xFFF2C94C) : null,
                       ),
-                      onPressed: () async {
-                        await widget.onToggleKeyframe();
-                        _refresh();
-                      },
+                      onPressed: keyframeAllowed
+                          ? () async {
+                              await widget.onToggleKeyframe();
+                              _refresh();
+                            }
+                          : null,
                     ),
                     IconButton(
                       tooltip: 'Supprimer l’os',
@@ -264,13 +273,15 @@ class _BonePropertiesSheetState extends State<BonePropertiesSheet> {
                         max: 1,
                         divisions: 100,
                         value: sampledOpacity.clamp(0.0, 1.0),
-                        onChanged: (value) {
-                          widget.onAnimatableChanged?.call(
-                            BoneAnimatable.opacity,
-                            value,
-                          );
-                          _refresh();
-                        },
+                        onChanged: keyframeAllowed
+                            ? (value) {
+                                widget.onAnimatableChanged?.call(
+                                  BoneAnimatable.opacity,
+                                  value,
+                                );
+                                _refresh();
+                              }
+                            : null,
                       ),
                     ),
                   ],
@@ -287,13 +298,15 @@ class _BonePropertiesSheetState extends State<BonePropertiesSheet> {
                         max: 3,
                         divisions: 28,
                         value: sampledStretch.clamp(0.2, 3),
-                        onChanged: (value) {
-                          widget.onAnimatableChanged?.call(
-                            BoneAnimatable.stretch,
-                            value,
-                          );
-                          _refresh();
-                        },
+                        onChanged: keyframeAllowed
+                            ? (value) {
+                                widget.onAnimatableChanged?.call(
+                                  BoneAnimatable.stretch,
+                                  value,
+                                );
+                                _refresh();
+                              }
+                            : null,
                       ),
                     ),
                   ],
@@ -310,13 +323,15 @@ class _BonePropertiesSheetState extends State<BonePropertiesSheet> {
                         max: 3,
                         divisions: 28,
                         value: sampledSquash.clamp(0.2, 3),
-                        onChanged: (value) {
-                          widget.onAnimatableChanged?.call(
-                            BoneAnimatable.squash,
-                            value,
-                          );
-                          _refresh();
-                        },
+                        onChanged: keyframeAllowed
+                            ? (value) {
+                                widget.onAnimatableChanged?.call(
+                                  BoneAnimatable.squash,
+                                  value,
+                                );
+                                _refresh();
+                              }
+                            : null,
                       ),
                     ),
                   ],

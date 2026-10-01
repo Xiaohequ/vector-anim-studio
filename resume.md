@@ -6,10 +6,9 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Repo : https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`)
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
-- Dernière version : **0.21.1** (corrections timeline/preview : la visibilité
-  respecte `startMs → endMs` même pour les pièces liées à un os, une forme
-  sélectionnée désélectionne l'os précédent ; 257/257 tests ; CI run #49
-  verte ; release `v0.21.1-build49`, APK 54,1 Mo publiée).
+- Dernière version : **0.21.2** (éditeur d'os recentré à la pose du playhead
+  + keyframes ignorées, os masqués hors fenêtre de leur forme, keyframes d'os
+  interdites hors segment ; 259/259 tests ; release en cours).
 - **v0.20.3 VALIDÉE APPAREIL (01/10)** — retour : « je valide v0.20.3 ».
   (un seul os par forme dans l'éditeur, pivot, bouton feuille d'os).
 - v0.20.2 (retours v0.20.1 : **pivot de l'os** dans l'éditeur (glisser

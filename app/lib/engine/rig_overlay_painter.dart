@@ -12,12 +12,18 @@ class RigOverlayPainter extends CustomPainter {
     required this.pose,
     required this.geo,
     this.selectedBoneId,
+    this.showOnlySelected = false,
   });
 
   final SkeletonRig rig;
   final SkeletonPose pose;
   final SceneGeometry geo;
   final String? selectedBoneId;
+
+  /// En studio, l'overlay est volontairement réduit à l'os sélectionné.
+  /// L'éditeur d'os conserve la valeur par défaut pour afficher toute la
+  /// chaîne en cours de dessin.
+  final bool showOnlySelected;
 
   static const Color _idle = Color(0xFFC084FC);
   static const Color _selected = Color(0xFFF2C94C);
@@ -84,6 +90,10 @@ class RigOverlayPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     for (final bone in rig.bones) {
+      if (showOnlySelected &&
+          (selectedBoneId == null || bone.id != selectedBoneId)) {
+        continue;
+      }
       final frame = pose.frameOf(bone.id);
       if (frame == null) continue;
       final selected = bone.id == selectedBoneId;
@@ -192,10 +202,12 @@ class RigOverlayPainter extends CustomPainter {
     SkeletonPose pose,
     SkeletonRig rig,
     SceneGeometry geo,
-    Offset canvasPoint,
-  ) {
+    Offset canvasPoint, {
+    bool Function(RigBone bone)? isVisible,
+  }) {
     String? segmentHit;
     for (final bone in rig.bones.reversed) {
+      if (isVisible != null && !isVisible(bone)) continue;
       final frame = pose.frameOf(bone.id);
       if (frame == null) continue;
       final joint = geo.sceneToCanvas(frame.joint);

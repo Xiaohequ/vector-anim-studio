@@ -110,20 +110,42 @@ class _BoneEditorScreenState extends State<BoneEditorScreen> {
     // l'écran : la forme occupe le centre, échelle maximale.
     final width = math.max(bounds.width * 1.6, 320.0);
     final height = math.max(bounds.height * 1.6, 320.0);
-    _shift = Offset(shape.x - width / 2, shape.y - height / 2);
+    final currentX = shape.valueAt(AnimatableProperty.x, widget.timeMs);
+    final currentY = shape.valueAt(AnimatableProperty.y, widget.timeMs);
+    _shift = Offset(currentX - width / 2, currentY - height / 2);
 
     _editor = AnimationProject.fromJson(project.toJson());
     _editor.width = width;
     _editor.height = height;
     _editor.fps = project.fps;
     _editor.skeleton = null;
+    final editorShape = shape.copy();
+    // Les keyframes de transformation de la forme originale ne doivent pas
+    // reprendre le dessus sur le centrage au moment du rendu de l'éditeur.
+    // On conserve les couleurs/morphs éventuels, mais on fige la pose de
+    // transformation échantillonnée au playhead et on centre son origine.
+    editorShape.clearTransformKeyframes();
+    for (final property in <AnimatableProperty>[
+      AnimatableProperty.rotation,
+      AnimatableProperty.scale,
+      AnimatableProperty.scaleX,
+      AnimatableProperty.scaleY,
+      AnimatableProperty.opacity,
+      AnimatableProperty.strokeWidth,
+    ]) {
+      editorShape.setBase(property, shape.valueAt(property, widget.timeMs));
+    }
+    editorShape
+      ..x = width / 2
+      ..y = height / 2
+      // L'éditeur est une vue de travail : la pièce doit rester visible même
+      // si le playhead du studio est hors de sa fenêtre d'affichage.
+      ..startMs = 0
+      ..endMs = math.max(widget.timeMs, shape.endMs)
+      ..visible = true;
     _editor.shapes
       ..clear()
-      ..add(
-        shape.copy()
-          ..x = width / 2
-          ..y = height / 2,
-      );
+      ..add(editorShape);
 
     // Chaîne de la forme (le rig n'existe peut-être pas encore).
     final rig = project.skeleton;

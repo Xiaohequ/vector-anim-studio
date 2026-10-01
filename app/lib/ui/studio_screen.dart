@@ -78,6 +78,30 @@ class _StudioScreenState extends State<StudioScreen>
   /// Os sélectionné (mode squelette) ; null → aucune sélection d'os.
   String? _selectedBoneId;
 
+  /// Un os est visible/interactif s'il porte au moins une forme visible au
+  /// playhead. Un os importé sans liaison reste éditable pour compatibilité.
+  bool _boneVisibleAt(RigBone bone, int timeMs) {
+    final project = _project;
+    final rig = _rig;
+    if (project == null || rig == null) return false;
+    var attached = false;
+    for (final shape in project.shapes) {
+      final carrierId = rig.carrierBoneId(shape.id);
+      if (carrierId == null ||
+          !rig.chainFrom(carrierId).any((item) => item.id == bone.id)) {
+        continue;
+      }
+      attached = true;
+      if (shape.isVisibleAt(timeMs)) return true;
+    }
+    return !attached;
+  }
+
+  bool _selectedBoneIsVisible(int timeMs) {
+    final bone = _selectedBone;
+    return bone != null && _boneVisibleAt(bone, timeMs);
+  }
+
   /// Os en cours de rotation (glisser de la poignée) ou de déplacement
   /// (glisser du bouton ✥).
   String? _dragBoneId;
@@ -831,11 +855,33 @@ class _StudioScreenState extends State<StudioScreen>
     _snack('Os supprimé (descendance et keyframes compris)');
   }
 
+  bool _boneKeyframeAllowed(RigBone bone, int timeMs) {
+    final project = _project;
+    final rig = _rig;
+    if (project == null || rig == null) return false;
+    var attached = false;
+    for (final shape in project.shapes) {
+      final carrierId = rig.carrierBoneId(shape.id);
+      if (carrierId == null ||
+          !rig.chainFrom(carrierId).any((item) => item.id == bone.id)) {
+        continue;
+      }
+      attached = true;
+      if (shape.isVisibleAt(timeMs)) return true;
+    }
+    // Os importé sans forme : conserver l'ancien comportement.
+    return !attached;
+  }
+
   Future<void> _toggleBoneKeyframe() async {
     final rig = _rig;
     final bone = _selectedBone;
     final controller = _controller;
     if (rig == null || bone == null || controller == null) return;
+    if (!_boneKeyframeAllowed(bone, controller.timeMs)) {
+      _snack('Le curseur doit être sur le segment de la forme liée');
+      return;
+    }
     _pushUndo();
     setState(() => controller.toggleBoneKeyframe(rig, bone));
     await _flushSave();
@@ -846,6 +892,7 @@ class _StudioScreenState extends State<StudioScreen>
     final bone = _selectedBone;
     final controller = _controller;
     if (rig == null || bone == null || controller == null) return;
+    if (!_boneKeyframeAllowed(bone, controller.timeMs)) return;
     final near = controller.nearestBoneKeyframe(rig, bone);
     if (near == null) return;
     _pushUndo();
@@ -900,6 +947,7 @@ class _StudioScreenState extends State<StudioScreen>
     final bone = _selectedBone;
     final controller = _controller;
     if (rig == null || bone == null || controller == null) return;
+    if (!_boneKeyframeAllowed(bone, controller.timeMs)) return;
     _pushUndo(tag: 'boneAnim:${bone.id}:${property.name}');
     setState(() {
       switch (property) {
@@ -1016,6 +1064,7 @@ class _StudioScreenState extends State<StudioScreen>
         onToggleIk: _toggleIk,
         onFlipBend: _flipBend,
         onOpenEditor: _editBoneInEditor,
+        onKeyframeAllowed: (timeMs) => _boneKeyframeAllowed(bone, timeMs),
       ),
     );
     if (mounted) setState(() {});
@@ -1113,6 +1162,11 @@ class _StudioScreenState extends State<StudioScreen>
     /// repos (translateBoneRest + carry) même quand l'os est animé.
     bool keyframed = false,
   }) {
+    if (keyframed &&
+        rig.hasKeyframes(bone.id) &&
+        !_boneKeyframeAllowed(bone, controller.timeMs)) {
+      return;
+    }
     if (keyframed && rig.hasKeyframes(bone.id)) {
       final pose = SkeletonPose.evaluate(rig, controller.timeMs);
       final parentFrame = pose.frameOf(bone.parentId);
@@ -1192,6 +1246,7 @@ class _StudioScreenState extends State<StudioScreen>
         }
       }
       if (ikParent != null &&
+          _boneVisibleAt(ikParent, controller.timeMs) &&
           RigOverlayPainter.hitIkEndEffector(
             pose,
             rig,
@@ -1205,7 +1260,10 @@ class _StudioScreenState extends State<StudioScreen>
       if (selectedBone == null) {
         // Aucune sélection : le losange vert sous le doigt démarre l'IK.
         for (final candidate in rig.bones.reversed) {
-          if (!candidate.ikEnabled) continue;
+          if (!candidate.ikEnabled ||
+              !_boneVisibleAt(candidate, controller.timeMs)) {
+            continue;
+          }
           if (RigOverlayPainter.hitIkEndEffector(
             pose,
             rig,
@@ -1218,7 +1276,8 @@ class _StudioScreenState extends State<StudioScreen>
           }
         }
       }
-      if (selectedBone != null) {
+      if (selectedBone != null &&
+          _boneVisibleAt(selectedBone, controller.timeMs)) {
         if (RigOverlayPainter.hitRotationHandle(
           pose,
           rig,
@@ -1614,6 +1673,7 @@ class _StudioScreenState extends State<StudioScreen>
         rig,
         geo,
         details.localPosition,
+        isVisible: (candidate) => _boneVisibleAt(candidate, controller.timeMs),
       );
       if (boneId != null) {
         setState(() {
@@ -2050,7 +2110,11 @@ class _StudioScreenState extends State<StudioScreen>
                           controller.timeMs,
                         ),
                         geo: SceneGeometry.fitFor(project, canvasSize),
-                        selectedBoneId: _selectedBoneId,
+                        selectedBoneId:
+                            _selectedBoneIsVisible(controller.timeMs)
+                            ? _selectedBoneId
+                            : null,
+                        showOnlySelected: true,
                       ),
                     ),
                   ),
@@ -2059,7 +2123,7 @@ class _StudioScreenState extends State<StudioScreen>
                 _buildPropertiesButton(shape, controller, canvasSize),
               // Os sélectionné : ⚙ propriétés + ✥ déplacement (comme pour
               // les formes, ancrés au segment).
-              if (bone != null)
+              if (bone != null && _selectedBoneIsVisible(controller.timeMs))
                 _buildBoneButtons(project, controller, canvasSize),
             ],
           );
@@ -2362,6 +2426,9 @@ class _StudioScreenState extends State<StudioScreen>
     // PIÈCE sélectionnée (bugfix v0.16.1 — avant, le ◆ no-opait dès qu'une
     // pièce remplaçait un os : aucune pose de pièce n'était créable).
     final boneSelected = bone != null;
+    final boneKeyframeAllowed = boneSelected
+        ? _boneKeyframeAllowed(bone, controller.timeMs)
+        : false;
     final boneKeyframe = boneSelected && rig != null
         ? controller.nearestBoneKeyframe(rig, bone)
         : null;
@@ -2393,12 +2460,16 @@ class _StudioScreenState extends State<StudioScreen>
               icon: Icon(controller.playing ? Icons.pause : Icons.play_arrow),
             ),
             IconButton(
-              tooltip: diamondKeyframe != null
+              tooltip: boneSelected && !boneKeyframeAllowed
+                  ? 'Keyframe d’os indisponible hors du segment'
+                  : diamondKeyframe != null
                   ? 'Retirer la keyframe au curseur'
                   : boneSelected
                   ? 'Ajouter une keyframe d’angle à l’os au curseur'
                   : 'Ajouter une keyframe au curseur',
-              onPressed: boneSelected ? _toggleBoneKeyframe : _toggleKeyframe,
+              onPressed: boneSelected
+                  ? (boneKeyframeAllowed ? _toggleBoneKeyframe : null)
+                  : _toggleKeyframe,
               icon: Icon(
                 diamondKeyframe == null
                     ? Icons.diamond_outlined

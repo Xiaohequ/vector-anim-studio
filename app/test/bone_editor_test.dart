@@ -112,6 +112,44 @@ void main() {
     expect(captured!.replacedIds, isEmpty);
   });
 
+  testWidgets('une forme avec keyframe reste centrée dans l’éditeur d’os', (
+    tester,
+  ) async {
+    final project = _project();
+    final shape = project.shapes.single;
+    shape.upsertKeyframe(0, <AnimatableProperty, double>{
+      ...shape.poseAt(0),
+      AnimatableProperty.x: 120,
+      AnimatableProperty.y: 180,
+    });
+    shape.upsertKeyframe(1000, <AnimatableProperty, double>{
+      ...shape.poseAt(1000),
+      AnimatableProperty.x: 600,
+      AnimatableProperty.y: 900,
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: BoneEditorScreen(project: project, shape: shape, timeMs: 1000),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final paint = tester.widget<CustomPaint>(canvas());
+    final painter = paint.painter! as ScenePainter;
+    final editorShape = painter.project.shapes.single;
+    expect(editorShape.x, closeTo(painter.project.width / 2, 0.001));
+    expect(editorShape.y, closeTo(painter.project.height / 2, 0.001));
+    expect(
+      editorShape.valueAt(AnimatableProperty.x, 1000),
+      closeTo(editorShape.x, 0.001),
+    );
+    expect(
+      editorShape.valueAt(AnimatableProperty.y, 1000),
+      closeTo(editorShape.y, 0.001),
+    );
+  });
+
   testWidgets('un seul os : dessiné, les taps n’en ajoutent plus (v0.20.3)', (
     tester,
   ) async {
