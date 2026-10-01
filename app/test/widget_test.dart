@@ -1234,6 +1234,43 @@ void main() {
     expect(find.textContaining('Os de « Bloc »'), findsOneWidget);
     expect(find.textContaining('EXTRÉMITÉ'), findsOneWidget);
   });
+
+  testWidgets(
+    'sélectionner une autre forme dans la timeline désélectionne l’os',
+    (tester) async {
+      final repository = _MemoryRepository();
+      final project = AnimationProject.blank(
+        name: 'Rat',
+        type: ProjectType.skeleton,
+      );
+      final linked = VectorShape(name: 'Liée', startMs: 0, endMs: 2000);
+      linked.layers.add(ShapeLayer(name: 'Corps', kind: ShapeKind.rect));
+      final free = VectorShape(name: 'Libre', startMs: 0, endMs: 2000);
+      free.layers.add(ShapeLayer(name: 'Décor', kind: ShapeKind.circle));
+      project.shapes.addAll(<VectorShape>[linked, free]);
+
+      final rig = SkeletonRig();
+      final bone = RigBone(name: 'Os lié');
+      rig.addBone(bone);
+      rig.bindShape(linked.id, bone.id);
+      project.skeleton = rig;
+
+      await pumpStudio(tester, repository, project);
+
+      // Le segment lié sélectionne l'os, comme en v0.21.0.
+      await tester.tap(find.text('Liée'));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Propriétés de l’os'), findsOneWidget);
+      expect(find.byTooltip('Propriétés de la forme'), findsNothing);
+
+      // Une autre forme sélectionnée dans la timeline doit effacer la
+      // sélection d'os et sélectionner la forme correspondante.
+      await tester.tap(find.text('Libre'));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Propriétés de l’os'), findsNothing);
+      expect(find.byTooltip('Propriétés de la forme'), findsOneWidget);
+    },
+  );
 }
 
 /// Faux fichier choisi dans le sélecteur : contenu EN MÉMOIRE (aucune I/O

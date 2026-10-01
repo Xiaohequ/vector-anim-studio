@@ -89,6 +89,14 @@ Future<Uint8List> _render(
   return data!.buffer.asUint8List();
 }
 
+int _countMatching(Uint8List pixels, bool Function(int r, int g, int b) match) {
+  var count = 0;
+  for (var i = 0; i < pixels.length; i += 4) {
+    if (match(pixels[i], pixels[i + 1], pixels[i + 2])) count++;
+  }
+  return count;
+}
+
 ({double x, double y, int count}) _centroid(
   Uint8List pixels,
   int w,
@@ -154,6 +162,62 @@ void main() {
       reason: 'la pièce a bien tourné avec l os',
     );
   });
+
+  testWidgets(
+    'projet squelette : la pièce respecte le rectangle de la timeline',
+    (tester) async {
+      final rig = SkeletonRig();
+      final bone = RigBone(
+        name: 'Porteur',
+        offsetX: 200,
+        offsetY: 850,
+        restAngle: -math.pi / 2,
+        length: 40,
+      );
+      rig.addBone(bone);
+      // Cette keyframe dépasse volontairement la fin du segment de la pièce.
+      rig.upsertKeyframe(bone.id, 2000, math.pi / 8);
+
+      final project = _project(rig: rig);
+      final shape = VectorShape(
+        name: 'Pièce temporaire',
+        x: 200,
+        y: 700,
+        startMs: 0,
+        endMs: 1000,
+      );
+      shape.layers.add(
+        ShapeLayer(
+          name: 'Corps',
+          kind: ShapeKind.rect,
+          width: 120,
+          height: 120,
+          colorValue: 0xFFFF5C5C,
+        ),
+      );
+      project.shapes.add(shape);
+      rig.bindShape(shape.id, bone.id);
+
+      bool red(int r, int g, int b) =>
+          (r - 0xFF).abs() < 30 &&
+          (g - 0x5C).abs() < 30 &&
+          (b - 0x5C).abs() < 30;
+      final inside = await _render(tester, project, 500);
+      final outside = await _render(tester, project, 1500);
+
+      expect(
+        _countMatching(inside, red),
+        greaterThan(400),
+        reason: 'la pièce est visible quand le playhead est sur le segment',
+      );
+      expect(
+        _countMatching(outside, red),
+        0,
+        reason:
+            'une keyframe d’os après la fin ne doit pas prolonger la visibilité',
+      );
+    },
+  );
 
   testWidgets('la couche liée suit son os (centroid mesuré)', (tester) async {
     final rig = _rig();

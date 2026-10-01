@@ -1072,10 +1072,10 @@ class _StudioScreenState extends State<StudioScreen>
     Offset canvasPoint,
   ) {
     for (final shape in project.shapes.reversed) {
-      final show = project.isSkeleton
-          ? shape.visible
-          : shape.isVisibleAt(controller.timeMs);
-      if (!show) continue;
+      // La fenêtre start → end du segment contrôle aussi les pièces d'un
+      // projet squelette. Les keyframes d'os au-delà du segment ne prolongent
+      // pas la visibilité dans le preview.
+      if (!shape.isVisibleAt(controller.timeMs)) continue;
       final bounds = ScenePainter.shapeBounds(shape, controller.timeMs);
       if (bounds == null) continue;
       if (SelectionGeometry.hit(
@@ -2055,10 +2055,7 @@ class _StudioScreenState extends State<StudioScreen>
                     ),
                   ),
                 ),
-              if (shape != null &&
-                  (project.isSkeleton
-                      ? shape.visible
-                      : shape.isVisibleAt(controller.timeMs)))
+              if (shape != null && shape.isVisibleAt(controller.timeMs))
                 _buildPropertiesButton(shape, controller, canvasSize),
               // Os sélectionné : ⚙ propriétés + ✥ déplacement (comme pour
               // les formes, ancrés au segment).
@@ -2306,8 +2303,10 @@ class _StudioScreenState extends State<StudioScreen>
                       timeMs: controller.timeMs,
                       zoom: zoom,
                       selectedShapeId: _selectedId,
-                      onSelect: (shape) =>
-                          setState(() => _selectedId = shape.id),
+                      onSelect: (shape) => setState(() {
+                        _selectedId = shape.id;
+                        _selectedBoneId = null;
+                      }),
                       onSeek: controller.setTime,
                       onRangeChanged: (shape, start, end) {
                         setState(() {

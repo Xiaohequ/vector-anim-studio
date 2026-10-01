@@ -146,12 +146,11 @@ class ScenePainter extends CustomPainter {
         : null;
 
     void paintShape(VectorShape shape) {
-      // Projet squelette : les pièces sont visibles en permanence (le rig
-      // porte toute l'animation) — pas de fenêtre d'affichage.
-      final show = project.isSkeleton
-          ? shape.visible
-          : shape.isVisibleAt(timeMs);
-      if (!show) return;
+      // Le rectangle de la timeline est la fenêtre d'affichage de la pièce,
+      // quel que soit le type de projet. Un rig peut avoir des keyframes
+      // après cette fenêtre, mais il ne doit pas prolonger la visibilité de
+      // la forme : elle disparaît dès que le playhead sort de start → end.
+      if (!shape.isVisibleAt(timeMs)) return;
       BoneFrame? frame;
       if (rigPose != null) {
         frame = rigPose.frameOf(rig!.boneIdForShape(shape.id));
