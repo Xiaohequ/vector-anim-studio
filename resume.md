@@ -8,7 +8,9 @@ v0.9.0, l'**animation squelette** (rig maître).
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
 - Dernière version : **0.20.3** (retour v0.20.2 : **un seul os par
   forme** dans l'éditeur — les taps ne créent plus rien dès qu'un os
-  existe, déplacement + pivot restent actifs ; 257/257 tests).
+  existe, déplacement + pivot restent actifs ; 257/257 tests ; commit
+  `58d17fe`, CI run #47 verte, release `v0.20.3-build47`, APK 54,1 Mo —
+  validation appareil en attente).
 - v0.20.2 (retours v0.20.1 : **pivot de l'os** dans l'éditeur (glisser
   l'EXTRÉMITÉ = pivoter, le MILIEU = déplacer), **sélecteur de forme
   masqué**, bouton **« Ouvrir l'éditeur d'os… »** dans la feuille
@@ -235,6 +237,8 @@ v0.9.0, l'**animation squelette** (rig maître).
   besoin (choix utilisateur à demander).
 - **Tests : 257/257** (le test « chaîne » devient « un seul os » :
   2ᵉ tentative refusée + indice, résultat = 1 os lié), analyze 0.
+- **Livraison** : commit `58d17fe`, CI run #47 VERTE, release
+  `v0.20.3-build47` (`vector-anim-studio-0.20.3.apk`, 54,1 Mo).
 
 ### v0.20.2 (retours v0.20.1 — pivot, sélecteur, accès feuille d'os)
 - **Retour** : « Éditeur os : os possible de pivoter » → le glisser est
