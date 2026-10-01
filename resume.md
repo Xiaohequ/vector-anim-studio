@@ -6,11 +6,11 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Repo : https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`)
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
-- Dernière version : **0.20.3** (retour v0.20.2 : **un seul os par
-  forme** dans l'éditeur — les taps ne créent plus rien dès qu'un os
-  existe, déplacement + pivot restent actifs ; 257/257 tests ; commit
-  `58d17fe`, CI run #47 verte, release `v0.20.3-build47`, APK 54,1 Mo —
-  validation appareil en attente).
+- Dernière version : **0.21.0** (vague 2 — TIMELINE : pistes d'os
+  supprimées, keyframes de l'os sur le segment de la forme liée, segment
+  lié coloré, sélection du segment = os sélectionné).
+- **v0.20.3 VALIDÉE APPAREIL (01/10)** — retour : « je valide v0.20.3 ».
+  (un seul os par forme dans l'éditeur, pivot, bouton feuille d'os).
 - v0.20.2 (retours v0.20.1 : **pivot de l'os** dans l'éditeur (glisser
   l'EXTRÉMITÉ = pivoter, le MILIEU = déplacer), **sélecteur de forme
   masqué**, bouton **« Ouvrir l'éditeur d'os… »** dans la feuille
@@ -223,6 +223,37 @@ v0.9.0, l'**animation squelette** (rig maître).
   foyer DÉJÀ déplacé : premier move de 22 px écran (< slop IK 26) puis move de
   correction ; rig initial JAMAIS tendu à fond (L1+L2 > distance joint→effecteur)
   sinon toute cible est hors de portée (le solveur clampe, tip ≠ cible).
+
+### v0.21.0 (vague 2 — la timeline)
+- **Demande** : « afficher l'os dans timeline », « ne plus afficher de
+  nouveau segment pour les keyframes de l'os », « segment d'une forme avec
+  os = couleur différente », « segment sélectionné → l'os sélectionné dans
+  le preview ».
+- **Pistes d'os SUPPRIMÉES** : `TimelineLayout.packBoneLanes` retiré du
+  modèle, `_BoneBar` + son bloc de déplacement (`_movingBone`,
+  `_handleBoneMove*`, `_cancelBoneMove`) supprimés de la vue, params
+  `onBoneMoveChanged/onBoneMoveEnd/onBoneGestureStart` retirés de
+  `TimelineView` ET du studio ; `laneCount = lanes.length` (une ligne par
+  pièce).
+- **Keyframes de l'os sur le segment lié** : `_shapeBar()` calcule le
+  porteur (`rig.carrierBoneId`) et alimente `_ShapeBar(rig:, carrier:)` →
+  `keyTimes` = piste de l'OS si lié, sinon celles de la forme ;
+  `onDeleteKeyframe` route vers `onDeleteBoneKeyframe` (segment lié) ou
+  `onDeleteKeyframe` (libre).
+- **Couleur** : segment lié = vert `0xFF3ECF8E` (vs bleu primaire /
+  violet instance).
+- **Sélection** : clic sur un segment lié → `onSelectBone` → le studio
+  fait ` _selectedBoneId = bone.id; _selectedId = null` (sélection
+  exclusive — **fix** : avant, `onSelectBone` ne vidait pas la sélection de
+  forme) ; le segment se surligne aussi quand c'est SON os qui est
+  sélectionné (`selectedBoneId`).
+- **Conséquence notée dans les notes de release** : morph/couleurs/
+  opacité d'une pièce liée restent dans le modèle mais ne sont plus
+  affichés/supprimables depuis la timeline (éditables via feuille ⚙ et
+  éditeur de forme).
+- **Tests : 255/255** (−2 `packBoneLanes` ; le test « barre d'os » devient
+  « segment lié : keyframes de l'os, couleur, clic = os sélectionné » et
+  vérifie les 4 exigences), analyze 0.
 
 ### v0.20.3 (retour v0.20.2 — un seul os par forme)
 - **Retour** : « Éditeur os : ne pas autoriser d'ajouter plusieurs os » →

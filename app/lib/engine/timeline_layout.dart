@@ -1,5 +1,4 @@
 import '../models/animation.dart';
-import '../models/skeleton.dart';
 
 /// Empilement des formes sur la timeline : une ligne par "piste d'affichage".
 ///
@@ -42,40 +41,5 @@ class TimelineLayout {
       if (lanes[i].any((s) => s.id == shape.id)) return i;
     }
     return 0;
-  }
-
-  /// Empilement des pistes d'OS (projet squelette) : même glouton que les
-  /// formes, appliqué aux plages [première keyframe, dernière keyframe].
-  /// Seuls les os avec au moins une keyframe apparaissent.
-  static List<List<RigBone>> packBoneLanes(SkeletonRig rig) {
-    final entries = <(RigBone, int, int)>[];
-    for (final bone in rig.bones) {
-      final track = rig.trackOf(bone.id);
-      if (track == null || track.isEmpty) continue;
-      entries.add((bone, track.first.timeMs, track.last.timeMs));
-    }
-    entries.sort((a, b) {
-      final byStart = a.$2.compareTo(b.$2);
-      return byStart != 0 ? byStart : a.$1.name.compareTo(b.$1.name);
-    });
-
-    final lanes = <List<RigBone>>[];
-    final laneEnds = <int>[];
-    for (final entry in entries) {
-      var placed = false;
-      for (var i = 0; i < lanes.length; i++) {
-        if (laneEnds[i] <= entry.$2) {
-          lanes[i].add(entry.$1);
-          laneEnds[i] = entry.$3;
-          placed = true;
-          break;
-        }
-      }
-      if (!placed) {
-        lanes.add(<RigBone>[entry.$1]);
-        laneEnds.add(entry.$3);
-      }
-    }
-    return lanes;
   }
 }

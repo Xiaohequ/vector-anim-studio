@@ -2329,15 +2329,13 @@ class _StudioScreenState extends State<StudioScreen>
                       },
                       skeletonRig: project.isSkeleton ? project.skeleton : null,
                       selectedBoneId: _selectedBoneId,
-                      onSelectBone: (bone) =>
-                          setState(() => _selectedBoneId = bone.id),
-                      onBoneMoveChanged: (bone, target) {
-                        setState(
-                          () => project.skeleton!.shiftTrackTo(bone.id, target),
-                        );
-                      },
-                      onBoneMoveEnd: (_) => _scheduleSave(),
-                      onBoneGestureStart: (_) => _pushUndo(),
+                      // Sélection depuis le segment (v0.21.0) : un segment
+                      // LIÉ sélectionne l'OS dans le preview (sélection
+                      // exclusive — la pièce n'est plus sélectionnable).
+                      onSelectBone: (bone) => setState(() {
+                        _selectedBoneId = bone.id;
+                        _selectedId = null;
+                      }),
                       onDeleteBoneKeyframe: (bone, timeMs) {
                         setState(
                           () => project.skeleton!.removeKeyframeAt(

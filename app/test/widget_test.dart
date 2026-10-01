@@ -678,26 +678,65 @@ void main() {
     expect(tip.dy, moreOrLessEquals(460, epsilon: 1e-3));
   });
 
-  testWidgets('un projet squelette affiche une barre d’os sur la timeline', (
-    tester,
-  ) async {
-    final project = AnimationProject.blank(
-      name: 'Rat',
-      type: ProjectType.skeleton,
-    );
-    final rig = SkeletonRig();
-    final bone = RigBone(name: 'Queue');
-    rig.addBone(bone);
-    rig.upsertKeyframe(bone.id, 500, 0.2);
-    rig.upsertKeyframe(bone.id, 1500, 0.4);
-    project.skeleton = rig;
+  testWidgets(
+    'segment lié : keyframes de l’os, couleur, clic = os sélectionné',
+    (tester) async {
+      final repository = _MemoryRepository();
+      final project = AnimationProject.blank(
+        name: 'Rat',
+        type: ProjectType.skeleton,
+      );
+      project.width = 720;
+      project.height = 1280;
+      final shape = VectorShape(name: 'Bloc', startMs: 0, endMs: 2000);
+      shape.layers.add(ShapeLayer(name: 'L', kind: ShapeKind.rect));
+      // Keyframes de la FORME : sur un segment lié, elles ne s'affichent PLUS
+      // (choix utilisateur v0.21.0) — seules celles de l'os comptent.
+      shape.setKeyframes(<ShapeKeyframe>[ShapeKeyframe(timeMs: 250)]);
+      project.shapes.add(shape);
 
-    await pumpStudio(tester, repository, project);
+      final rig = SkeletonRig();
+      final bone = RigBone(name: 'Queue');
+      rig.addBone(bone);
+      rig.bindShape(shape.id, bone.id);
+      rig.upsertKeyframe(bone.id, 500, 0.2);
+      rig.upsertKeyframe(bone.id, 1500, 0.4);
+      project.skeleton = rig;
 
-    expect(find.textContaining('\u{1F9B4} Queue'), findsOneWidget);
-    // Les barres de formes n'existent pas en mode squelette.
-    expect(find.textContaining('\u{1F3AC}'), findsNothing);
-  });
+      await pumpStudio(tester, repository, project);
+
+      // ① Plus de piste d'os séparée (🦴) : une seule ligne, celle de la pièce.
+      expect(find.textContaining('\u{1F9B4}'), findsNothing);
+      expect(find.text('Bloc'), findsOneWidget);
+
+      // ② Losanges = keyframes de l'OS (2), pas celles de la forme (1 à 250).
+      final diamonds = find.byWidgetPredicate(
+        (w) =>
+            w is Container &&
+            w.color == const Color(0xFFF2C94C) &&
+            w.constraints == const BoxConstraints.tightFor(width: 7, height: 7),
+      );
+      expect(diamonds, findsNWidgets(2));
+
+      // ③ Couleur propre au segment lié (vert os, alpha de remplissage 0.30).
+      final bars = tester
+          .widgetList<Container>(find.byType(Container))
+          .where(
+            (c) =>
+                c.decoration is BoxDecoration &&
+                (c.decoration! as BoxDecoration).color ==
+                    const Color(0xFF3ECF8E).withValues(alpha: 0.30),
+          )
+          .toList();
+      expect(bars, hasLength(1), reason: 'un segment lié coloré en vert os');
+
+      // ④ Clic sur le segment → l'OS est sélectionné (sélection exclusive).
+      await tester.tap(find.text('Bloc'));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Propriétés de l’os'), findsOneWidget);
+      expect(find.byTooltip('Propriétés de la forme'), findsNothing);
+    },
+  );
 
   testWidgets('une instance de projet squelette s’anime dans un vectoriel', (
     tester,
