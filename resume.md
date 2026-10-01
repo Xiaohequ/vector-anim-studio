@@ -11,7 +11,9 @@ v0.9.0, l'**animation squelette** (rig maître).
   déplacement de l'os sans bouger la forme), boutons **Ajouter / Modifier /
   Supprimer l'os** dans la sheet ⚙, **confirmation avant effacement** des
   keyframes de transform (morph/couleurs/opacité conservés), **menu
-  Squelette supprimé** ; 253/253 tests).
+  Squelette supprimé** ; 253/253 tests ; commit `1c08626`, CI run #44
+  verte, release `v0.20.0-build44`, APK 54,1 Mo — validation appareil en
+  attente).
 - v0.19.1 (pièce portée par un os = plus aucune manipulation au doigt :
   **non sélectionnable** au tap, déplacement / rotation / échelle bloqués,
   sliders X/Y/rotation/échelle verrouillés ; seul l'os, ou une
@@ -246,6 +248,9 @@ v0.9.0, l'**animation squelette** (rig maître).
   (`geo.canvasToScene`) ; le 1ᵉʳ move d'un geste est avalé par la slop
   (18 px) — il faut un 2ᵉ move pour voir le déplacement ; `canvasHarness`
   doit être déclaré AVANT les tests qui l'utilisent (fonction locale).
+- **Livraison** : commit `1c08626`, CI run #44 VERTE, release
+  `v0.20.0-build44` (`vector-anim-studio-0.20.0.apk`, 54,1 Mo) —
+  **validation appareil en attente**.
 - **Vague 2 (prochaine release)** : timeline — pistes d'os supprimées,
   losanges d'os sur le segment de la forme liée, segment coloré,
   sélection du segment → os sélectionné.
