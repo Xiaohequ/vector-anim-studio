@@ -8,7 +8,9 @@ v0.9.0, l'**animation squelette** (rig maître).
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
 - Dernière version : **0.21.0** (vague 2 — TIMELINE : pistes d'os
   supprimées, keyframes de l'os sur le segment de la forme liée, segment
-  lié coloré, sélection du segment = os sélectionné).
+  lié coloré, sélection du segment = os sélectionné ; 255/255 tests ;
+  commit `5aa77ae`, CI run #48 verte, release `v0.21.0-build48`, APK
+  54,1 Mo — validation appareil en attente).
 - **v0.20.3 VALIDÉE APPAREIL (01/10)** — retour : « je valide v0.20.3 ».
   (un seul os par forme dans l'éditeur, pivot, bouton feuille d'os).
 - v0.20.2 (retours v0.20.1 : **pivot de l'os** dans l'éditeur (glisser
@@ -254,6 +256,8 @@ v0.9.0, l'**animation squelette** (rig maître).
 - **Tests : 255/255** (−2 `packBoneLanes` ; le test « barre d'os » devient
   « segment lié : keyframes de l'os, couleur, clic = os sélectionné » et
   vérifie les 4 exigences), analyze 0.
+- **Livraison** : commit `5aa77ae`, CI run #48 VERTE, release
+  `v0.21.0-build48` (`vector-anim-studio-0.21.0.apk`, 54,1 Mo).
 
 ### v0.20.3 (retour v0.20.2 — un seul os par forme)
 - **Retour** : « Éditeur os : ne pas autoriser d'ajouter plusieurs os » →
