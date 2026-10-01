@@ -169,11 +169,14 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                 ),
                 const SizedBox(height: 4),
                 // Os de la forme (v0.20) : l'os n'existe que par une forme.
+                // Bugfix v0.20.1 : conditionnée à `skeletonRig != null`, la
+                // section était INVISIBLE sur un projet squelette neuf (pas
+                // encore de rig — il naît à la validation de l'éditeur) : on
+                // conditionne au TYPE de projet, plus à l'existence du rig.
                 // « Ajouter » ouvre l'éditeur d'os (dessin sur la forme,
                 // forme ancrée au milieu de l'écran) ; « Supprimer » part
                 // avec la descendance et toutes les keyframes de l'os.
-                if (widget.skeletonRig != null &&
-                    widget.onOpenBoneEditor != null)
+                if (widget.skeletonPiece && widget.onOpenBoneEditor != null)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 2),
                     child: Row(

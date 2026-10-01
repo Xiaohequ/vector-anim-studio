@@ -6,14 +6,18 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Repo : https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`)
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
-- Dernière version : **0.20.0** (vague 1 — « l'os n'existe que par une
-  forme » : **nouvel éditeur d'os** (forme seule centrée, dessin en 2 taps,
-  déplacement de l'os sans bouger la forme), boutons **Ajouter / Modifier /
-  Supprimer l'os** dans la sheet ⚙, **confirmation avant effacement** des
-  keyframes de transform (morph/couleurs/opacité conservés), **menu
-  Squelette supprimé** ; 253/253 tests ; commit `1c08626`, CI run #44
-  verte, release `v0.20.0-build44`, APK 54,1 Mo — validation appareil en
-  attente).
+- Dernière version : **0.20.1** (bugfix — la section os de la feuille ⚙
+  était conditionnée à l'existence du rig, donc INVISIBLE sur un projet
+  squelette neuf : désormais conditionnée au type de projet ; 254/254
+  tests).
+- v0.20.0 (vague 1 — « l'os n'existe que par une forme » : **nouvel éditeur
+  d'os** (forme seule centrée, dessin en 2 taps, déplacement de l'os sans
+  bouger la forme), boutons **Ajouter / Modifier / Supprimer l'os** dans la
+  sheet ⚙, **confirmation avant effacement** des keyframes de transform
+  (morph/couleurs/opacité conservés), **menu Squelette supprimé** ;
+  253/253 tests ; commit `1c08626`, CI run #44 verte, release
+  `v0.20.0-build44`, APK 54,1 Mo — **retour appareil : bouton d'ajout
+  d'os introuvable → corrigé en v0.20.1**).
 - v0.19.1 (pièce portée par un os = plus aucune manipulation au doigt :
   **non sélectionnable** au tap, déplacement / rotation / échelle bloqués,
   sliders X/Y/rotation/échelle verrouillés ; seul l'os, ou une
@@ -208,6 +212,22 @@ v0.9.0, l'**animation squelette** (rig maître).
   foyer DÉJÀ déplacé : premier move de 22 px écran (< slop IK 26) puis move de
   correction ; rig initial JAMAIS tendu à fond (L1+L2 > distance joint→effecteur)
   sinon toute cible est hors de portée (le solveur clampe, tip ≠ cible).
+
+### v0.20.1 (bugfix : bouton « Ajouter un os… » introuvable)
+- **Retour appareil v0.20.0** : « pas de bouton pour ajouter un os sur une
+  forme » — la section os de la sheet ⚙ testait `skeletonRig != null`, or
+  un projet squelette NEUF a `project.skeleton == null` (le rig naît à la
+  validation de l'éditeur) → bouton invisible, parcours bloqué dès le
+  premier os.
+- **Fix** : condition au TYPE de projet (`widget.skeletonPiece`), plus à
+  l'existence du rig — « Aucun os » + « Ajouter un os… » affichés d'entrée ;
+  « Modifier/Supprimer l'os » restent conditionnés à un os réel.
+- **Retour aussi** : le bouton « Squelette » du bas remplacé par
+  « Animations » = **normal** (D.4) ; les actions d'os vivent dans la sheet ⚙
+  (ajout/modif/suppression) et sur le canvas (tap = sélection d'os,
+  ✥/rotation/IK = animation, ◆ de la playbar cible l'os).
+- **Tests : 254/254** (+1 non-régression : projet squelette neuf → bouton
+  présent → éditeur ouvert, rig créé au ✓), analyze 0.
 
 ### v0.20.0 (vague 1 — l'os n'existe que par une forme)
 - **Demande utilisateur** : os affiché via la forme, éditeur d'os dédié,

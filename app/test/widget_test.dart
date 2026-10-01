@@ -1116,6 +1116,44 @@ void main() {
     expect(project.skeleton!.tracks, isEmpty);
     expect(project.skeleton!.isAttached(shape.id), isFalse);
   });
+
+  testWidgets('bugfix v0.20.1 : « Ajouter un os… » visible SANS rig', (
+    tester,
+  ) async {
+    final repository = _MemoryRepository();
+    final project = AnimationProject.blank(
+      name: 'Film',
+      type: ProjectType.skeleton,
+    );
+    project.width = 720;
+    project.height = 1280;
+    final shape = VectorShape(name: 'Bloc', x: 360, y: 640);
+    shape.layers.add(
+      ShapeLayer(name: 'L', kind: ShapeKind.rect, width: 300, height: 200),
+    );
+    project.shapes.add(shape);
+    project.skeleton = null; // projet squelette NEUF : pas encore de rig
+
+    await pumpStudio(tester, repository, project);
+    expect(project.skeleton, isNull);
+
+    // La pièce est auto-sélectionnée au chargement → sheet ⚙.
+    await tester.tap(find.byTooltip('Propriétés de la forme'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Ajouter un os…'),
+      findsOneWidget,
+      reason: 'le bouton ne doit pas dépendre de l’existence du rig',
+    );
+    expect(find.text('Aucun os'), findsOneWidget);
+
+    // Le flux ouvre directement l'éditeur (aucune keyframe → pas de
+    // dialogue de confirmation) et le rig naît à la VALIDATION (✓).
+    await tester.tap(find.text('Ajouter un os…'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Os de « Bloc »'), findsOneWidget);
+    expect(project.skeleton, isNull);
+  });
 }
 
 /// Faux fichier choisi dans le sélecteur : contenu EN MÉMOIRE (aucune I/O
