@@ -6,7 +6,8 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Repo : https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`)
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
-- Dernière version : **0.21.2** (éditeur d'os recentré à la pose du playhead
+- Dernière version : **0.21.2 VALIDÉE APPAREIL (01/10)** — retour : « Les 3
+  modifications marchent » (éditeur d'os recentré à la pose du playhead
   + keyframes ignorées, os masqués hors fenêtre de leur forme, keyframes d'os
   interdites hors segment ; 259/259 tests ; CI run #50 verte ; release
   `v0.21.2-build50`, APK 54,1 Mo publiée).
