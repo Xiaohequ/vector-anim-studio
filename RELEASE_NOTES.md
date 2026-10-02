@@ -1,21 +1,18 @@
-# Vector Anim Studio 0.22.0
+# Vector Anim Studio 0.23.0
 
-## Bugfix preview
+## Zoom et plein écran du preview
 
-- Sélectionner une forme dont toutes les couches sont masquées ne réduit plus
-  le `Stack` et ne fait plus disparaître le preview ni les autres formes.
-
-## Miroir de chaîne d'os
-
-- Les propriétés de l'os proposent **Miroir H** et **Miroir V**.
-- Le miroir transforme l'os sélectionné et toute sa descendance autour du
-  centre de la première forme liée, ainsi que les formes/couches portées.
-- Les keyframes d'angle et de translation d'os et les poses de transformation
-  des formes sont réfléchies à tous les instants ; un miroir est une action
-  annulable unique.
+- L’éditeur de forme et le Studio proposent **Zoom arrière**, **Zoom avant** et
+  **Ajuster** sur le preview. Le zoom est centré et indépendant des données
+  d’animation ; plage de 50 % à 400 %.
+- Le Studio propose un mode **plein écran** : AppBar, timeline, playbar et barre
+  d’outils sont masquées ; les barres système sont cachées. La forme et l’os
+  sélectionnés sont désélectionnés à l’entrée et les overlays de sélection sont
+  masqués. Le bouton de sortie et le bouton Retour quittent le mode.
+- Le playhead et la lecture restent inchangés. Les gestes de transformation sont
+  désactivés en plein écran afin que l’aperçu serve uniquement au visionnage.
 
 ### Tests
 
-- **262/262 tests** passés ; `flutter analyze` : aucun problème.
-- Régression du preview avec la seule couche masquée : vérifiée.
-- Miroir des os, keyframes de formes et d'os, chaîne et undo : vérifiés.
+- Tests ciblés de géométrie du zoom, preview éditeur et mode plein écran Studio.
+- Suite complète **265/265 tests** passée ; `flutter analyze` sans problème.

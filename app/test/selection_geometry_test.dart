@@ -45,6 +45,21 @@ void main() {
       expect(back.dx, closeTo(scene.dx, 0.001));
       expect(back.dy, closeTo(scene.dy, 0.001));
     });
+
+    test('zoom du preview agrandit la scène autour du centre du canvas', () {
+      final fit = SceneGeometry.fitFor(_project(), const Size(720, 640));
+      final zoomed = SceneGeometry.fitFor(
+        _project(),
+        const Size(720, 640),
+        zoom: 2,
+      );
+      expect(zoomed.scale, fit.scale * 2);
+      expect(zoomed.sceneToCanvas(const Offset(180, 320)), const Offset(360, 320));
+      final back = zoomed.canvasToScene(
+        zoomed.sceneToCanvas(const Offset(123, 456)),
+      );
+      expect(back.dx, closeTo(123, 0.001));
+    });
   });
 
   group('Poses', () {
@@ -260,4 +275,5 @@ void main() {
       );
     });
   });
+
 }

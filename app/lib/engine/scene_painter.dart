@@ -20,6 +20,7 @@ class ScenePainter extends CustomPainter {
     this.embeddedProjects = const {},
     this.showLayerPoints = false,
     this.activePointIndex = -1,
+    this.previewZoom = 1,
   });
 
   final AnimationProject project;
@@ -44,13 +45,16 @@ class ScenePainter extends CustomPainter {
   /// Index du point en cours de glisser (surbrillance), ou −1.
   final int activePointIndex;
 
+  /// Zoom d'affichage uniquement (jamais utilisé pour les exports).
+  final double previewZoom;
+
   /// Facteur d'échelle permettant d'inscrire la scène dans [size].
   static double scaleFor(AnimationProject project, Size size) =>
       math.min(size.width / project.width, size.height / project.height);
 
   @override
   void paint(Canvas canvas, Size size) {
-    final geo = SceneGeometry.fitFor(project, size);
+    final geo = SceneGeometry.fitFor(project, size, zoom: previewZoom);
 
     canvas.save();
     canvas.translate(geo.dx, geo.dy);

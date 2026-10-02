@@ -109,6 +109,33 @@ class _StudioScreenState extends State<StudioScreen>
   /// Zoom/défilement de la timeline (mémoire de session, non persisté).
   TimelineZoomState? _zoom;
 
+  /// Zoom du preview uniquement, indépendant des transformations des objets.
+  double _previewZoom = 1;
+  bool _previewFullscreen = false;
+
+  SceneGeometry _canvasGeometry(AnimationProject project, Size size) =>
+      SceneGeometry.fitFor(project, size, zoom: _previewZoom);
+
+  void _changePreviewZoom(double factor) {
+    setState(() => _previewZoom = (_previewZoom * factor).clamp(0.5, 4.0));
+  }
+
+  void _fitPreview() => setState(() => _previewZoom = 1);
+
+  void _togglePreviewFullscreen() {
+    final entering = !_previewFullscreen;
+    setState(() {
+      _previewFullscreen = entering;
+      if (entering) {
+        _selectedId = null;
+        _selectedBoneId = null;
+      }
+    });
+    SystemChrome.setEnabledSystemUIMode(
+      entering ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
+    );
+  }
+
   // Geste en cours sur le canvas (déplacement, pinch, rotation par poignée).
   _CanvasGesture _gesture = _CanvasGesture.none;
   int _activePointers = 0;
@@ -261,6 +288,9 @@ class _StudioScreenState extends State<StudioScreen>
   @override
   void dispose() {
     _saveTimer?.cancel();
+    if (_previewFullscreen) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    }
     _ticker?.dispose();
     _controller?.dispose();
     super.dispose();
@@ -692,7 +722,7 @@ class _StudioScreenState extends State<StudioScreen>
     final rig = project.skeleton;
     final bone = rig?.boneById(_dragBoneId);
     if (controller == null || rig == null || bone == null) return;
-    final geo = SceneGeometry.fitFor(project, canvasSize);
+    final geo = _canvasGeometry(project, canvasSize);
     setState(() {
       _translateBoneFollow(
         project,
@@ -1292,7 +1322,7 @@ class _StudioScreenState extends State<StudioScreen>
     if (project.isSkeleton && rig != null && rig.bones.isNotEmpty) {
       final selectedBone = rig.boneById(_selectedBoneId);
       final pose = SkeletonPose.evaluate(rig, controller.timeMs);
-      final geo = SceneGeometry.fitFor(project, canvasSize);
+      final geo = _canvasGeometry(project, canvasSize);
       // IK (v0.10, généralisé v0.15) : glisser l'EXTRÉMITÉ du dernier os de
       // la chaîne résout toute la chaîne (2 os = solveur analytique, N os =
       // CCD) — prioritaire sur la poignée de rotation. L'os touché est
@@ -1380,7 +1410,7 @@ class _StudioScreenState extends State<StudioScreen>
       _gesture = _CanvasGesture.none;
       return;
     }
-    final geo = SceneGeometry.fitFor(project, canvasSize);
+    final geo = _canvasGeometry(project, canvasSize);
     _gestureBoneFrame = _frameForShape(project, shape, controller.timeMs);
     final pose = SelectionGeometry.shapePoseWithRig(
       shape,
@@ -1470,7 +1500,7 @@ class _StudioScreenState extends State<StudioScreen>
         final chain = rig.ikChain(root.id);
         if (chain.isEmpty) break;
         final pose = SkeletonPose.evaluate(rig, controller.timeMs);
-        final geo = SceneGeometry.fitFor(project, canvasSize);
+        final geo = _canvasGeometry(project, canvasSize);
         final target = geo.canvasToScene(details.localFocalPoint);
         List<double> desired;
         if (chain.length == 2) {
@@ -1521,7 +1551,7 @@ class _StudioScreenState extends State<StudioScreen>
         final pose = SkeletonPose.evaluate(rig, controller.timeMs);
         final frame = pose.frameOf(bone.id);
         if (frame == null) break;
-        final geo = SceneGeometry.fitFor(project, canvasSize);
+        final geo = _canvasGeometry(project, canvasSize);
         final scene = geo.canvasToScene(details.localFocalPoint);
         var desired = math.atan2(
           scene.dy - frame.joint.dy,
@@ -1567,7 +1597,7 @@ class _StudioScreenState extends State<StudioScreen>
         });
         _gestureMutated = true;
       case _CanvasGesture.move:
-        final geo = SceneGeometry.fitFor(project, canvasSize);
+        final geo = _canvasGeometry(project, canvasSize);
         final frame = _gestureBoneFrame;
         final rig = project.skeleton;
         // Pièce liée à un os au repos (pièce non animée) : le glisser
@@ -1616,7 +1646,7 @@ class _StudioScreenState extends State<StudioScreen>
           next.toDouble(),
         );
       case _CanvasGesture.rotate:
-        final geo = SceneGeometry.fitFor(project, canvasSize);
+        final geo = _canvasGeometry(project, canvasSize);
         final pose = SelectionGeometry.shapePoseWithRig(
           shape!,
           controller.timeMs,
@@ -1736,7 +1766,7 @@ class _StudioScreenState extends State<StudioScreen>
     TimelineController controller,
     Size canvasSize,
   ) {
-    final geo = SceneGeometry.fitFor(project, canvasSize);
+    final geo = _canvasGeometry(project, canvasSize);
     // Sélection d'os d'abord (mode squelette) — exclusive avec la pièce :
     // soit un os, soit une forme (jamais les deux).
     final rig = project.skeleton;
@@ -2076,23 +2106,37 @@ class _StudioScreenState extends State<StudioScreen>
     }
 
     return PopScope(
+      canPop: !_previewFullscreen,
       onPopInvokedWithResult: (didPop, _) {
-        if (didPop) _flushSave();
+        if (_previewFullscreen) {
+          if (!didPop) _togglePreviewFullscreen();
+        } else if (didPop) {
+          _flushSave();
+        }
       },
       child: Scaffold(
-        appBar: AppBar(
-          title: Text(
-            project.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          actions: <Widget>[_exportMenu()],
-        ),
+        appBar: _previewFullscreen
+            ? null
+            : AppBar(
+                title: Text(
+                  project.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                actions: <Widget>[_exportMenu()],
+              ),
         body: AnimatedBuilder(
           animation: controller,
           builder: (context, _) {
             return LayoutBuilder(
               builder: (context, constraints) {
+                if (_previewFullscreen) {
+                  return SafeArea(
+                    child: SizedBox.expand(
+                      child: _buildCanvas(project, controller),
+                    ),
+                  );
+                }
                 // Le preview prend ~40 % de la hauteur : le reste va à la
                 // barre de lecture, à la timeline et à la barre d'outils.
                 final previewHeight = (constraints.maxHeight * 0.40).clamp(
@@ -2120,11 +2164,17 @@ class _StudioScreenState extends State<StudioScreen>
 
   Widget _buildCanvas(AnimationProject project, TimelineController controller) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      margin: _previewFullscreen
+          ? EdgeInsets.zero
+          : const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: const Color(0xFF0B0D12),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF232733)),
+        borderRadius: _previewFullscreen
+            ? BorderRadius.zero
+            : BorderRadius.circular(16),
+        border: _previewFullscreen
+            ? null
+            : Border.all(color: const Color(0xFF232733)),
       ),
       clipBehavior: Clip.antiAlias,
       child: LayoutBuilder(
@@ -2141,32 +2191,43 @@ class _StudioScreenState extends State<StudioScreen>
                   onPointerCancel: (_) => _pointerUp(),
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onScaleStart: (details) => _onCanvasGestureStart(
-                      details,
-                      project,
-                      controller,
-                      canvasSize,
-                    ),
-                    onScaleUpdate: (details) => _onCanvasGestureUpdate(
-                      details,
-                      project,
-                      controller,
-                      canvasSize,
-                    ),
-                    onScaleEnd: _onCanvasGestureEnd,
-                    onTapUp: (details) => _onCanvasTapUp(
-                      details,
-                      project,
-                      controller,
-                      canvasSize,
-                    ),
+                    onScaleStart: _previewFullscreen
+                        ? null
+                        : (details) => _onCanvasGestureStart(
+                            details,
+                            project,
+                            controller,
+                            canvasSize,
+                          ),
+                    onScaleUpdate: _previewFullscreen
+                        ? null
+                        : (details) => _onCanvasGestureUpdate(
+                            details,
+                            project,
+                            controller,
+                            canvasSize,
+                          ),
+                    onScaleEnd: _previewFullscreen ? null : _onCanvasGestureEnd,
+                    onTapUp: (details) {
+                      if (!_previewFullscreen) {
+                        _onCanvasTapUp(
+                          details,
+                          project,
+                          controller,
+                          canvasSize,
+                        );
+                      }
+                    },
                     child: CustomPaint(
                       painter: ScenePainter(
                         project: project,
                         timeMs: controller.timeMs,
-                        selectedShapeId: _selectedId,
+                        selectedShapeId: _previewFullscreen
+                            ? null
+                            : _selectedId,
                         showFrame: true,
                         embeddedProjects: _embedded,
+                        previewZoom: _previewZoom,
                       ),
                       child: const SizedBox.expand(),
                     ),
@@ -2183,7 +2244,7 @@ class _StudioScreenState extends State<StudioScreen>
                           project.skeleton!,
                           controller.timeMs,
                         ),
-                        geo: SceneGeometry.fitFor(project, canvasSize),
+                        geo: _canvasGeometry(project, canvasSize),
                         selectedBoneId:
                             _selectedBoneIsVisible(controller.timeMs)
                             ? _selectedBoneId
@@ -2193,18 +2254,68 @@ class _StudioScreenState extends State<StudioScreen>
                     ),
                   ),
                 ),
-              if (shape != null && shape.isVisibleAt(controller.timeMs))
+              if (!_previewFullscreen &&
+                  shape != null &&
+                  shape.isVisibleAt(controller.timeMs))
                 _buildPropertiesButton(shape, controller, canvasSize),
               // Os sélectionné : ⚙ propriétés + ✥ déplacement (comme pour
               // les formes, ancrés au segment).
-              if (bone != null && _selectedBoneIsVisible(controller.timeMs))
+              if (!_previewFullscreen &&
+                  bone != null &&
+                  _selectedBoneIsVisible(controller.timeMs))
                 _buildBoneButtons(project, controller, canvasSize),
+              Positioned(right: 8, top: 8, child: _buildPreviewControls()),
             ],
           );
         },
       ),
     );
   }
+
+  Widget _buildPreviewControls() => DecoratedBox(
+    decoration: BoxDecoration(
+      color: const Color(0xCC151922),
+      borderRadius: BorderRadius.circular(22),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        IconButton(
+          tooltip: 'Zoom arrière du preview',
+          visualDensity: VisualDensity.compact,
+          onPressed: () => _changePreviewZoom(1 / 1.2),
+          icon: const Icon(Icons.zoom_out, size: 20),
+        ),
+        Text(
+          '${(_previewZoom * 100).round()}%',
+          style: const TextStyle(fontSize: 11),
+        ),
+        IconButton(
+          tooltip: 'Zoom avant du preview',
+          visualDensity: VisualDensity.compact,
+          onPressed: () => _changePreviewZoom(1.2),
+          icon: const Icon(Icons.zoom_in, size: 20),
+        ),
+        IconButton(
+          tooltip: 'Ajuster le preview',
+          visualDensity: VisualDensity.compact,
+          onPressed: _fitPreview,
+          icon: const Icon(Icons.fit_screen_outlined, size: 18),
+        ),
+        IconButton(
+          tooltip: _previewFullscreen
+              ? 'Quitter le plein écran'
+              : 'Plein écran',
+          visualDensity: VisualDensity.compact,
+          onPressed: _togglePreviewFullscreen,
+          icon: Icon(
+            _previewFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
+            size: 20,
+          ),
+        ),
+      ],
+    ),
+  );
 
   /// Boutons flottants de l'os sélectionné : ⚙ propriétés (ancré au bout du
   /// segment, comme le bouton des formes) + ✥ mode déplacement à côté.
@@ -2231,7 +2342,7 @@ class _StudioScreenState extends State<StudioScreen>
         child: SizedBox.shrink(),
       );
     }
-    final geo = SceneGeometry.fitFor(project, canvasSize);
+    final geo = _canvasGeometry(project, canvasSize);
     // Ancrage : l'os sélectionné, SAUF quand il est l'enfant unique d'un os
     // IK — dans ce cas les boutons se rangent au joint du parent (le coude),
     // loin de l'effecteur que le doigt doit saisir.
@@ -2350,7 +2461,7 @@ class _StudioScreenState extends State<StudioScreen>
         child: SizedBox.shrink(),
       );
     }
-    final geo = SceneGeometry.fitFor(project, canvasSize);
+    final geo = _canvasGeometry(project, canvasSize);
     final center = SelectionGeometry.propertiesButton(
       bounds,
       SelectionGeometry.shapePoseWithRig(

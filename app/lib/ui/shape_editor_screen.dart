@@ -45,6 +45,18 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
   late final TextEditingController _name;
   String? _selectedLayerId;
 
+  // Zoom d'affichage du preview, indépendant des données de la forme.
+  double _previewZoom = 1;
+
+  SceneGeometry _previewGeometry(Size size) =>
+      SceneGeometry.fitFor(widget.project, size, zoom: _previewZoom);
+
+  void _changePreviewZoom(double factor) {
+    setState(() => _previewZoom = (_previewZoom * factor).clamp(0.5, 4.0));
+  }
+
+  void _fitPreview() => setState(() => _previewZoom = 1);
+
   // Option : aimanter la rotation aux multiples de 90° (bouton du preview).
   bool _snapRotation = false;
 
@@ -311,6 +323,7 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
                         activePointIndex: _gesture == _EditorGesture.pointDrag
                             ? _pointIndex
                             : -1,
+                        previewZoom: _previewZoom,
                       ),
                       child: const SizedBox.expand(),
                     ),
@@ -359,6 +372,11 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
                     foregroundColor: Colors.white70,
                   ),
                 ),
+              ),
+              Positioned(
+                right: 8,
+                bottom: 8,
+                child: _buildPreviewZoomControls(),
               ),
               if (layer != null && layer.visible)
                 _buildLayerButton(layer, canvasSize),
@@ -470,10 +488,44 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
         '◆ au curseur ajoute/retire une pose';
   }
 
+  Widget _buildPreviewZoomControls() => DecoratedBox(
+    decoration: BoxDecoration(
+      color: const Color(0xCC151922),
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        IconButton(
+          tooltip: 'Zoom arrière du preview',
+          visualDensity: VisualDensity.compact,
+          onPressed: () => _changePreviewZoom(1 / 1.2),
+          icon: const Icon(Icons.zoom_out, size: 20),
+        ),
+        Text(
+          '${(_previewZoom * 100).round()}%',
+          style: const TextStyle(fontSize: 11),
+        ),
+        IconButton(
+          tooltip: 'Zoom avant du preview',
+          visualDensity: VisualDensity.compact,
+          onPressed: () => _changePreviewZoom(1.2),
+          icon: const Icon(Icons.zoom_in, size: 20),
+        ),
+        IconButton(
+          tooltip: 'Ajuster le preview',
+          visualDensity: VisualDensity.compact,
+          onPressed: _fitPreview,
+          icon: const Icon(Icons.fit_screen_outlined, size: 18),
+        ),
+      ],
+    ),
+  );
+
   /// Bouton « réglages » ancré au coin bas-gauche du rectangle de la couche.
   Widget _buildLayerButton(ShapeLayer layer, Size canvasSize) {
     if (canvasSize.isEmpty) return const SizedBox.shrink();
-    final geo = SceneGeometry.fitFor(widget.project, canvasSize);
+    final geo = _previewGeometry(canvasSize);
     final center = SelectionGeometry.propertiesButton(
       ScenePainter.layerBounds(layer),
       SelectionGeometry.layerPose(_draft, layer, _previewMs),
@@ -552,7 +604,7 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
         canvasSize.isEmpty) {
       return null;
     }
-    final geo = SceneGeometry.fitFor(widget.project, canvasSize);
+    final geo = _previewGeometry(canvasSize);
     final cloud = _draft.pointsAtLayer(layer.id, layer.points, _previewMs);
     final positions = SelectionGeometry.pointHandlePositions(
       cloud,
@@ -588,7 +640,7 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
       _gesture = _EditorGesture.none;
       return;
     }
-    final geo = SceneGeometry.fitFor(widget.project, canvasSize);
+    final geo = _previewGeometry(canvasSize);
     final pose = _previewLayerPose(layer);
     final bounds = ScenePainter.layerBounds(layer);
     var gesture = _EditorGesture.none;
@@ -643,7 +695,7 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
         // Le delta stocké = différence des conversions canvas → local
         // dessiné (pose figée au temps affiché pendant le geste) — la
         // recentrage (w/2, h/2) ne décale pas les deltas.
-        final geo = SceneGeometry.fitFor(widget.project, canvasSize);
+        final geo = _previewGeometry(canvasSize);
         final pose = _previewLayerPose(layer);
         final startLocal = SelectionGeometry.canvasToLocal(
           _gestureStartPoint,
@@ -682,7 +734,7 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
           _draft.applyLayerPoints(layer, cloud, _pointTargetMs, autoKey: true);
         });
       case _EditorGesture.move:
-        final geo = SceneGeometry.fitFor(widget.project, canvasSize);
+        final geo = _previewGeometry(canvasSize);
         final sceneDelta =
             geo.canvasToScene(details.localFocalPoint) -
             geo.canvasToScene(_gestureStartPoint);
@@ -706,7 +758,7 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
         final next = (_gestureBaseScale * details.scale).clamp(0.05, 4.0);
         setState(() => layer.scale = next.toDouble());
       case _EditorGesture.rotate:
-        final geo = SceneGeometry.fitFor(widget.project, canvasSize);
+        final geo = _previewGeometry(canvasSize);
         final pose = _previewLayerPose(layer);
         final center = SelectionGeometry.center(pose, geo);
         final angle = math.atan2(
@@ -741,7 +793,7 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
       final handles = _pointHandles(canvasSize);
       if (handles == null) return;
       final pose = _previewLayerPose(layer);
-      final geo = SceneGeometry.fitFor(widget.project, canvasSize);
+      final geo = _previewGeometry(canvasSize);
       final local = SelectionGeometry.canvasToLocal(
         details.localPosition,
         pose,
@@ -770,7 +822,7 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
       _snack('Point ajouté');
       return;
     }
-    final geo = SceneGeometry.fitFor(widget.project, canvasSize);
+    final geo = _previewGeometry(canvasSize);
     for (final layer in _draft.layers.reversed) {
       if (!layer.visible) continue;
       if (SelectionGeometry.hit(

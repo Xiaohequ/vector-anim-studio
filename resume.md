@@ -6,11 +6,18 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Repo : https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`)
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
-- Dernière version : **0.21.2 VALIDÉE APPAREIL (01/10)** — retour : « Les 3
-  modifications marchent » (éditeur d'os recentré à la pose du playhead
-  + keyframes ignorées, os masqués hors fenêtre de leur forme, keyframes d'os
-  interdites hors segment ; 259/259 tests ; CI run #50 verte ; release
-  `v0.21.2-build50`, APK 54,1 Mo publiée).
+- Dernière version publiée : **v0.22.0 VALIDÉE APPAREIL** — `v0.22.0-build51`, APK
+  `vector-anim-studio-0.22.0.apk`. Correctif preview confirmé (« Correction
+  marche ») et miroir H/V sur os confirmé (« Mirroir sur os marche »). 262/262
+  tests, `flutter analyze` sans problème.
+- **v0.23.0 en cours de release** : zoom des previews dans l’éditeur de forme
+  et le Studio, plein écran Studio avec désélection à l’entrée. `flutter analyze`
+  OK ; suite complète **265/265 tests** passée, tests ciblés confirmés après
+  le dernier ajustement. CI et validation appareil en attente.
+- **v0.21.2 VALIDÉE APPAREIL (01/10)** — retour : « Les 3 modifications
+  marchent » (éditeur d'os recentré à la pose du playhead + keyframes ignorées,
+  os masqués hors fenêtre de leur forme, keyframes d'os interdites hors segment ;
+  259/259 tests ; CI run #50 verte ; release `v0.21.2-build50`, APK 54,1 Mo).
 - **v0.20.3 VALIDÉE APPAREIL (01/10)** — retour : « je valide v0.20.3 ».
   (un seul os par forme dans l'éditeur, pivot, bouton feuille d'os).
 - v0.20.2 (retours v0.20.1 : **pivot de l'os** dans l'éditeur (glisser
@@ -92,8 +99,13 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 ## ✅ Validé sur appareil
 
-- **v0.19.1 (30/09)** : pièce liée à un os = transformations verrouillées
-  — « verrouiller déplacement, rotation, échelle forme marche ».
+- **v0.21.2 (01/10)** : éditeur d'os recentré, os masqués hors fenêtre de leur
+  forme et keyframes d'os bloquées hors segment — « Les 3 modifications marchent ».
+- **v0.20.3 (01/10)** : un os par forme dans l'éditeur, pivot et bouton de la
+  feuille Propriétés de l'os — « je valide v0.20.3 ».
+
+- **v0.22.0** : correction du preview et miroir H/V sur os validés —
+  « Correction marche. Mirroir sur os marche ».
 - **v0.19.0 (30/09)** : miroir H/V — « miroir marche » (contenu reflété,
   forme en place, keyframes/pivot intacts, double appui = retour).
 - **v0.10.1 (25/09)** : la chaîne rigging complète v0.9.1 → v0.9.5 ET la
@@ -808,6 +820,34 @@ v0.9.0, l'**animation squelette** (rig maître).
   permanent en CI, import par fichier.
 - Le skill agent `skills/generer-animation-json/` génère le vasf-1
   (références + validateur `validate_vasf.py`) — à étendre à la v2.
+
+### v0.22.0 (publiée et validée sur appareil — CI run #51 verte)
+- **Bugfix preview** : le bouton Propriétés de forme reste un enfant
+  positionné du `Stack` même sans bounds visibles ; sélectionner une forme dont
+  toutes les couches sont masquées ne réduit plus le canvas. Repro + test widget
+  permanent de dimensions du preview.
+- **Miroir d'os H/V** dans la sheet Propriétés : reflète l'os sélectionné et sa
+  descendance autour du centre de la première forme portée (playhead), puis les
+  formes/couches liées. Les angles de repos, angles animés, translations animées,
+  poses X/Y/rotation des pièces, signes IK et pivots sont réfléchis ; opacité,
+  stretch/squash et données de morph/couleur sont préservés. Une pression = une
+  entrée Undo ; sauvegarde différée. Test FK vérifie la géométrie réfléchie puis
+  son inverse ; test widget couvre la sheet, les keyframes et Undo.
+- **Validation appareil (01/10)** : correction du preview confirmée (« Correction
+  marche ») et miroir H/V sur os confirmé (« Mirroir sur os marche »).
+- **Release** : commit `4a113f3`, CI run #51, `v0.22.0-build51`, APK
+  `vector-anim-studio-0.22.0.apk` ; 262/262 tests, analyse sans problème.
+
+### v0.23.0 (implémentation locale — release et validation appareil en attente)
+- Contrôles de zoom − / + / Ajuster sur le preview de l’éditeur de forme et du
+  Studio (zoom d’affichage centré, sans modifier les données de la forme).
+- Dans le Studio, bouton plein écran : masque AppBar, timeline et outils,
+  utilise l’écran disponible et masque la sélection ; entrée en mode plein écran
+  désélectionne formes et os. Le bouton de sortie et le retour système quittent
+  le mode. Le playhead et la lecture restent inchangés.
+- Vérifications locales : `flutter analyze` sans problème ; tests ciblés de
+  géométrie, zoom éditeur et plein écran Studio passés. Suite complète à relancer
+  après les derniers ajouts de tests ; pas de build/release ni validation appareil.
 
 ### Backlog de long terme
 - Signature release (keystore + secrets GitHub) et/ou App Bundle `.aab`.

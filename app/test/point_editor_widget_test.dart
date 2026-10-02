@@ -405,4 +405,33 @@ void main() {
     expect(saved, isNotNull);
     expect(saved!.keyframes, isEmpty);
   });
+
+  testWidgets('zoom du preview éditeur ne modifie pas la pose', (tester) async {
+    final project = _project();
+    final shape = _pathShape(withKeyframes: false);
+    final initialX = shape.x;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: _Host(project: project, shape: shape),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final paintFinder = _previewCanvas();
+    var painter =
+        tester.widget<CustomPaint>(paintFinder).painter! as ScenePainter;
+    expect(painter.previewZoom, 1);
+
+    await tester.tap(find.byTooltip('Zoom avant du preview'));
+    await tester.pump();
+    painter = tester.widget<CustomPaint>(paintFinder).painter! as ScenePainter;
+    expect(painter.previewZoom, closeTo(1.2, 0.0001));
+    expect(shape.x, initialX);
+
+    await tester.tap(find.byTooltip('Ajuster le preview'));
+    await tester.pump();
+    painter = tester.widget<CustomPaint>(paintFinder).painter! as ScenePainter;
+    expect(painter.previewZoom, 1);
+    expect(shape.x, initialX);
+  });
 }

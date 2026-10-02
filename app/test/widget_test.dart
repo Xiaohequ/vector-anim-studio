@@ -1477,6 +1477,39 @@ void main() {
       expect(find.byTooltip('Propriétés de la forme'), findsOneWidget);
     },
   );
+
+  testWidgets('zoom du Studio est indépendant et plein écran désélectionne', (
+    tester,
+  ) async {
+    final project = seededProject();
+    await pumpStudio(tester, repository, project);
+
+    final painterFinder = find.byWidgetPredicate(
+      (widget) => widget is CustomPaint && widget.painter is ScenePainter,
+    );
+    var painter =
+        tester.widget<CustomPaint>(painterFinder).painter! as ScenePainter;
+    expect(painter.previewZoom, 1);
+    expect(painter.selectedShapeId, project.shapes.single.id);
+
+    await tester.tap(find.byTooltip('Zoom avant du preview'));
+    await tester.pump();
+    painter =
+        tester.widget<CustomPaint>(painterFinder).painter! as ScenePainter;
+    expect(painter.previewZoom, closeTo(1.2, 0.0001));
+
+    await tester.tap(find.byTooltip('Plein écran'));
+    await tester.pumpAndSettle();
+    painter =
+        tester.widget<CustomPaint>(painterFinder).painter! as ScenePainter;
+    expect(painter.selectedShapeId, isNull);
+    expect(find.byTooltip('Quitter le plein écran'), findsOneWidget);
+    expect(find.byTooltip('Exporter'), findsNothing);
+
+    await tester.tap(find.byTooltip('Quitter le plein écran'));
+    await tester.pumpAndSettle();
+    expect(find.text('Film'), findsOneWidget);
+  });
 }
 
 /// Faux fichier choisi dans le sélecteur : contenu EN MÉMOIRE (aucune I/O

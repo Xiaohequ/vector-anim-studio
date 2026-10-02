@@ -81,11 +81,17 @@ class SceneGeometry {
   /// Décalage vertical (centrage du cadre).
   final double dy;
 
-  /// Inscrit la scène dans [canvasSize] (fit + centrage).
-  static SceneGeometry fitFor(AnimationProject project, Size canvasSize) {
+  /// Inscrit la scène dans [canvasSize] (fit + centrage), puis applique un
+  /// zoom de preview centré. Le zoom ne modifie jamais les données de scène.
+  static SceneGeometry fitFor(
+    AnimationProject project,
+    Size canvasSize, {
+    double zoom = 1,
+  }) {
     final safeW = math.max(1.0, project.width);
     final safeH = math.max(1.0, project.height);
-    final s = math.min(canvasSize.width / safeW, canvasSize.height / safeH);
+    final fit = math.min(canvasSize.width / safeW, canvasSize.height / safeH);
+    final s = fit * zoom;
     return SceneGeometry(
       scale: s,
       dx: (canvasSize.width - safeW * s) / 2,
