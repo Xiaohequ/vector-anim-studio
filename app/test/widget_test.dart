@@ -81,7 +81,7 @@ void main() {
       await tester.pumpWidget(VectorAnimStudioApp(repository: repository));
       await tester.pumpAndSettle();
 
-      expect(find.text('Vector Anim Studio'), findsOneWidget);
+      expect(find.text('Keyform Studio'), findsOneWidget);
       // Bouton de l'état vide + bouton flottant.
       expect(find.text('Nouveau projet'), findsNWidgets(2));
       expect(find.text('Aucun projet pour l’instant'), findsOneWidget);
@@ -1475,6 +1475,67 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byTooltip('Propriétés de l’os'), findsNothing);
       expect(find.byTooltip('Propriétés de la forme'), findsOneWidget);
+    },
+  );
+
+  testWidgets('MP4 propose les résolutions et le GIF garde seulement le fps', (
+    tester,
+  ) async {
+    final project = seededProject();
+    await pumpStudio(tester, repository, project);
+
+    await tester.tap(find.byTooltip('Export'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Vidéo MP4 (H.264)'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Résolution vidéo'), findsOneWidget);
+    expect(find.text('480p'), findsOneWidget);
+    expect(find.text('720p'), findsOneWidget);
+    expect(find.text('1080p'), findsOneWidget);
+    expect(
+      find.text('406×720 px · proportions du projet conservées'),
+      findsOneWidget,
+    );
+    expect(find.text('30 fps'), findsOneWidget);
+    await tester.tap(find.text('Annuler'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Export'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('GIF animé'));
+    await tester.pumpAndSettle();
+    expect(find.text('Résolution vidéo'), findsNothing);
+    expect(find.text('12 fps'), findsOneWidget);
+  });
+
+  testWidgets(
+    'messages Studio apparaissent en haut et disparaissent après 5 s',
+    (tester) async {
+      final project = lockedPiece(bind: true);
+      await pumpStudio(tester, repository, project);
+      final (topLeft, geo) = canvasHarness(tester, project);
+      final bonePoint = topLeft + geo.sceneToCanvas(const Offset(360, 190));
+      await tester.tapAt(bonePoint);
+      await tester.pumpAndSettle();
+      final center = topLeft + geo.sceneToCanvas(const Offset(360, 640));
+      await tester.tapAt(center);
+      await tester.pumpAndSettle();
+
+      final message = find.byKey(const ValueKey<String>('keyform-top-message'));
+      expect(message, findsOneWidget);
+      expect(find.textContaining('non sélectionnable'), findsOneWidget);
+      final banner = tester.getTopLeft(message);
+      final scaffoldTop = tester.getTopLeft(find.byType(Scaffold).first);
+      expect(banner.dy, greaterThanOrEqualTo(scaffoldTop.dy));
+      expect(banner.dy, greaterThan(50));
+      expect(banner.dy, lessThan(150));
+      await tester.pump(const Duration(seconds: 6));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey<String>('keyform-top-message')),
+        findsNothing,
+      );
     },
   );
 

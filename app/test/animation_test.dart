@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:vector_anim_studio/engine/animation_presets.dart';
 import 'package:vector_anim_studio/engine/timeline_layout.dart';
 import 'package:vector_anim_studio/engine/undo_stack.dart';
+import 'package:vector_anim_studio/engine/export_service.dart';
 import 'package:vector_anim_studio/models/animation.dart';
 import 'package:vector_anim_studio/models/skeleton.dart';
 
@@ -716,6 +717,33 @@ void main() {
         Offset(31, 9),
         Offset(31, 31),
       ]);
+    });
+  });
+
+  group('définition vidéo MP4', () {
+    test(
+      'preset 720p préserve le ratio portrait et le codec reçoit du pair',
+      () {
+        final project = AnimationProject(width: 720, height: 1280);
+        final size = mp4DimensionsForLongEdge(project, 720);
+        expect(size.width, 406);
+        expect(size.height, 720);
+        expect(size.width.isEven, isTrue);
+        expect(size.height.isEven, isTrue);
+      },
+    );
+
+    test('preset 1080p fonctionne en paysage et sur un format carré', () {
+      final landscape = mp4DimensionsForLongEdge(
+        AnimationProject(width: 1280, height: 720),
+        1080,
+      );
+      expect(landscape, (width: 1080, height: 608));
+      final square = mp4DimensionsForLongEdge(
+        AnimationProject(width: 800, height: 800),
+        480,
+      );
+      expect(square, (width: 480, height: 480));
     });
   });
 }

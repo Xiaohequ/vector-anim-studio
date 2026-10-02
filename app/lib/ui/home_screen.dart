@@ -114,7 +114,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Vector Anim Studio'),
+        title: const Text('Keyform Studio'),
         actions: <Widget>[
           IconButton(
             tooltip: 'Actualiser',

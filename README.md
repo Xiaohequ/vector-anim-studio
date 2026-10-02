@@ -1,4 +1,10 @@
-# vector_anim_studio
+# Keyform Studio
+
+> Nom commercial depuis v0.26.0. Les identifiants techniques restent en place :
+> package Dart `vector_anim_studio`, `applicationId` / namespace Android
+> `fr.xqu.vector_anim_studio`, bundle iOS `fr.xqu.vectorAnimStudio`, dépôt Git
+> `vector-anim-studio` — changer un identifiant casserait la mise à jour de
+> l'app installée et les URL des releases.
 
 Application Flutter (Android, iOS configuré) pour **créer des animations vectorielles** : projets multiples, formes composées de couches, keyframes par propriété, timeline à rectangles d'affichage, lecture et export MP4 / GIF / PNG / JSON.
 
