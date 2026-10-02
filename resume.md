@@ -6,8 +6,11 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Nom technique / dépôt : `vector_anim_studio` / https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`). Nom d'affichage : **Keyform Studio** depuis v0.26.0.
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
-- **Travail local v0.27.0** : choix résolution MP4 480p/720p/1080p + messages en haut dans le Studio et l’éditeur. Suite complète 270/270 et analyse propres ; release/validation appareil à faire.
-- Dernière version publiée : **v0.25.0** — build `v0.25.0-build56`, APK
+- **Dernière version : v0.27.0 VALIDÉE** — build `v0.27.0-build58`, APK
+  `vector-anim-studio-0.27.0.apk` (51,6 Mo), CI run #58 verte. Choix résolution
+  MP4 480p/720p/1080p, messages en haut et nom d'affichage Keyform Studio validés
+  par l'utilisateur.
+- Version précédente : **v0.25.0** — build `v0.25.0-build56`, APK
   `vector-anim-studio-0.25.0.apk` (51,7 Mo) ; CI run #56 verte (commit `bf3a1f5`).
 - **v0.25.0 = nouvelle icône « TRAIL », VALIDÉE APPAREIL (02/10)** — retour :
   « Icone c'est bon. C'est validé ». Mipmaps Android + icône adaptative
@@ -16,6 +19,7 @@ v0.9.0, l'**animation squelette** (rig maître).
   Une variante CLAIRE existe (`tmp/icones/trail/clair_1024.png`), non retenue.
 - **Reste à valider sur appareil** (v0.23.0 `build52` et v0.24.0 `build53`) :
   zoom caméra jusqu’à 800 %, mode « Déplacer la vue », plein écran Studio.
+- **v0.27.0 VALIDÉE APPAREIL** : choix résolution MP4 480p/720p/1080p et messages en haut de l'écran validés par l'utilisateur.
 - **v0.21.2 VALIDÉE APPAREIL (01/10)** — retour : « Les 3 modifications
   marchent » (éditeur d'os recentré à la pose du playhead + keyframes ignorées,
   os masqués hors fenêtre de leur forme, keyframes d'os interdites hors segment ;
@@ -875,6 +879,16 @@ v0.9.0, l'**animation squelette** (rig maître).
 - CI PR #1 verte sur les ressources ; merge squash sur `main` → release `v0.25.0-build56`.
 - Vérification dans l'APK publié : 10 ressources d'icône présentes (5 mipmaps RGB
   48→192 px + 5 avant-plans RGBA 108→432 px), `resources.arsc` OK.
+
+### v0.27.0 (publiée — CI run #58, `v0.27.0-build58` — VALIDÉE par l'utilisateur)
+- **Export MP4 : résolution au choix** — 480p, 720p (défaut), 1080p ; orientation
+  et proportions du projet conservées (dimensions H.264 paires). Le GIF reste
+  inchangé à 320 px.
+- **Messages en haut d'écran** dans Studio et éditeur, fermables et temporaires
+  (5 s) ; remplacent les SnackBars du bas.
+- Nom d'affichage **Keyform Studio** ; identifiants techniques inchangés.
+- 270/270 tests, `flutter analyze` OK ; build APK CI verte ; retour appareil :
+  « Je valide la version 0.27.0 ».
 
 ### Backlog de long terme
 - Signature release (keystore + secrets GitHub) et/ou App Bundle `.aab`.
