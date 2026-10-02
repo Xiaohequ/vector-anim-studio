@@ -1037,6 +1037,79 @@ class _StudioScreenState extends State<StudioScreen>
     _snack('Os supprimé (enfants re-parentés)');
   }
 
+  /// Miroir de l'os sélectionné et de sa descendance, avec les pièces liées,
+  /// autour du centre de la première pièce portée au playhead. Si aucune
+  /// pièce n'est liée, l'articulation de l'os sert de pivot.
+  void _mirrorBoneChain(RigBone selectedBone, bool horizontal) {
+    final project = _project;
+    final rig = _rig;
+    final controller = _controller;
+    if (project == null || rig == null || controller == null) return;
+    final subtree = rig.chainFrom(selectedBone.id);
+    final ids = <String>{for (final item in subtree) item.id};
+    if (ids.isEmpty) return;
+
+    final pose = SkeletonPose.evaluate(rig, controller.timeMs);
+    var pivot = pose.frameOf(selectedBone.id)?.joint ?? Offset.zero;
+    for (final shape in project.shapes) {
+      final carrierId = rig.carrierBoneId(shape.id);
+      if (carrierId == null || !ids.contains(carrierId)) continue;
+      final frame = pose.frameOf(carrierId);
+      if (frame == null) continue;
+      pivot = SelectionGeometry.shapePoseWithRig(
+        shape,
+        controller.timeMs,
+        frame,
+      ).origin;
+      break;
+    }
+
+    double reflectX(double x) => horizontal ? 2 * pivot.dx - x : x;
+    double reflectY(double y) => horizontal ? y : 2 * pivot.dy - y;
+    // Les formes reçoivent le flip du contenu dans leur repère local ; leur
+    // rotation de groupe change donc de signe quel que soit l'axe réfléchi.
+    double reflectShapeAngle(double angle) => -angle;
+
+    _pushUndo();
+    setState(() {
+      rig.mirrorSubtree(selectedBone.id, horizontal: horizontal, pivot: pivot);
+      for (final shape in project.shapes) {
+        final carrierId = rig.carrierBoneId(shape.id);
+        if (carrierId == null || !ids.contains(carrierId)) continue;
+        final shapeWasAnimated = shape.keyframes.isNotEmpty;
+        final baseX = shape.x;
+        final baseY = shape.y;
+        final baseRotation = shape.rotation;
+        shape
+          ..x = reflectX(baseX)
+          ..y = reflectY(baseY)
+          ..rotation = reflectShapeAngle(baseRotation)
+          ..pivotDx = horizontal ? -shape.pivotDx : shape.pivotDx
+          ..pivotDy = horizontal ? shape.pivotDy : -shape.pivotDy;
+        for (final key in shape.keyframes) {
+          final x = key.values[AnimatableProperty.x] ?? baseX;
+          final y = key.values[AnimatableProperty.y] ?? baseY;
+          final angle = key.values[AnimatableProperty.rotation] ?? baseRotation;
+          key.values[AnimatableProperty.x] = reflectX(x);
+          key.values[AnimatableProperty.y] = reflectY(y);
+          key.values[AnimatableProperty.rotation] = reflectShapeAngle(angle);
+        }
+        if (shapeWasAnimated) {
+          // Every keyframe is a complete pose; use base values for sparse
+          // properties so mirror animation samples correctly at all times.
+          shape
+            ..x = reflectX(baseX)
+            ..y = reflectY(baseY)
+            ..rotation = reflectShapeAngle(baseRotation);
+        }
+        if (!shape.isInstance && shape.layers.isNotEmpty) {
+          shape.mirror(horizontal: horizontal);
+        }
+      }
+    });
+    _scheduleSave();
+  }
+
   /// Bottom sheet « Propriétés de l'os » pour l'os sélectionné.
   Future<void> _showBoneSheet() async {
     final rig = _rig;
@@ -1065,6 +1138,7 @@ class _StudioScreenState extends State<StudioScreen>
         onFlipBend: _flipBend,
         onOpenEditor: _editBoneInEditor,
         onKeyframeAllowed: (timeMs) => _boneKeyframeAllowed(bone, timeMs),
+        onMirror: (horizontal) => _mirrorBoneChain(bone, horizontal),
       ),
     );
     if (mounted) setState(() {});
@@ -2149,7 +2223,13 @@ class _StudioScreenState extends State<StudioScreen>
         ? null
         : SkeletonPose.evaluate(rig, controller.timeMs).frameOf(bone.id);
     if (bone == null || frame == null || canvasSize.isEmpty) {
-      return const SizedBox.shrink();
+      return const Positioned(
+        left: 0,
+        top: 0,
+        width: 0,
+        height: 0,
+        child: SizedBox.shrink(),
+      );
     }
     final geo = SceneGeometry.fitFor(project, canvasSize);
     // Ancrage : l'os sélectionné, SAUF quand il est l'enfant unique d'un os
@@ -2258,8 +2338,17 @@ class _StudioScreenState extends State<StudioScreen>
   ) {
     final project = _project;
     final bounds = ScenePainter.shapeBounds(shape, controller.timeMs);
+    // Ce widget est dans un Stack : rester positionné même si toutes les
+    // couches de la forme sont masquées. Un enfant shrink non-positionné
+    // peut sinon participer au calcul de taille du Stack et écraser le preview.
     if (project == null || bounds == null || canvasSize.isEmpty) {
-      return const SizedBox.shrink();
+      return const Positioned(
+        left: 0,
+        top: 0,
+        width: 0,
+        height: 0,
+        child: SizedBox.shrink(),
+      );
     }
     final geo = SceneGeometry.fitFor(project, canvasSize);
     final center = SelectionGeometry.propertiesButton(

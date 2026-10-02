@@ -6,6 +6,83 @@ import 'package:vector_anim_studio/models/animation.dart';
 import 'package:vector_anim_studio/models/skeleton.dart';
 
 void main() {
+  group('miroir d’os', () {
+    test(
+      'miroir H du sous-arbre conserve une pose réfléchie et son inverse',
+      () {
+        final rig = SkeletonRig();
+        final root = RigBone(
+          id: 'r',
+          name: 'R',
+          offsetX: 100,
+          offsetY: 200,
+          restAngle: 0.2,
+          length: 80,
+          ikEnabled: true,
+          bendSign: 1,
+        );
+        final child = RigBone(
+          id: 'c',
+          name: 'C',
+          parentId: 'r',
+          offsetX: 80,
+          offsetY: 0,
+          restAngle: 0.4,
+          length: 50,
+        );
+        final outside = RigBone(
+          id: 'o',
+          name: 'O',
+          offsetX: 20,
+          offsetY: 20,
+          length: 20,
+        );
+        rig.bones.addAll([root, child, outside]);
+        rig.tracks['r'] = [
+          BoneKeyframe(timeMs: 0, angleDelta: 0.1, tx: 4, ty: 3),
+          BoneKeyframe(timeMs: 1000, angleDelta: 0.8, tx: 12, ty: -2),
+        ];
+        rig.tracks['c'] = [
+          BoneKeyframe(timeMs: 0, angleDelta: -0.3, tx: 5, ty: 7),
+          BoneKeyframe(timeMs: 1000, angleDelta: 0.2, tx: -3, ty: 4),
+        ];
+        final before = SkeletonPose.evaluate(rig, 500);
+        final pivot = const Offset(180, 200);
+        final subtreeIds = {'r', 'c'};
+        final beforeFrames = {
+          for (final id in subtreeIds) id: before.frameOf(id)!,
+        };
+        final outsideBefore = before.frameOf('o')!;
+
+        rig.mirrorSubtree('r', horizontal: true, pivot: pivot);
+        final after = SkeletonPose.evaluate(rig, 500);
+        for (final id in subtreeIds) {
+          final a = after.frameOf(id)!;
+          final b = beforeFrames[id]!;
+          expect(a.joint.dx, closeTo(2 * pivot.dx - b.joint.dx, 1e-6));
+          expect(a.joint.dy, closeTo(b.joint.dy, 1e-6));
+          expect(a.tip.dx, closeTo(2 * pivot.dx - b.tip.dx, 1e-6));
+          expect(a.tip.dy, closeTo(b.tip.dy, 1e-6));
+        }
+        expect(after.frameOf('o')!.joint, outsideBefore.joint);
+        expect(root.bendSign, -1);
+
+        // Miroir une seconde fois autour du même pivot = données d'origine.
+        rig.mirrorSubtree('r', horizontal: true, pivot: pivot);
+        final restored = SkeletonPose.evaluate(rig, 500);
+        for (final id in subtreeIds) {
+          final a = restored.frameOf(id)!;
+          final b = beforeFrames[id]!;
+          expect(a.joint.dx, closeTo(b.joint.dx, 1e-6));
+          expect(a.joint.dy, closeTo(b.joint.dy, 1e-6));
+          expect(a.tip.dx, closeTo(b.tip.dx, 1e-6));
+          expect(a.tip.dy, closeTo(b.tip.dy, 1e-6));
+        }
+        expect(root.bendSign, 1);
+      },
+    );
+  });
+
   group('évaluation FK', () {
     test('chaîne statique : racine + enfant orthogonal', () {
       final rig = SkeletonRig();

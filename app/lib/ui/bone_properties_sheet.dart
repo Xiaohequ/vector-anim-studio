@@ -34,6 +34,7 @@ class BonePropertiesSheet extends StatefulWidget {
     this.onFlipBend,
     this.onOpenEditor,
     this.onKeyframeAllowed,
+    this.onMirror,
   });
 
   final SkeletonRig rig;
@@ -67,6 +68,9 @@ class BonePropertiesSheet extends StatefulWidget {
   /// Autorise l'ajout/retrait d'une keyframe selon la fenêtre de la forme
   /// portée par l'os.
   final bool Function(int timeMs)? onKeyframeAllowed;
+
+  /// Réfléchit l'os sélectionné, sa descendance, leurs poses et leurs pièces.
+  final ValueChanged<bool>? onMirror;
 
   @override
   State<BonePropertiesSheet> createState() => _BonePropertiesSheetState();
@@ -125,9 +129,12 @@ class _BonePropertiesSheetState extends State<BonePropertiesSheet> {
         final sampledStretch = rig.stretchAt(bone.id, controller.timeMs);
         final sampledSquash = rig.squashAt(bone.id, controller.timeMs);
         final ikChild = rig.onlyChildOf(bone.id);
+        final chainIds = <String>{
+          for (final item in rig.chainFrom(bone.id)) item.id,
+        };
         final boundShapes = <String>[
           for (final binding in rig.bindings)
-            if (binding.boneId == bone.id) binding.shapeId,
+            if (chainIds.contains(binding.boneId)) binding.shapeId,
         ];
         return SafeArea(
           child: ConstrainedBox(
@@ -181,6 +188,25 @@ class _BonePropertiesSheetState extends State<BonePropertiesSheet> {
                     ),
                   ],
                 ),
+                if (widget.onMirror != null)
+                  Row(
+                    children: <Widget>[
+                      TextButton.icon(
+                        onPressed: () => widget.onMirror!(true),
+                        icon: const Icon(Icons.flip, size: 16),
+                        label: const Text('Miroir H'),
+                      ),
+                      const SizedBox(width: 4),
+                      TextButton.icon(
+                        onPressed: () => widget.onMirror!(false),
+                        icon: Transform.rotate(
+                          angle: 3.141592653589793 / 2,
+                          child: const Icon(Icons.flip, size: 16),
+                        ),
+                        label: const Text('Miroir V'),
+                      ),
+                    ],
+                  ),
                 // v0.20.2 : accès direct à l'éditeur d'os depuis les
                 // propriétés de l'os (demande utilisateur) — le même
                 // écran que « Ajouter un os… » de la feuille de la forme,

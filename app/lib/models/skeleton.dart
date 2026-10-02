@@ -649,6 +649,66 @@ class SkeletonRig {
     bone.offsetY += local.dy;
   }
 
+  /// Réfléchit le sous-arbre de [rootBoneId] autour de [pivot] dans le plan
+  /// du projet. Les keyframes d'angle et de translation sont transformées
+  /// aussi ; les attributs scalaires (opacité/étirements) restent inchangés.
+  void mirrorSubtree(
+    String rootBoneId, {
+    required bool horizontal,
+    required Offset pivot,
+  }) {
+    if (boneById(rootBoneId) == null) return;
+    final ids = <String>{for (final bone in chainFrom(rootBoneId)) bone.id};
+    final restPose = SkeletonPose.evaluate(this, 0);
+
+    Offset reflectPoint(Offset p) => horizontal
+        ? Offset(2 * pivot.dx - p.dx, p.dy)
+        : Offset(p.dx, 2 * pivot.dy - p.dy);
+    Offset reflectVector(Offset v) =>
+        horizontal ? Offset(-v.dx, v.dy) : Offset(v.dx, -v.dy);
+    double reflectAngle(double a) => horizontal ? math.pi - a : -a;
+
+    for (final bone in orderedParentsFirst()) {
+      if (!ids.contains(bone.id)) continue;
+      final oldFrame = restPose.frameOf(bone.id);
+      if (oldFrame == null) continue;
+      final parentFrame = restPose.frameOf(bone.parentId);
+      final parentIsMirrored =
+          bone.parentId != null && ids.contains(bone.parentId);
+      final newJoint = reflectPoint(oldFrame.jointRest);
+      final newWorldAngle = reflectAngle(oldFrame.worldAngleRest);
+      final parentJoint = parentIsMirrored
+          ? reflectPoint(parentFrame!.jointRest)
+          : parentFrame?.jointRest ?? Offset.zero;
+      final parentAngle = parentIsMirrored
+          ? reflectAngle(parentFrame!.worldAngleRest)
+          : parentFrame?.worldAngleRest ?? 0.0;
+      final localOffset = rotateVector(newJoint - parentJoint, -parentAngle);
+      bone
+        ..offsetX = localOffset.dx
+        ..offsetY = localOffset.dy
+        ..restAngle = newWorldAngle - parentAngle;
+      if (bone.ikEnabled) bone.bendSign = -bone.bendSign;
+
+      final track = tracks[bone.id];
+      if (track == null) continue;
+      for (final key in track) {
+        key.angleDelta = -key.angleDelta;
+        final oldWorldTranslation = rotateVector(
+          Offset(key.tx, key.ty),
+          parentFrame?.worldAngleRest ?? 0,
+        );
+        final newLocalTranslation = rotateVector(
+          reflectVector(oldWorldTranslation),
+          -parentAngle,
+        );
+        key
+          ..tx = newLocalTranslation.dx
+          ..ty = newLocalTranslation.dy;
+      }
+    }
+  }
+
   /// Supprime un os : les enfants sont re-parentés à son parent (le rig reste
   /// connexe), ses liaisons et sa piste d'animation sont retirées.
   void removeBone(String boneId) {

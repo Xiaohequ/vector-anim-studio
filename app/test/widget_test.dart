@@ -154,6 +154,52 @@ void main() {
     );
   }
 
+  testWidgets(
+    'preview reste à sa taille quand on sélectionne une forme aux couches cachées',
+    (tester) async {
+      final repository = _MemoryRepository();
+      final project = AnimationProject.blank(
+        name: 'Rig',
+        type: ProjectType.skeleton,
+      );
+      final visible = VectorShape(name: 'Visible');
+      visible.layers.add(ShapeLayer(name: 'Corps', kind: ShapeKind.rect));
+      final hidden = VectorShape(name: 'Masquée');
+      hidden.layers.add(
+        ShapeLayer(name: 'Unique', kind: ShapeKind.rect, visible: false),
+      );
+      project.shapes.addAll(<VectorShape>[visible, hidden]);
+      final rig = SkeletonRig();
+      final bone = RigBone(name: 'Os');
+      rig.addBone(bone);
+      rig.bindShape(hidden.id, bone.id);
+      project.skeleton = rig;
+      await pumpStudio(tester, repository, project);
+
+      final before = tester
+          .renderObject<RenderBox>(
+            find.byWidgetPredicate(
+              (w) => w is CustomPaint && w.painter is ScenePainter,
+            ),
+          )
+          .size;
+      await tester.tap(find.byTooltip('Formes').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Masquée').last);
+      await tester.pumpAndSettle();
+
+      final after = tester
+          .renderObject<RenderBox>(
+            find.byWidgetPredicate(
+              (w) => w is CustomPaint && w.painter is ScenePainter,
+            ),
+          )
+          .size;
+      expect(after.width, closeTo(before.width, 0.01));
+      expect(after.height, closeTo(before.height, 0.01));
+    },
+  );
+
   testWidgets('undo annule la suppression d’une forme', (tester) async {
     final repository = _MemoryRepository();
     final project = seededProject();
@@ -1154,6 +1200,115 @@ void main() {
     expect(project.skeleton!.bindings, isEmpty);
     expect(project.skeleton!.tracks, isEmpty);
     expect(project.skeleton!.isAttached(shape.id), isFalse);
+  });
+
+  testWidgets('miroir H de la chaîne os apparaît dans la sheet et s’annule', (
+    tester,
+  ) async {
+    final repository = _MemoryRepository();
+    final project = AnimationProject.blank(
+      name: 'Film',
+      type: ProjectType.skeleton,
+    );
+    project.width = 720;
+    project.height = 1280;
+    final shape = VectorShape(name: 'Bloc', x: 360, y: 640);
+    shape.layers.add(ShapeLayer(name: 'L', kind: ShapeKind.rect));
+    shape.upsertKeyframe(0, shape.poseAt(0));
+    shape.upsertKeyframe(1000, <AnimatableProperty, double>{
+      ...shape.poseAt(0),
+      AnimatableProperty.x: 420,
+      AnimatableProperty.rotation: 0.6,
+    });
+    project.shapes.add(shape);
+    final rig = SkeletonRig();
+    final root = RigBone(
+      id: 'root',
+      name: 'Racine',
+      offsetX: 350,
+      offsetY: 500,
+      restAngle: 0.2,
+      length: 240,
+    );
+    final child = RigBone(
+      id: 'child',
+      name: 'Enfant',
+      parentId: root.id,
+      offsetX: 240,
+      offsetY: 0,
+      restAngle: 0.4,
+      length: 60,
+    );
+    rig.bones.addAll(<RigBone>[root, child]);
+    rig.bindShape(shape.id, root.id);
+    rig.tracks[root.id] = <BoneKeyframe>[
+      BoneKeyframe(timeMs: 0, angleDelta: 0.1),
+      BoneKeyframe(timeMs: 1000, angleDelta: 0.5),
+    ];
+    rig.tracks[child.id] = <BoneKeyframe>[
+      BoneKeyframe(timeMs: 0, angleDelta: -0.2),
+      BoneKeyframe(timeMs: 1000, angleDelta: 0.3),
+    ];
+    project.skeleton = rig;
+    await pumpStudio(tester, repository, project);
+    final rootBefore = root.toJson();
+    final childBefore = child.toJson();
+    final tracksBefore = rig.toJson()['tracks'];
+    final shapeBefore = shape.toJson();
+
+    final (topLeft, geo) = canvasHarness(tester, project);
+    await tester.tapAt(topLeft + geo.sceneToCanvas(const Offset(360, 502)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Propriétés de l’os'));
+    await tester.pumpAndSettle();
+    expect(find.text('Miroir H'), findsOneWidget);
+    expect(find.text('Miroir V'), findsOneWidget);
+
+    final pieceFrame = SkeletonPose.evaluate(rig, 0).frameOf(root.id)!;
+    final pivot = SelectionGeometry.shapePoseWithRig(
+      shape,
+      0,
+      pieceFrame,
+    ).origin;
+    await tester.tap(find.text('Miroir H'));
+    await tester.pumpAndSettle();
+    final mirroredRoot = root.toJson();
+    final mirroredChild = child.toJson();
+    final mirroredTracks = rig.toJson()['tracks'];
+    final mirroredShape = shape.toJson();
+    expect(root.offsetX, closeTo(2 * pivot.dx - 350, 1e-6));
+    expect(child.restAngle, closeTo(-0.4, 1e-6));
+    expect(rig.tracks[root.id]![1].angleDelta, closeTo(-0.5, 1e-6));
+    expect(rig.tracks[child.id]![1].angleDelta, closeTo(-0.3, 1e-6));
+    expect(
+      shape.keyframes[1].values[AnimatableProperty.x],
+      closeTo(2 * pivot.dx - 420, 1e-6),
+    );
+    expect(
+      shape.keyframes[1].values[AnimatableProperty.rotation],
+      closeTo(-0.6, 1e-6),
+    );
+
+    // Le projet restauré est une copie JSON ; vérifier par identifiants et
+    // comparer à la sauvegarde capturée après l'action pour contrôler qu'Undo
+    // a bien changé l'état.
+    // Fermer la bottom sheet avant d'appuyer sur Undo dans la playbar.
+    await tester.tapAt(const Offset(20, 20));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.undo).last);
+    await tester.pumpAndSettle();
+    final restored = await repository.load(project.id);
+    expect(restored.skeleton!.boneById(root.id)!.toJson(), rootBefore);
+    expect(restored.skeleton!.boneById(root.id)!.toJson(), isNot(mirroredRoot));
+    expect(restored.skeleton!.boneById(child.id)!.toJson(), childBefore);
+    expect(
+      restored.skeleton!.boneById(child.id)!.toJson(),
+      isNot(mirroredChild),
+    );
+    expect(restored.skeleton!.toJson()['tracks'], tracksBefore);
+    expect(restored.skeleton!.toJson()['tracks'], isNot(mirroredTracks));
+    expect(restored.shapeById(shape.id)!.toJson(), shapeBefore);
+    expect(restored.shapeById(shape.id)!.toJson(), isNot(mirroredShape));
   });
 
   testWidgets('bugfix v0.20.1 : « Ajouter un os… » visible SANS rig', (
