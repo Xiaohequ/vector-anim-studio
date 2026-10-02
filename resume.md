@@ -6,16 +6,15 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Repo : https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`)
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
-- Dernière version publiée : **v0.24.0** — build `v0.24.0-build53`, APK
-  `vector-anim-studio-0.24.0.apk` ; CI run #53 verte (commit `fa31d99`).
-  Zoom caméra 800 % + mode main dans les deux previews, plein écran Studio :
-  **en attente de validation appareil**.
-- **v0.25.0 en préparation** (branche `icones-trail`, PR #1) : nouvelle icône
-  « TRAIL » — mipmaps Android + icône adaptative `anydpi-v26` + catalogue
-  `AppIcon.appiconset` iOS complet, générés par `tmp/generer_icones.py`.
-  CI sur la PR : **Build APK verte** (analyse, 266/266 tests, ressources OK) ;
-  le job release ne tourne que sur `main`. Version `0.25.0+1` et notes de
-  release écrites sur la branche — le merge sur `main` publiera la release.
+- Dernière version publiée : **v0.25.0** — build `v0.25.0-build56`, APK
+  `vector-anim-studio-0.25.0.apk` (51,7 Mo) ; CI run #56 verte (commit `bf3a1f5`).
+- **v0.25.0 = nouvelle icône « TRAIL », VALIDÉE APPAREIL (02/10)** — retour :
+  « Icone c'est bon. C'est validé ». Mipmaps Android + icône adaptative
+  `anydpi-v26` + catalogue iOS `AppIcon.appiconset`, générés par
+  `tmp/generer_icones.py` (`--deploy` pour réécrire dans le projet).
+  Une variante CLAIRE existe (`tmp/icones/trail/clair_1024.png`), non retenue.
+- **Reste à valider sur appareil** (v0.23.0 `build52` et v0.24.0 `build53`) :
+  zoom caméra jusqu’à 800 %, mode « Déplacer la vue », plein écran Studio.
 - **v0.21.2 VALIDÉE APPAREIL (01/10)** — retour : « Les 3 modifications
   marchent » (éditeur d'os recentré à la pose du playhead + keyframes ignorées,
   os masqués hors fenêtre de leur forme, keyframes d'os interdites hors segment ;
@@ -101,6 +100,7 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 ## ✅ Validé sur appareil
 
+- **v0.25.0 (02/10)** : nouvelle icône « TRAIL » — « Icone c'est bon. C'est validé ».
 - **v0.21.2 (01/10)** : éditeur d'os recentré, os masqués hors fenêtre de leur
   forme et keyframes d'os bloquées hors segment — « Les 3 modifications marchent ».
 - **v0.20.3 (01/10)** : un os par forme dans l'éditeur, pivot et bouton de la
@@ -862,7 +862,7 @@ v0.9.0, l'**animation squelette** (rig maître).
   désactivés pendant le pan pour éviter de déplacer un os par mégarde.
 - Suite complète 266/266, analyse propre. Validation appareil à faire.
 
-### v0.25.0 (branche `icones-trail`, PR #1)
+### v0.25.0 (publiée — CI run #56, `v0.25.0-build56` — **VALIDÉE APPAREIL 02/10**)
 - Icône d’application « TRAIL » : cadre net + échos de mouvement + point coloré.
 - Android : mipmaps mdpi→xxxhdpi + **icône adaptative** `mipmap-anydpi-v26`
   (avant-plan PNG transparent, zone sûre 66/108, fond `#0B2129` via `colors.xml`).
@@ -871,7 +871,9 @@ v0.9.0, l'**animation squelette** (rig maître).
 - Générée par `tmp/generer_icones.py` (relancer `--deploy` après un changement
   de design) ; comparaison des variantes sombre/claire dans `tmp/icones/trail/`.
 - La variante **claire** est produite mais non intégrée (choix : sombre).
-- CI PR #1 verte sur les ressources ; merge sur `main` → release `v0.25.0-buildNN`.
+- CI PR #1 verte sur les ressources ; merge squash sur `main` → release `v0.25.0-build56`.
+- Vérification dans l'APK publié : 10 ressources d'icône présentes (5 mipmaps RGB
+  48→192 px + 5 avant-plans RGBA 108→432 px), `resources.arsc` OK.
 
 ### Backlog de long terme
 - Signature release (keystore + secrets GitHub) et/ou App Bundle `.aab`.
