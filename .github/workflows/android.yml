@@ -117,7 +117,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v{0}-build{1}', needs.build.outputs.version, github.run_number) }}
-          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('Vector Anim Studio {0} — build {1}', needs.build.outputs.version, github.run_number) }}
+          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('Keyform Studio {0} — build {1}', needs.build.outputs.version, github.run_number) }}
           body_path: dist/release_notes.md
           files: |
             dist/*.apk

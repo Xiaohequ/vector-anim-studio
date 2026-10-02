@@ -1,8 +1,10 @@
-# VASF — Vector Anim Studio simple JSON format (v1 + extensions v2, v3, v4)
+# VASF — Keyform Studio simple JSON format (v1 + extensions v2, v3, v4)
 
 VASF is a compact, LLM-friendly JSON format for describing a complete 2D vector
-animation (shapes, keyframes, optional skeleton rig) that the **Vector Anim Studio**
-Android app can import directly.
+animation (shapes, keyframes, optional skeleton rig) that the **Keyform Studio**
+(Android / iOS) app can import directly. `VASF` keeps its original spelling
+(*Vector Anim Studio Format*): it is the format identifier stored in the file,
+not the app name.
 
 Rules of thumb for generating a valid file:
 

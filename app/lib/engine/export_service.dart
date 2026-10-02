@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:image/image.dart' as img;
@@ -13,6 +14,27 @@ import 'simple_animation_format.dart';
 
 /// Format de sortie vidéo.
 enum VideoFormat { mp4, gif }
+
+/// Presets « p » : la dimension la plus longue de la vidéo finale (orientation
+/// conservée, donc 720p donne 720×1280 en portrait ou 1280×720 en paysage).
+const List<int> mp4ResolutionPresets = <int>[480, 720, 1080];
+
+double mp4WidthForLongEdge(AnimationProject project, int longEdge) =>
+    longEdge * project.width / math.max(project.width, project.height);
+
+/// Dimensions effectives (nombres pairs exigés par l'encodeur H.264) pour un
+/// preset dont le bord long vaut [longEdge] pixels.
+({int width, int height}) mp4DimensionsForLongEdge(
+  AnimationProject project,
+  int longEdge,
+) {
+  final rawWidth = mp4WidthForLongEdge(project, longEdge);
+  int even(int value) => value.isEven ? value : value + 1;
+  return (
+    width: even(rawWidth.round()),
+    height: even((rawWidth * project.height / project.width).round()),
+  );
+}
 
 extension VideoFormatInfo on VideoFormat {
   String get label => switch (this) {

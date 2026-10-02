@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -44,6 +45,8 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
   late VectorShape _draft;
   late final TextEditingController _name;
   String? _selectedLayerId;
+  Timer? _bannerTimer;
+  OverlayEntry? _messageOverlay;
 
   // Caméra du preview, indépendante des données de la forme.
   double _previewZoom = 1;
@@ -144,6 +147,7 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
 
   @override
   void dispose() {
+    _dismissTopMessage();
     _name.dispose();
     super.dispose();
   }
@@ -220,9 +224,69 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
     });
   }
 
-  void _snack(String message) => ScaffoldMessenger.of(
-    context,
-  ).showSnackBar(SnackBar(content: Text(message)));
+  void _snack(String message) => _showTopMessage(message);
+
+  void _showTopMessage(String message) {
+    _dismissTopMessage();
+    _messageOverlay = OverlayEntry(
+      builder: (overlayContext) {
+        final top =
+            MediaQuery.paddingOf(overlayContext).top + kToolbarHeight + 8;
+        return Positioned(
+          top: top,
+          left: 12,
+          right: 12,
+          child: Material(
+            key: const ValueKey<String>('keyform-top-message'),
+            color: const Color(0xFF242B3A),
+            elevation: 8,
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.only(
+                left: 14,
+                right: 4,
+                top: 4,
+                bottom: 4,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  const Icon(Icons.info_outline, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      message,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Fermer le message',
+                    visualDensity: VisualDensity.compact,
+                    constraints: const BoxConstraints(
+                      minWidth: 36,
+                      minHeight: 36,
+                    ),
+                    onPressed: _dismissTopMessage,
+                    icon: const Icon(Icons.close, size: 18),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    Overlay.of(context, rootOverlay: true).insert(_messageOverlay!);
+    _bannerTimer = Timer(const Duration(seconds: 5), _dismissTopMessage);
+  }
+
+  void _dismissTopMessage() {
+    _bannerTimer?.cancel();
+    _bannerTimer = null;
+    _messageOverlay?.remove();
+    _messageOverlay = null;
+  }
 
   /// Bornée de la fenêtre d'affichage éditable : la fin du dernier AUTRE
   /// segment +10 s (le projet s'étend tout seul) — jamais sous la fin du

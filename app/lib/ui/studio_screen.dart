@@ -54,6 +54,8 @@ class _StudioScreenState extends State<StudioScreen>
   String? _selectedId;
   String? _error;
   Timer? _saveTimer;
+  Timer? _bannerTimer;
+  OverlayEntry? _messageOverlay;
 
   /// Projets imbriqués préchargés (instances d'animation), indexés par id.
   final Map<String, AnimationProject> _embedded = <String, AnimationProject>{};
@@ -307,6 +309,7 @@ class _StudioScreenState extends State<StudioScreen>
   @override
   void dispose() {
     _saveTimer?.cancel();
+    _dismissTopMessage();
     if (_previewFullscreen) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     }
@@ -359,9 +362,70 @@ class _StudioScreenState extends State<StudioScreen>
     if (project != null) await widget.repository.save(project);
   }
 
-  void _snack(String message) => ScaffoldMessenger.of(
-    context,
-  ).showSnackBar(SnackBar(content: Text(message)));
+  void _snack(String message) => _showTopMessage(message);
+
+  void _showTopMessage(String message) {
+    _dismissTopMessage();
+    _messageOverlay = OverlayEntry(
+      builder: (overlayContext) {
+        final top =
+            MediaQuery.paddingOf(overlayContext).top +
+            (_previewFullscreen ? 8 : kToolbarHeight + 8);
+        return Positioned(
+          top: top,
+          left: 12,
+          right: 12,
+          child: Material(
+            key: const ValueKey<String>('keyform-top-message'),
+            color: const Color(0xFF242B3A),
+            elevation: 8,
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.only(
+                left: 14,
+                right: 4,
+                top: 4,
+                bottom: 4,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  const Icon(Icons.info_outline, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      message,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Fermer le message',
+                    visualDensity: VisualDensity.compact,
+                    constraints: const BoxConstraints(
+                      minWidth: 36,
+                      minHeight: 36,
+                    ),
+                    onPressed: _dismissTopMessage,
+                    icon: const Icon(Icons.close, size: 18),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    Overlay.of(context, rootOverlay: true).insert(_messageOverlay!);
+    _bannerTimer = Timer(const Duration(seconds: 5), _dismissTopMessage);
+  }
+
+  void _dismissTopMessage() {
+    _bannerTimer?.cancel();
+    _bannerTimer = null;
+    _messageOverlay?.remove();
+    _messageOverlay = null;
+  }
 
   // ------------------------------------------------------------------ undo
 
@@ -1827,14 +1891,20 @@ class _StudioScreenState extends State<StudioScreen>
     }
   }
 
-  /// Dialogue de réglage des fps avant un export MP4 ou GIF.
-  Future<int?> _askExportFps(VideoFormat format) async {
-    final choices = format == VideoFormat.mp4
+  /// Dialogue des options avant export : fps et définition MP4.
+  Future<({int fps, int? resolution})?> _askExportOptions(
+    VideoFormat format,
+  ) async {
+    final fpsChoices = format == VideoFormat.mp4
         ? <int>[15, 24, 25, 30, 60]
         : <int>[10, 12, 15, 25];
-    final initial = format == VideoFormat.mp4 ? (_project?.fps ?? 30) : 12;
-    var selected = choices.contains(initial) ? initial : choices.last;
-    return showDialog<int>(
+    final project = _project;
+    final initialFps = format == VideoFormat.mp4 ? (project?.fps ?? 30) : 12;
+    var selectedFps = fpsChoices.contains(initialFps)
+        ? initialFps
+        : fpsChoices.last;
+    var selectedResolution = 720;
+    return showDialog<({int fps, int? resolution})>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
@@ -1845,22 +1915,46 @@ class _StudioScreenState extends State<StudioScreen>
             children: <Widget>[
               Text(
                 'Durée du projet : '
-                '${((_project?.durationMs ?? 0) / 1000).toStringAsFixed(2)} s',
+                '${((project?.durationMs ?? 0) / 1000).toStringAsFixed(2)} s',
                 style: const TextStyle(fontSize: 12),
               ),
-              const SizedBox(height: 8),
+              if (format == VideoFormat.mp4) ...<Widget>[
+                const SizedBox(height: 14),
+                const Text('Résolution vidéo'),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: <Widget>[
+                    for (final choice in mp4ResolutionPresets)
+                      ChoiceChip(
+                        label: Text('${choice}p'),
+                        selected: choice == selectedResolution,
+                        onSelected: (_) =>
+                            setDialogState(() => selectedResolution = choice),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                if (project != null)
+                  Text(
+                    _resolutionDimensions(project, selectedResolution),
+                    style: const TextStyle(fontSize: 11, color: Colors.white60),
+                  ),
+              ],
+              const SizedBox(height: 14),
               const Text('Images par seconde'),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 6,
                 runSpacing: 6,
                 children: <Widget>[
-                  for (final choice in choices)
+                  for (final choice in fpsChoices)
                     ChoiceChip(
-                      label: Text('$choice'),
-                      selected: choice == selected,
+                      label: Text('$choice fps'),
+                      selected: choice == selectedFps,
                       onSelected: (_) =>
-                          setDialogState(() => selected = choice),
+                          setDialogState(() => selectedFps = choice),
                     ),
                 ],
               ),
@@ -1872,7 +1966,12 @@ class _StudioScreenState extends State<StudioScreen>
               child: const Text('Annuler'),
             ),
             FilledButton(
-              onPressed: () => Navigator.of(context).pop(selected),
+              onPressed: () => Navigator.of(context).pop((
+                fps: selectedFps,
+                resolution: format == VideoFormat.mp4
+                    ? selectedResolution
+                    : null,
+              )),
               child: const Text('Exporter'),
             ),
           ],
@@ -1881,13 +1980,19 @@ class _StudioScreenState extends State<StudioScreen>
     );
   }
 
+  String _resolutionDimensions(AnimationProject project, int longEdge) {
+    final size = mp4DimensionsForLongEdge(project, longEdge);
+    return '${size.width}×${size.height} px · proportions du projet conservées';
+  }
+
   // ----------------------------------------------------------------- export
 
   Future<void> _exportVideo(VideoFormat format) async {
     final project = _project;
     if (project == null) return;
-    final fps = await _askExportFps(format);
-    if (fps == null || !mounted) return;
+    final options = await _askExportOptions(format);
+    if (options == null || !mounted) return;
+    final fps = options.fps;
     project.fps = fps; // défaut du prochain export
     await _flushSave();
     if (!mounted) return;
@@ -1930,6 +2035,9 @@ class _StudioScreenState extends State<StudioScreen>
       final file = await service.exportVideo(
         format: format,
         fps: fps,
+        width: options.resolution == null
+            ? null
+            : mp4WidthForLongEdge(project, options.resolution!),
         onProgress: (value) => progress.value = value,
       );
       navigator.pop();

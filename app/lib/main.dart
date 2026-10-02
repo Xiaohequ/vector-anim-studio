@@ -16,7 +16,7 @@ class VectorAnimStudioApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Vector Anim Studio',
+      title: 'Keyform Studio',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,

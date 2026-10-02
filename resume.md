@@ -1,11 +1,12 @@
-# Résumé du projet — vector_anim_studio
+# Résumé du projet — Keyform Studio
 
-Studio d'animation Flutter (Android) : projets multiples, formes composées de couches,
+Keyform Studio, studio d'animation Flutter (Android) : projets multiples, formes composées de couches,
 keyframes « pose », timeline zoomable, undo, export MP4/GIF/PNG/JSON — et depuis la
 v0.9.0, l'**animation squelette** (rig maître).
 
-- Repo : https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`)
+- Nom technique / dépôt : `vector_anim_studio` / https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`). Nom d'affichage : **Keyform Studio** depuis v0.26.0.
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
+- **Travail local v0.27.0** : choix résolution MP4 480p/720p/1080p + messages en haut dans le Studio et l’éditeur. Suite complète 270/270 et analyse propres ; release/validation appareil à faire.
 - Dernière version publiée : **v0.25.0** — build `v0.25.0-build56`, APK
   `vector-anim-studio-0.25.0.apk` (51,7 Mo) ; CI run #56 verte (commit `bf3a1f5`).
 - **v0.25.0 = nouvelle icône « TRAIL », VALIDÉE APPAREIL (02/10)** — retour :
