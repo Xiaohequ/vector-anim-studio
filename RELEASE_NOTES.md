@@ -1,18 +1,21 @@
-# Vector Anim Studio 0.23.0
+# Vector Anim Studio 0.24.0
 
-## Zoom et plein écran du preview
+## Caméra des previews
 
-- L’éditeur de forme et le Studio proposent **Zoom arrière**, **Zoom avant** et
-  **Ajuster** sur le preview. Le zoom est centré et indépendant des données
-  d’animation ; plage de 50 % à 400 %.
-- Le Studio propose un mode **plein écran** : AppBar, timeline, playbar et barre
-  d’outils sont masquées ; les barres système sont cachées. La forme et l’os
-  sélectionnés sont désélectionnés à l’entrée et les overlays de sélection sont
-  masqués. Le bouton de sortie et le bouton Retour quittent le mode.
-- Le playhead et la lecture restent inchangés. Les gestes de transformation sont
-  désactivés en plein écran afin que l’aperçu serve uniquement au visionnage.
+- Zoom maximum porté à **800 %** dans l’éditeur de forme et le Studio.
+- Ajout d’un mode **Déplacer la vue** dans les deux previews : le glisser déplace
+  la caméra sans déplacer les formes ou les os. Le mode se désactive en retapant
+  l’icône main.
+- **Ajuster** réinitialise le zoom à 100 % et recentre le cadrage.
+- Le pan est appliqué à la scène et à ses overlays ; sélection et géométrie
+  restent alignées dans l’éditeur comme dans le Studio.
 
-### Tests
+## Plein écran Studio
 
-- Tests ciblés de géométrie du zoom, preview éditeur et mode plein écran Studio.
-- Suite complète **265/265 tests** passée ; `flutter analyze` sans problème.
+- Le mode plein écran de la version précédente reste disponible ; la caméra
+  (zoom et pan) est partagée avec le preview normal.
+
+### Vérifications
+
+- Tests ciblés caméra, géométrie et gestes : passés.
+- Suite complète : **266/266 tests** ; `flutter analyze` : aucun problème.

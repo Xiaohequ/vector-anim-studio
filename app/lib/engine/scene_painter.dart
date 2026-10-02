@@ -21,6 +21,7 @@ class ScenePainter extends CustomPainter {
     this.showLayerPoints = false,
     this.activePointIndex = -1,
     this.previewZoom = 1,
+    this.previewPan = Offset.zero,
   });
 
   final AnimationProject project;
@@ -48,13 +49,21 @@ class ScenePainter extends CustomPainter {
   /// Zoom d'affichage uniquement (jamais utilisé pour les exports).
   final double previewZoom;
 
+  /// Déplacement écran de caméra, utilisé uniquement dans les previews.
+  final Offset previewPan;
+
   /// Facteur d'échelle permettant d'inscrire la scène dans [size].
   static double scaleFor(AnimationProject project, Size size) =>
       math.min(size.width / project.width, size.height / project.height);
 
   @override
   void paint(Canvas canvas, Size size) {
-    final geo = SceneGeometry.fitFor(project, size, zoom: previewZoom);
+    final geo = SceneGeometry.fitFor(
+      project,
+      size,
+      zoom: previewZoom,
+      pan: previewPan,
+    );
 
     canvas.save();
     canvas.translate(geo.dx, geo.dy);

@@ -6,14 +6,13 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Repo : https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`)
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
-- Dernière version publiée : **v0.22.0 VALIDÉE APPAREIL** — `v0.22.0-build51`, APK
-  `vector-anim-studio-0.22.0.apk`. Correctif preview confirmé (« Correction
-  marche ») et miroir H/V sur os confirmé (« Mirroir sur os marche »). 262/262
-  tests, `flutter analyze` sans problème.
-- **v0.23.0 en cours de release** : zoom des previews dans l’éditeur de forme
-  et le Studio, plein écran Studio avec désélection à l’entrée. `flutter analyze`
-  OK ; suite complète **265/265 tests** passée, tests ciblés confirmés après
-  le dernier ajustement. CI et validation appareil en attente.
+- Dernière version publiée : **v0.23.0** — build `v0.23.0-build52`, APK
+  `vector-anim-studio-0.23.0.apk` ; CI run #52 verte. Zoom preview et plein
+  écran Studio en attente de validation appareil.
+- Travail local **v0.24.0** : zoom caméra jusqu’à 800 % et mode main pour déplacer
+  le cadrage dans l’éditeur et le Studio. `flutter analyze` OK ; suite complète
+  **266/266 tests** passée, tests ciblés géométrie/pan/preview passés ; CI et
+  validation appareil à faire.
 - **v0.21.2 VALIDÉE APPAREIL (01/10)** — retour : « Les 3 modifications
   marchent » (éditeur d'os recentré à la pose du playhead + keyframes ignorées,
   os masqués hors fenêtre de leur forme, keyframes d'os interdites hors segment ;

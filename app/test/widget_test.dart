@@ -1498,6 +1498,26 @@ void main() {
         tester.widget<CustomPaint>(painterFinder).painter! as ScenePainter;
     expect(painter.previewZoom, closeTo(1.2, 0.0001));
 
+    await tester.tap(find.byTooltip('Déplacer la vue'));
+    await tester.pump();
+    expect(
+      find.byTooltip('Désactiver le déplacement de la vue'),
+      findsOneWidget,
+    );
+    await tester.drag(find.byType(GestureDetector).first, const Offset(36, 24));
+    await tester.pump();
+    painter =
+        tester.widget<CustomPaint>(painterFinder).painter! as ScenePainter;
+    expect(painter.previewPan.dx, greaterThan(0));
+    expect(painter.previewPan.dy, greaterThan(0));
+
+    await tester.tap(find.byTooltip('Ajuster le preview'));
+    await tester.pump();
+    painter =
+        tester.widget<CustomPaint>(painterFinder).painter! as ScenePainter;
+    expect(painter.previewZoom, 1);
+    expect(painter.previewPan, Offset.zero);
+
     await tester.tap(find.byTooltip('Plein écran'));
     await tester.pumpAndSettle();
     painter =

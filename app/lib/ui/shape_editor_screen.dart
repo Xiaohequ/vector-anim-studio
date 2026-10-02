@@ -45,17 +45,40 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
   late final TextEditingController _name;
   String? _selectedLayerId;
 
-  // Zoom d'affichage du preview, indépendant des données de la forme.
+  // Caméra du preview, indépendante des données de la forme.
   double _previewZoom = 1;
+  Offset _previewPan = Offset.zero;
+  bool _previewPanMode = false;
+  Offset _panStart = Offset.zero;
+  Offset _panBase = Offset.zero;
 
-  SceneGeometry _previewGeometry(Size size) =>
-      SceneGeometry.fitFor(widget.project, size, zoom: _previewZoom);
+  SceneGeometry _previewGeometry(Size size) => SceneGeometry.fitFor(
+    widget.project,
+    size,
+    zoom: _previewZoom,
+    pan: _previewPan,
+  );
 
   void _changePreviewZoom(double factor) {
-    setState(() => _previewZoom = (_previewZoom * factor).clamp(0.5, 4.0));
+    setState(() => _previewZoom = (_previewZoom * factor).clamp(0.5, 8.0));
   }
 
-  void _fitPreview() => setState(() => _previewZoom = 1);
+  void _fitPreview() => setState(() {
+    _previewZoom = 1;
+    _previewPan = Offset.zero;
+  });
+
+  void _startPreviewPan(Offset position) {
+    _panStart = position;
+    _panBase = _previewPan;
+  }
+
+  void _updatePreviewPan(Offset position) {
+    setState(() => _previewPan = _panBase + position - _panStart);
+  }
+
+  void _togglePreviewPanMode() =>
+      setState(() => _previewPanMode = !_previewPanMode);
 
   // Option : aimanter la rotation aux multiples de 90° (bouton du preview).
   bool _snapRotation = false;
@@ -304,14 +327,19 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
                   onPointerCancel: (_) => _pointerUp(),
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onScaleStart: (details) =>
-                        _onGestureStart(details, canvasSize),
-                    onScaleUpdate: (details) =>
-                        _onGestureUpdate(details, canvasSize),
-                    onScaleEnd: (_) => _endGesture(),
-                    onTapUp: (details) => _onTapUp(details, canvasSize),
-                    onLongPressStart: (details) =>
-                        _onLongPress(details, canvasSize),
+                    onScaleStart: _previewPanMode
+                        ? null
+                        : (details) => _onGestureStart(details, canvasSize),
+                    onScaleUpdate: _previewPanMode
+                        ? null
+                        : (details) => _onGestureUpdate(details, canvasSize),
+                    onScaleEnd: _previewPanMode ? null : (_) => _endGesture(),
+                    onTapUp: _previewPanMode
+                        ? null
+                        : (details) => _onTapUp(details, canvasSize),
+                    onLongPressStart: _previewPanMode
+                        ? null
+                        : (details) => _onLongPress(details, canvasSize),
                     child: CustomPaint(
                       painter: ScenePainter(
                         project: _preview,
@@ -324,6 +352,7 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
                             ? _pointIndex
                             : -1,
                         previewZoom: _previewZoom,
+                        previewPan: _previewPan,
                       ),
                       child: const SizedBox.expand(),
                     ),
@@ -373,6 +402,17 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
                   ),
                 ),
               ),
+              if (_previewPanMode)
+                Positioned.fill(
+                  child: Listener(
+                    behavior: HitTestBehavior.opaque,
+                    onPointerDown: (event) =>
+                        _startPreviewPan(event.localPosition),
+                    onPointerMove: (event) =>
+                        _updatePreviewPan(event.localPosition),
+                    child: const SizedBox.expand(),
+                  ),
+                ),
               Positioned(
                 right: 8,
                 bottom: 8,
@@ -496,6 +536,18 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
+        IconButton(
+          tooltip: _previewPanMode
+              ? 'Désactiver le déplacement de la vue'
+              : 'Déplacer la vue',
+          isSelected: _previewPanMode,
+          visualDensity: VisualDensity.compact,
+          onPressed: _togglePreviewPanMode,
+          icon: Icon(
+            _previewPanMode ? Icons.pan_tool : Icons.pan_tool_outlined,
+            size: 18,
+          ),
+        ),
         IconButton(
           tooltip: 'Zoom arrière du preview',
           visualDensity: VisualDensity.compact,

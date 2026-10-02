@@ -109,18 +109,37 @@ class _StudioScreenState extends State<StudioScreen>
   /// Zoom/défilement de la timeline (mémoire de session, non persisté).
   TimelineZoomState? _zoom;
 
-  /// Zoom du preview uniquement, indépendant des transformations des objets.
+  /// Caméra du preview, indépendante des transformations des objets.
   double _previewZoom = 1;
+  Offset _previewPan = Offset.zero;
+  bool _previewPanMode = false;
+  Offset _panStart = Offset.zero;
+  Offset _panBase = Offset.zero;
   bool _previewFullscreen = false;
 
   SceneGeometry _canvasGeometry(AnimationProject project, Size size) =>
-      SceneGeometry.fitFor(project, size, zoom: _previewZoom);
+      SceneGeometry.fitFor(project, size, zoom: _previewZoom, pan: _previewPan);
 
   void _changePreviewZoom(double factor) {
-    setState(() => _previewZoom = (_previewZoom * factor).clamp(0.5, 4.0));
+    setState(() => _previewZoom = (_previewZoom * factor).clamp(0.5, 8.0));
   }
 
-  void _fitPreview() => setState(() => _previewZoom = 1);
+  void _fitPreview() => setState(() {
+    _previewZoom = 1;
+    _previewPan = Offset.zero;
+  });
+
+  void _startPreviewPan(Offset position) {
+    _panStart = position;
+    _panBase = _previewPan;
+  }
+
+  void _updatePreviewPan(Offset position) {
+    setState(() => _previewPan = _panBase + position - _panStart);
+  }
+
+  void _togglePreviewPanMode() =>
+      setState(() => _previewPanMode = !_previewPanMode);
 
   void _togglePreviewFullscreen() {
     final entering = !_previewFullscreen;
@@ -2191,7 +2210,7 @@ class _StudioScreenState extends State<StudioScreen>
                   onPointerCancel: (_) => _pointerUp(),
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onScaleStart: _previewFullscreen
+                    onScaleStart: (_previewFullscreen || _previewPanMode)
                         ? null
                         : (details) => _onCanvasGestureStart(
                             details,
@@ -2199,7 +2218,7 @@ class _StudioScreenState extends State<StudioScreen>
                             controller,
                             canvasSize,
                           ),
-                    onScaleUpdate: _previewFullscreen
+                    onScaleUpdate: (_previewFullscreen || _previewPanMode)
                         ? null
                         : (details) => _onCanvasGestureUpdate(
                             details,
@@ -2207,9 +2226,17 @@ class _StudioScreenState extends State<StudioScreen>
                             controller,
                             canvasSize,
                           ),
-                    onScaleEnd: _previewFullscreen ? null : _onCanvasGestureEnd,
+                    onScaleEnd: (_previewFullscreen || _previewPanMode)
+                        ? null
+                        : _onCanvasGestureEnd,
+                    onPanStart: _previewPanMode
+                        ? (details) => _startPreviewPan(details.localPosition)
+                        : null,
+                    onPanUpdate: _previewPanMode
+                        ? (details) => _updatePreviewPan(details.localPosition)
+                        : null,
                     onTapUp: (details) {
-                      if (!_previewFullscreen) {
+                      if (!_previewFullscreen && !_previewPanMode) {
                         _onCanvasTapUp(
                           details,
                           project,
@@ -2228,6 +2255,7 @@ class _StudioScreenState extends State<StudioScreen>
                         showFrame: true,
                         embeddedProjects: _embedded,
                         previewZoom: _previewZoom,
+                        previewPan: _previewPan,
                       ),
                       child: const SizedBox.expand(),
                     ),
@@ -2280,6 +2308,18 @@ class _StudioScreenState extends State<StudioScreen>
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
+        IconButton(
+          tooltip: _previewPanMode
+              ? 'Désactiver le déplacement de la vue'
+              : 'Déplacer la vue',
+          isSelected: _previewPanMode,
+          visualDensity: VisualDensity.compact,
+          onPressed: _togglePreviewPanMode,
+          icon: Icon(
+            _previewPanMode ? Icons.pan_tool : Icons.pan_tool_outlined,
+            size: 18,
+          ),
+        ),
         IconButton(
           tooltip: 'Zoom arrière du preview',
           visualDensity: VisualDensity.compact,

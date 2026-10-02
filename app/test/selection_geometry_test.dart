@@ -54,11 +54,37 @@ void main() {
         zoom: 2,
       );
       expect(zoomed.scale, fit.scale * 2);
-      expect(zoomed.sceneToCanvas(const Offset(180, 320)), const Offset(360, 320));
+      expect(
+        zoomed.sceneToCanvas(const Offset(180, 320)),
+        const Offset(360, 320),
+      );
       final back = zoomed.canvasToScene(
         zoomed.sceneToCanvas(const Offset(123, 456)),
       );
       expect(back.dx, closeTo(123, 0.001));
+    });
+
+    test('pan décale la caméra en pixels écran sans changer le zoom', () {
+      final geo = SceneGeometry.fitFor(
+        _project(),
+        const Size(720, 640),
+        zoom: 2,
+        pan: const Offset(35, -20),
+      );
+      final centered = SceneGeometry.fitFor(
+        _project(),
+        const Size(720, 640),
+        zoom: 2,
+      );
+      expect(geo.scale, centered.scale);
+      expect(
+        geo.sceneToCanvas(Offset.zero).dx,
+        centered.sceneToCanvas(Offset.zero).dx + 35,
+      );
+      expect(
+        geo.sceneToCanvas(Offset.zero).dy,
+        centered.sceneToCanvas(Offset.zero).dy - 20,
+      );
     });
   });
 
@@ -275,5 +301,4 @@ void main() {
       );
     });
   });
-
 }

@@ -87,6 +87,7 @@ class SceneGeometry {
     AnimationProject project,
     Size canvasSize, {
     double zoom = 1,
+    Offset pan = Offset.zero,
   }) {
     final safeW = math.max(1.0, project.width);
     final safeH = math.max(1.0, project.height);
@@ -94,8 +95,8 @@ class SceneGeometry {
     final s = fit * zoom;
     return SceneGeometry(
       scale: s,
-      dx: (canvasSize.width - safeW * s) / 2,
-      dy: (canvasSize.height - safeH * s) / 2,
+      dx: (canvasSize.width - safeW * s) / 2 + pan.dx,
+      dy: (canvasSize.height - safeH * s) / 2 + pan.dy,
     );
   }
 
