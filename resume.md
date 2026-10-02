@@ -6,13 +6,16 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Repo : https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`)
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
-- Dernière version publiée : **v0.23.0** — build `v0.23.0-build52`, APK
-  `vector-anim-studio-0.23.0.apk` ; CI run #52 verte. Zoom preview et plein
-  écran Studio en attente de validation appareil.
-- Travail local **v0.24.0** : zoom caméra jusqu’à 800 % et mode main pour déplacer
-  le cadrage dans l’éditeur et le Studio. `flutter analyze` OK ; suite complète
-  **266/266 tests** passée, tests ciblés géométrie/pan/preview passés ; CI et
-  validation appareil à faire.
+- Dernière version publiée : **v0.24.0** — build `v0.24.0-build53`, APK
+  `vector-anim-studio-0.24.0.apk` ; CI run #53 verte (commit `fa31d99`).
+  Zoom caméra 800 % + mode main dans les deux previews, plein écran Studio :
+  **en attente de validation appareil**.
+- **v0.25.0 en préparation** (branche `icones-trail`, PR #1) : nouvelle icône
+  « TRAIL » — mipmaps Android + icône adaptative `anydpi-v26` + catalogue
+  `AppIcon.appiconset` iOS complet, générés par `tmp/generer_icones.py`.
+  CI sur la PR : **Build APK verte** (analyse, 266/266 tests, ressources OK) ;
+  le job release ne tourne que sur `main`. Version `0.25.0+1` et notes de
+  release écrites sur la branche — le merge sur `main` publiera la release.
 - **v0.21.2 VALIDÉE APPAREIL (01/10)** — retour : « Les 3 modifications
   marchent » (éditeur d'os recentré à la pose du playhead + keyframes ignorées,
   os masqués hors fenêtre de leur forme, keyframes d'os interdites hors segment ;
@@ -837,16 +840,38 @@ v0.9.0, l'**animation squelette** (rig maître).
 - **Release** : commit `4a113f3`, CI run #51, `v0.22.0-build51`, APK
   `vector-anim-studio-0.22.0.apk` ; 262/262 tests, analyse sans problème.
 
-### v0.23.0 (implémentation locale — release et validation appareil en attente)
+### v0.23.0 (publiée — CI run #52, `v0.23.0-build52`)
 - Contrôles de zoom − / + / Ajuster sur le preview de l’éditeur de forme et du
   Studio (zoom d’affichage centré, sans modifier les données de la forme).
 - Dans le Studio, bouton plein écran : masque AppBar, timeline et outils,
   utilise l’écran disponible et masque la sélection ; entrée en mode plein écran
   désélectionne formes et os. Le bouton de sortie et le retour système quittent
   le mode. Le playhead et la lecture restent inchangés.
-- Vérifications locales : `flutter analyze` sans problème ; tests ciblés de
-  géométrie, zoom éditeur et plein écran Studio passés. Suite complète à relancer
-  après les derniers ajouts de tests ; pas de build/release ni validation appareil.
+- Validation appareil à faire.
+
+### v0.24.0 (publiée — CI run #53, `v0.24.0-build53`)
+- Zoom des previews porté à **800 %** (éditeur de forme et Studio).
+- Mode **Déplacer la vue** (icône main) dans les deux previews : le glisser
+  décale la caméra (pan en pixels écran) sans toucher aux formes ni aux os ;
+  les overlays (sélection, os, poignées) suivent le pan.
+- **Ajuster** = zoom 100 % + recentrage. Le plein écran conserve la caméra.
+- `SceneGeometry.fitFor` accepte désormais `zoom` et `pan` ; le painter prend
+  `previewZoom`/`previewPan` (défaut 1 et zéro → **exports inchangés**).
+- Piège réglé : le plan de capture du pan doit être posé AVANT les boutons
+  flottants, sinon il avale les taps ; et les gestes canvas (scale/tap) sont
+  désactivés pendant le pan pour éviter de déplacer un os par mégarde.
+- Suite complète 266/266, analyse propre. Validation appareil à faire.
+
+### v0.25.0 (branche `icones-trail`, PR #1)
+- Icône d’application « TRAIL » : cadre net + échos de mouvement + point coloré.
+- Android : mipmaps mdpi→xxxhdpi + **icône adaptative** `mipmap-anydpi-v26`
+  (avant-plan PNG transparent, zone sûre 66/108, fond `#0B2129` via `colors.xml`).
+- iOS : catalogue `AppIcon.appiconset` régénéré (20 → 1024 pt, `Contents.json`
+  inchangé), fond plein cadre sans alpha comme l’exige l’App Store.
+- Générée par `tmp/generer_icones.py` (relancer `--deploy` après un changement
+  de design) ; comparaison des variantes sombre/claire dans `tmp/icones/trail/`.
+- La variante **claire** est produite mais non intégrée (choix : sombre).
+- CI PR #1 verte sur les ressources ; merge sur `main` → release `v0.25.0-buildNN`.
 
 ### Backlog de long terme
 - Signature release (keystore + secrets GitHub) et/ou App Bundle `.aab`.

@@ -1,21 +1,20 @@
-# Vector Anim Studio 0.24.0
+# Vector Anim Studio 0.25.0
 
-## Caméra des previews
+## Nouvelle icône d'application « TRAIL »
 
-- Zoom maximum porté à **800 %** dans l’éditeur de forme et le Studio.
-- Ajout d’un mode **Déplacer la vue** dans les deux previews : le glisser déplace
-  la caméra sans déplacer les formes ou les os. Le mode se désactive en retapant
-  l’icône main.
-- **Ajuster** réinitialise le zoom à 100 % et recentre le cadrage.
-- Le pan est appliqué à la scène et à ses overlays ; sélection et géométrie
-  restent alignées dans l’éditeur comme dans le Studio.
-
-## Plein écran Studio
-
-- Le mode plein écran de la version précédente reste disponible ; la caméra
-  (zoom et pan) est partagée avec le preview normal.
+- Un cadre net accompagné de ses échos de mouvement et d'un point coloré :
+  l'animation par couches, résumée en un seul signe.
+- Icône générée par script (`tmp/generer_icones.py`) : tailles, dégradé de fond et
+  zone sûre calculés pour coller aux masques système.
+- **Android** : mipmaps mdpi → xxxhdpi **plus icône adaptative** (`anydpi-v26`,
+  avant-plan transparent + fond `#0B2129`) — rendu correct en cercle comme en
+  carré arrondi sur les launchers récents.
+- **iOS** : catalogue `AppIcon.appiconset` régénéré, de 20 pt au 1024 pt demandé
+  par l'App Store (fond plein cadre, sans transparence, sans texte).
+- Lisibilité vérifiée jusqu'à 32 px.
 
 ### Vérifications
 
-- Tests ciblés caméra, géométrie et gestes : passés.
-- Suite complète : **266/266 tests** ; `flutter analyze` : aucun problème.
+- CI sur la PR #1 : analyse statique, **266/266 tests** et
+  `flutter build apk --release` avec les nouvelles ressources — tous verts.
+- Validation de l'icône sur appareil (et rendu Xcode) à confirmer.
