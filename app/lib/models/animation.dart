@@ -531,6 +531,9 @@ class VectorShape {
     this.embeddedProjectId,
     this.embeddedWidth = 0,
     this.embeddedHeight = 0,
+    this.embeddedIsSkeleton = false,
+    this.flipH = false,
+    this.flipV = false,
   }) : id = id ?? generateId('shape'),
        layers = layers ?? <ShapeLayer>[];
 
@@ -544,6 +547,14 @@ class VectorShape {
   /// Dimensions du projet source, capturées à l'insertion (sélection, bounds).
   double embeddedWidth;
   double embeddedHeight;
+
+  /// Type du projet imbriqué au moment de son insertion (sert à distinguer
+  /// les éléments squelette sur la timeline).
+  bool embeddedIsSkeleton;
+
+  /// Miroir du groupe complet, principalement utilisé sur les instances.
+  bool flipH;
+  bool flipV;
 
   bool get isInstance => embeddedProjectId != null;
 
@@ -961,6 +972,14 @@ class VectorShape {
   /// d'axe horizontal (haut ↔ bas). Deux appels identiques = retour à
   /// l'original (le flip est auto-inverse).
   void mirror({required bool horizontal}) {
+    if (isInstance) {
+      if (horizontal) {
+        flipH = !flipH;
+      } else {
+        flipV = !flipV;
+      }
+      return;
+    }
     for (final layer in layers) {
       if (horizontal) {
         layer.flipH = !layer.flipH;
@@ -1027,6 +1046,9 @@ class VectorShape {
       embeddedProjectId: embeddedProjectId,
       embeddedWidth: embeddedWidth,
       embeddedHeight: embeddedHeight,
+      embeddedIsSkeleton: embeddedIsSkeleton,
+      flipH: flipH,
+      flipV: flipV,
     );
     for (final key in keyframes) {
       clone.keyframes.add(key.copy());
@@ -1082,6 +1104,9 @@ class VectorShape {
     'embeddedProjectId': embeddedProjectId,
     'embeddedWidth': embeddedWidth,
     'embeddedHeight': embeddedHeight,
+    'embeddedIsSkeleton': embeddedIsSkeleton,
+    'flipH': flipH,
+    'flipV': flipV,
     'layers': layers.map((l) => l.toJson()).toList(),
     'keyframes': keyframes.map((k) => k.toJson()).toList(),
   };
@@ -1106,6 +1131,9 @@ class VectorShape {
       embeddedProjectId: json['embeddedProjectId'] as String?,
       embeddedWidth: (json['embeddedWidth'] as num?)?.toDouble() ?? 0,
       embeddedHeight: (json['embeddedHeight'] as num?)?.toDouble() ?? 0,
+      embeddedIsSkeleton: json['embeddedIsSkeleton'] as bool? ?? false,
+      flipH: json['flipH'] as bool? ?? false,
+      flipV: json['flipV'] as bool? ?? false,
       layers: (json['layers'] as List<Object?>? ?? const [])
           .map((l) => ShapeLayer.fromJson((l as Map).cast<String, Object?>()))
           .toList(),

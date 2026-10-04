@@ -231,6 +231,9 @@ void main() {
         embeddedProjectId: 'source-123',
         embeddedWidth: 1080,
         embeddedHeight: 1920,
+        embeddedIsSkeleton: true,
+        flipH: true,
+        flipV: true,
       ),
     );
     await repository.save(project);
@@ -241,6 +244,9 @@ void main() {
     expect(instance.embeddedProjectId, 'source-123');
     expect(instance.embeddedWidth, 1080);
     expect(instance.embeddedHeight, 1920);
+    expect(instance.embeddedIsSkeleton, isTrue);
+    expect(instance.flipH, isTrue);
+    expect(instance.flipV, isTrue);
   });
 
   test('un projet squelette persiste son rig (os, pistes, liaisons)', () async {

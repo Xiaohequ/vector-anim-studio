@@ -220,11 +220,10 @@ class _TimelineViewState extends State<TimelineView> {
       pinching: _pinching,
       moving: _movingShape?.id == shape.id,
       movingOriginMs: _movingOriginMs,
-      selected: carrier != null
-          ? carrier.id == widget.selectedBoneId
-          : shape.id == widget.selectedShapeId,
+      selected: shape.id == widget.selectedShapeId ||
+          (carrier != null && carrier.id == widget.selectedBoneId),
       onSelect: () {
-        if (carrier != null) {
+        if (carrier != null && !shape.isInstance) {
           widget.onSelectBone?.call(carrier);
         } else {
           widget.onSelect(shape);
@@ -236,12 +235,12 @@ class _TimelineViewState extends State<TimelineView> {
       onMoveChanged: (target) => _handleMoveUpdate(shape, target),
       onMoveEnd: () => _handleMoveEnd(shape),
       onDeleteKeyframe: (time) {
-        if (carrier != null) {
+        if (carrier != null && !shape.isInstance) {
           widget.onDeleteBoneKeyframe?.call(carrier, time);
         } else {
           widget.onDeleteKeyframe(shape, time);
         }
-      },
+      }
       onGestureStart: () => widget.onGestureStart(shape),
       onFollowEdge: _followEdge,
     );
@@ -502,10 +501,11 @@ class _ShapeBar extends StatelessWidget {
     // Épinglée au bord droit : une barre plus large que son minimum doit
     // rester visible quand sa fin touche le bord droit de la vue.
     final pinnedLeft = math.min(left, math.max(0.0, width - 24));
-    // Couleur : un segment LIÉ à un os se distingue d'un segment libre
-    // (v0.21.0) — vert os, vs bleu primaire (pièce) / violet (instance).
-    final bound = carrier != null;
-    final color = bound
+    // Segment de groupe squelette : orange ; os lié : vert ; instance
+    final bound = carrier != null && !shape.isInstance;
+    final color = shape.isInstance && shape.embeddedIsSkeleton
+        ? const Color(0xFFFF9F43)
+        : bound
         ? const Color(0xFF3ECF8E)
         : shape.isInstance
         ? const Color(0xFFC084FC)
@@ -514,7 +514,7 @@ class _ShapeBar extends StatelessWidget {
     // keyframes de la forme ne sont plus « prises en compte », choix
     // utilisateur v0.21.0), sinon celles de la forme.
     final List<int> keyTimes;
-    if (bound) {
+    if (bound && !shape.isInstance) {
       keyTimes = <int>{
         for (final key in rig!.trackOf(carrier!.id) ?? const <BoneKeyframe>[])
           if (key.timeMs >= shape.startMs && key.timeMs <= shape.endMs)
@@ -583,7 +583,9 @@ class _ShapeBar extends StatelessWidget {
               alignment: Alignment.centerLeft,
               padding: const EdgeInsets.symmetric(horizontal: 8),
               child: Text(
-                shape.isInstance ? '\u{1F3AC} ${shape.name}' : shape.name,
+                shape.isInstance
+                    ? '${shape.embeddedIsSkeleton ? '🦴' : '\u{1F3AC}'} ${shape.name}'
+                    : shape.name,
                 style: TextStyle(
                   fontSize: 11,
                   color: shape.visible ? Colors.white : Colors.white38,

@@ -39,7 +39,17 @@ for var in VASF_PREVIEW_INPUT VASF_PREVIEW_OUT VASF_PREVIEW_TIMES VASF_PREVIEW_S
   fi
 done
 
-exec docker run --rm -i \
+# Un verrou hôte partagé sérialise les appels Flutter de ce projet. Sans cela,
+# plusieurs tests lancés en parallèle créent chacun un conteneur et plusieurs
+# VM Dart, ce qui surcharge fortement le serveur.
+FLUTTER_LOCK="${FLUTTER_LOCK:-/tmp/vector_anim_studio_flutter.lock}"
+FLUTTER_CONTAINER="vector-anim-studio-flutter"
+# Nettoie un éventuel conteneur orphelin laissé si le processus appelant a été
+# tué brutalement. Le verrou garantit qu'aucun autre appel du script ne tourne.
+flock --exclusive "$FLUTTER_LOCK" bash -c '
+  docker rm -f "$1" >/dev/null 2>&1 || true
+  exec docker run --rm --name "$1" -i "${@:2}"
+' _ "$FLUTTER_CONTAINER" \
   -e GRADLE_OPTS="-Dorg.gradle.jvmargs=-Xmx512m -Dorg.gradle.daemon=false -Dorg.gradle.workers.max=1" \
   "${ENV_FLAGS[@]}" \
   -v "${PROJECT_DIR}":/work \

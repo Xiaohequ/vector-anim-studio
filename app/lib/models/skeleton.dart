@@ -1086,6 +1086,9 @@ void carryBoundPieces(
     final oldFrame = before.frameOf(binding.boneId);
     final newFrame = after.frameOf(binding.boneId);
     if (shape == null || oldFrame == null || newFrame == null) continue;
+    // Les instances s'animent comme groupe indépendamment de la pièce portée;
+    // la liaison sert à piloter le segment du rig hôte, pas à verrouiller le groupe.
+    if (shape.isInstance) continue;
     final deltaAngle = newFrame.worldAngleRest - oldFrame.worldAngleRest;
     final moved =
         (newFrame.jointRest - oldFrame.jointRest).distance > 1e-9 ||

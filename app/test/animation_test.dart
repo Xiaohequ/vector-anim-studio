@@ -356,6 +356,9 @@ void main() {
       expect(back.embeddedProjectId, 'src-1');
       expect(back.embeddedWidth, 360);
       expect(back.embeddedHeight, 640);
+      expect(back.embeddedIsSkeleton, isFalse);
+      expect(back.flipH, isFalse);
+      expect(back.flipV, isFalse);
     });
 
     test('copy conserve l\'instance', () {

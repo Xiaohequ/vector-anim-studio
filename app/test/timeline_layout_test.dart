@@ -52,5 +52,6 @@ void main() {
       expect(TimelineLayout.laneIndexOf(lanes, a), 0);
       expect(TimelineLayout.laneIndexOf(lanes, b), 1);
     });
+
   });
 }

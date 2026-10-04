@@ -29,6 +29,7 @@ class BoneEditorResult {
 
   /// Os porteur de la forme (racine de la chaîne) à lier.
   final String carrierBoneId;
+
 }
 
 /// Éditeur d'os (v0.20) — « l'os n'existe que par une forme ».
@@ -50,11 +51,13 @@ class BoneEditorScreen extends StatefulWidget {
     required this.project,
     required this.shape,
     this.timeMs = 0,
+    this.embeddedProjects = const <String, AnimationProject>{},
   });
 
   final AnimationProject project;
   final VectorShape shape;
   final int timeMs;
+  final Map<String, AnimationProject> embeddedProjects;
 
   @override
   State<BoneEditorScreen> createState() => _BoneEditorScreenState();
@@ -71,8 +74,9 @@ class _BoneEditorScreenState extends State<BoneEditorScreen> {
   /// Os qui existaient déjà (à remplacer à la validation).
   late final List<String> _existingIds;
 
-  /// Os racine de la chaîne (ceux à retranslater à la validation).
+  /// Os racine de la chaîne porteuse (ceux à retranslater dans l'aperçu).
   late final List<RigBone> _roots;
+
 
   /// Translation éditeur ↔ projet (voir [_toProject]).
   late final Offset _shift;
@@ -147,14 +151,14 @@ class _BoneEditorScreenState extends State<BoneEditorScreen> {
       ..clear()
       ..add(editorShape);
 
-    // Chaîne de la forme (le rig n'existe peut-être pas encore).
+    // Chaîne porteuse de la forme (le rig n'existe peut-être pas encore).
+    // Sur un groupe, préserver les autres os hôtes et permettre d'en ajouter.
     final rig = project.skeleton;
     final carrierId = rig?.carrierBoneId(shape.id);
     final chain = (rig == null || carrierId == null)
         ? const <RigBone>[]
         : [for (final bone in rig.chainFrom(carrierId)) bone.copy()];
     _existingIds = [for (final bone in chain) bone.id];
-    final chainIds = <String>{for (final bone in chain) bone.id};
     // Liste MODIFIABLE : le cas « aucune pièce liée » arrive avec une liste
     // `const` vide, qui refuse l'ajout au premier dessin.
     _bones = List<RigBone>.of(chain);
@@ -211,7 +215,9 @@ class _BoneEditorScreenState extends State<BoneEditorScreen> {
   /// **Un seul os** (retour v0.20.3) : la forme a déjà SON os → plus
   /// d'ajout, seul le déplacement / le pivot restent possibles.
   void _onTapUp(Offset point, SceneGeometry geo) {
-    if (_bones.isNotEmpty) return; // un seul os par forme
+    if (_bones.isNotEmpty && !widget.shape.isInstance) {
+      return; // une pièce a déjà sa chaîne ; un groupe peut en prolonger une
+    }
     final scenePoint = geo.canvasToScene(point);
     final rig = _previewRig;
     final pose = SkeletonPose.evaluate(rig, 0);
@@ -373,9 +379,11 @@ class _BoneEditorScreenState extends State<BoneEditorScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final hint = _bones.isNotEmpty
+    final hint = _bones.isNotEmpty && !widget.shape.isInstance
         ? 'La forme a déjà son os — glisser au MILIEU = le déplacer, sur '
               'son EXTRÉMITÉ = le pivoter'
+        : _bones.isNotEmpty
+        ? 'Tap sur un os puis un point pour ajouter un enfant — glisser = déplacer ou pivoter'
         : _pendingJoint == null
         ? 'Tap : articulation puis extrémité — glisser au MILIEU d’un os = '
               'le déplacer, sur son EXTRÉMITÉ = le pivoter'
@@ -440,6 +448,7 @@ class _BoneEditorScreenState extends State<BoneEditorScreen> {
                                 // on dessine SUR la pièce, le cadre de
                                 // sélection ne fait que gêner.
                                 showFrame: false,
+                                embeddedProjects: widget.embeddedProjects,
                               ),
                               foregroundPainter: RigOverlayPainter(
                                 rig: rig,

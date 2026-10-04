@@ -1,31 +1,30 @@
-# Keyform Studio 0.27.0
+# Keyform Studio 0.28.0
 
-## Résolution vidéo au choix
+## Projets squelette imbriqués en tant que groupes
 
-- L'export MP4 propose **480p, 720p et 1080p** (720p par défaut), en portrait,
-  paysage ou carré selon le format du projet. Le dialogue affiche les dimensions
-  exactes encodées, arrondies à des valeurs paires pour H.264 ; les proportions
-  restent celles du projet.
-- Les autres formats restent inchangés : le GIF garde son réglage actuel (320 px
-  de large).
+- Dans un projet squelette, **Formes → Insérer un projet squelette…** ajoute un
+  sous-projet existant comme élément de groupe animé. Le source reste un projet
+  distinct et peut être ouvert depuis les propriétés du groupe.
+- **Importer un VASF comme groupe…** importe un fichier JSON VASF squelette et
+  l'enregistre comme nouveau sous-projet avant de l'insérer ; le JSON doit
+  contenir une section `skeleton`.
+- Le groupe conserve sa transformation, ses keyframes de pose, ses pivots,
+  miroirs horizontal/vertical et peut être attaché à un os du rig hôte. Le
+  binding pilote le groupe par le rig sans perdre les transformations de groupe.
+- Le groupe squelette apparaît sur la timeline comme un seul élément, avec
+  segment orange et icône 🦴 ; ses keyframes de groupe restent éditables.
+- Les propriétés de groupe (type d'instance et miroirs) sont persistées en base
+  (schéma v8). La prévisualisation recentre et adapte le sous-projet dans le
+  cadre du groupe.
 
-## Messages en haut de l'écran
+## Import de fichier à l'accueil
 
-- Les SnackBars deviennent des messages temporaires en haut, fermables, dans
-  l'éditeur de forme et le Studio. Ils disparaissent après 5 secondes ; un
-  nouveau message remplace le précédent.
-
-## Nom de l'application
-
-- L'app s'affiche maintenant sous **Keyform Studio** (Android, iOS, accueil et
-  titre système) ; les identifiants techniques restent inchangés pour préserver
-  les installations existantes. Le format d'échange conserve son identifiant
-  VASF.
+- L'import JSON reste disponible depuis l'écran d'accueil, crée un projet neuf
+  et ne remplace jamais un projet existant, même si l'ID apparaît dans le JSON.
 
 ### Vérifications
 
-- `flutter analyze` : aucun problème ; tests ciblés des résolutions, du GIF,
-  de la bannière, des morphs et gestes : passés.
-- Suite complète : **270/270 tests** passés.
-- Le build APK local a rencontré le verrou Gradle `journal-1` après expiration
-  d'une première commande ; build Android à valider par la CI sur la PR.
+- Tests ciblés : import de groupe VASF, insertion et keyframes de groupe,
+  persistance de l'instance squelette et timeline : passés.
+- La CI doit confirmer `flutter analyze`, la suite complète et le build APK sur
+  la PR avant publication de la release.
