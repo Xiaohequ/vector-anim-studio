@@ -198,6 +198,78 @@ void main() {
     },
   );
 
+  testWidgets(
+    'groupe squelette lié : la pose de repos de l’os transporte le groupe',
+    (tester) async {
+      final source = AnimationProject.blank(
+        name: 'Source',
+        type: ProjectType.skeleton,
+      );
+      final sourceShape = VectorShape(name: 'Rouge', x: 180, y: 320);
+      sourceShape.layers.add(
+        ShapeLayer(
+          name: 'Rouge',
+          kind: ShapeKind.rect,
+          width: 100,
+          height: 100,
+          colorValue: 0xFFFF5C5C,
+        ),
+      );
+      source.shapes.add(sourceShape);
+      source.skeleton = SkeletonRig(
+        bones: <RigBone>[
+          RigBone(name: 'Source bone', offsetX: 180, offsetY: 320, length: 40),
+        ],
+      );
+
+      final hostRig = SkeletonRig();
+      final bone = RigBone(name: 'Os hôte', offsetX: 360, offsetY: 640, length: 80);
+      hostRig.addBone(bone);
+      final host = _project(rig: hostRig);
+      final group = VectorShape(
+        name: 'Groupe importé',
+        embeddedProjectId: source.id,
+        embeddedWidth: source.width,
+        embeddedHeight: source.height,
+        embeddedIsSkeleton: true,
+        x: 360,
+        y: 640,
+        startMs: 0,
+        endMs: 4000,
+      );
+      host.shapes.add(group);
+      hostRig.bindShape(group.id, bone.id);
+      final embedded = <String, AnimationProject>{source.id: source};
+
+      final before = _centroid(
+        await _render(tester, host, 0, embeddedProjects: embedded),
+        360,
+        640,
+        (r, g, b) =>
+            (r - 0xFF).abs() < 30 &&
+            (g - 0x5C).abs() < 30 &&
+            (b - 0x5C).abs() < 30,
+      );
+      final beforePose = SkeletonPose.evaluate(hostRig, 0);
+      bone.offsetY += 80; // comportement d’un os au repos, sans keyframe
+      final afterPose = SkeletonPose.evaluate(hostRig, 0);
+      carryBoundPieces(host, hostRig, beforePose, afterPose, 0);
+      final after = _centroid(
+        await _render(tester, host, 0, embeddedProjects: embedded),
+        360,
+        640,
+        (r, g, b) =>
+            (r - 0xFF).abs() < 30 &&
+            (g - 0x5C).abs() < 30 &&
+            (b - 0x5C).abs() < 30,
+      );
+      expect(after.x, closeTo(before.x, 2));
+      expect(after.y - before.y, closeTo(40, 2));
+      expect(group.keyframes, isEmpty);
+      expect(group.y, closeTo(720, 1e-9));
+    },
+  );
+
   testWidgets('la pièce liée suit l os animé (centroid mesuré)', (
     tester,
   ) async {
