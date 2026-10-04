@@ -924,7 +924,7 @@ void main() {
     );
 
     await pumpStudio(tester, repository, host);
-    expect(find.textContaining('\u{1F3AC} Rat'), findsOneWidget);
+    expect(find.textContaining('🦴 Rat'), findsOneWidget);
 
     // Lecture : le rig du sous-projet est échantillonné à son temps de
     // boucle, sans planter (rendu à chaque frame).
