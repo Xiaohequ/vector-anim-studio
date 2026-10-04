@@ -2409,6 +2409,9 @@ class _StudioScreenState extends State<StudioScreen>
                         selectedShapeId: _previewFullscreen
                             ? null
                             : _selectedId,
+                        selectedBoneId: _previewFullscreen
+                            ? null
+                            : _selectedBoneId,
                         showFrame: true,
                         embeddedProjects: _embedded,
                         previewZoom: _previewZoom,

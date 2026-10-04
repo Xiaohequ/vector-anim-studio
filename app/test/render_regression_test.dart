@@ -71,6 +71,8 @@ Future<Uint8List> _render(
   int timeMs, {
   int w = 360,
   int h = 640,
+  String? selectedBoneId,
+  Map<String, AnimationProject> embeddedProjects = const {},
 }) async {
   late ui.Image image;
   await tester.runAsync(() async {
@@ -79,6 +81,8 @@ Future<Uint8List> _render(
     ScenePainter(
       project: project,
       timeMs: timeMs,
+      selectedBoneId: selectedBoneId,
+      embeddedProjects: embeddedProjects,
     ).paint(canvas, ui.Size(w.toDouble(), h.toDouble()));
     image = await recorder.endRecording().toImage(w, h);
   });
@@ -121,6 +125,79 @@ int _countMatching(Uint8List pixels, bool Function(int r, int g, int b) match) {
 }
 
 void main() {
+  testWidgets(
+    'groupe squelette lié : déplacer un os enfant entraîne le groupe entier',
+    (tester) async {
+      final sourceRig = _rig();
+      final source = _project(rig: sourceRig);
+      final sourcePiece = VectorShape(name: 'Corps', x: 200, y: 700);
+      sourcePiece.layers.add(
+        ShapeLayer(
+          name: 'Corps rouge',
+          kind: ShapeKind.rect,
+          width: 90,
+          height: 90,
+          colorValue: 0xFFFF5C5C,
+        ),
+      );
+      source.shapes.add(sourcePiece);
+      sourceRig.bindShape(sourcePiece.id, sourceRig.bones.first.id);
+
+      final hostRig = SkeletonRig();
+      final root = RigBone(name: 'Porteur', offsetX: 360, offsetY: 640, length: 100);
+      final child = RigBone(
+        name: 'Os ajouté',
+        parentId: root.id,
+        offsetX: 100,
+        offsetY: 0,
+        length: 80,
+      );
+      hostRig.bones.addAll(<RigBone>[root, child]);
+      hostRig.tracks[child.id] = <BoneKeyframe>[
+        BoneKeyframe(timeMs: 0),
+        BoneKeyframe(timeMs: 1000, tx: 35),
+      ];
+      final host = _project(rig: hostRig);
+      final group = VectorShape(
+        name: 'Groupe',
+        embeddedProjectId: source.id,
+        embeddedWidth: source.width,
+        embeddedHeight: source.height,
+        embeddedIsSkeleton: true,
+        x: 360,
+        y: 640,
+        startMs: 0,
+        endMs: 2000,
+      );
+      host.shapes.add(group);
+      hostRig.bindShape(group.id, root.id);
+
+      Future<({double x, double y, int count})> centroidAt(
+        int timeMs,
+        String? selectedBoneId,
+      ) async => _centroid(
+        await _render(
+          tester,
+          host,
+          timeMs,
+          selectedBoneId: selectedBoneId,
+          embeddedProjects: <String, AnimationProject>{source.id: source},
+        ),
+        360,
+        640,
+        (r, g, b) =>
+            (r - 0xFF).abs() < 30 &&
+            (g - 0x5C).abs() < 30 &&
+            (b - 0x5C).abs() < 30,
+      );
+
+      final defaultCarrier = await centroidAt(1000, null);
+      final animatedChild = await centroidAt(1000, child.id);
+      expect((animatedChild.x - defaultCarrier.x).abs(), greaterThan(8));
+      expect((animatedChild.y - defaultCarrier.y).abs(), lessThan(3));
+    },
+  );
+
   testWidgets('la pièce liée suit l os animé (centroid mesuré)', (
     tester,
   ) async {

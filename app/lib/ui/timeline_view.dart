@@ -583,7 +583,7 @@ class _ShapeBar extends StatelessWidget {
               alignment: Alignment.centerLeft,
               padding: const EdgeInsets.symmetric(horizontal: 8),
               child: Text(
-                shape.isInstance ? '\u{1F3AC} ${shape.name}' : shape.name,
+                shape.name,
                 style: TextStyle(
                   fontSize: 11,
                   color: shape.visible ? Colors.white : Colors.white38,
