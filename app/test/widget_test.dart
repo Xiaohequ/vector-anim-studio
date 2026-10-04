@@ -834,7 +834,8 @@ void main() {
       expect(group.isInstance, isTrue);
       expect(group.embeddedIsSkeleton, isTrue);
       expect(group.embeddedProjectId, source.id);
-      expect(find.text('🦴 Personnage source'), findsOneWidget);
+      expect(find.textContaining('Personnage source'), findsOneWidget);
+      expect(find.textContaining('🦴'), findsNothing);
 
       // Le groupe a des transformations et ses propres keyframes, et peut être
       // pris en charge par le rig hôte sans perdre sa manipulation de groupe.
@@ -907,7 +908,10 @@ void main() {
         ),
       );
       final painter = overlay.painter! as RigOverlayPainter;
-      expect(painter.visibleBoneIds, containsAll(<String>{root.id, child.id}));
+      expect(
+        painter.visibleBoneIds,
+        containsAll(<String>{root.id, child.id}),
+      );
       expect(find.byTooltip('Propriétés de la forme'), findsOneWidget);
 
       final (topLeft, geo) = canvasHarness(tester, host);
@@ -954,7 +958,7 @@ void main() {
     );
     expect(savedSource.name, 'VASF importé');
     expect(savedSource.isSkeleton, isTrue);
-    expect(find.text('🦴 VASF importé'), findsOneWidget);
+    expect(find.textContaining('VASF importé'), findsOneWidget);
   });
 
   testWidgets('une instance de projet squelette s’anime dans un vectoriel', (
@@ -989,7 +993,7 @@ void main() {
     );
 
     await pumpStudio(tester, repository, host);
-    expect(find.textContaining('🦴 Rat'), findsOneWidget);
+    expect(find.textContaining('Rat'), findsOneWidget);
 
     // Lecture : le rig du sous-projet est échantillonné à son temps de
     // boucle, sans planter (rendu à chaque frame).
