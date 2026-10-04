@@ -13,6 +13,7 @@ class RigOverlayPainter extends CustomPainter {
     required this.geo,
     this.selectedBoneId,
     this.showOnlySelected = false,
+    this.visibleBoneIds,
   });
 
   final SkeletonRig rig;
@@ -24,6 +25,10 @@ class RigOverlayPainter extends CustomPainter {
   /// L'éditeur d'os conserve la valeur par défaut pour afficher toute la
   /// chaîne en cours de dessin.
   final bool showOnlySelected;
+
+  /// Liste optionnelle des os autorisés dans l'overlay réduit. Sert au Studio
+  /// à montrer toute la chaîne du groupe sélectionné, même sans os sélectionné.
+  final Set<String>? visibleBoneIds;
 
   static const Color _idle = Color(0xFFC084FC);
   static const Color _selected = Color(0xFFF2C94C);
@@ -91,7 +96,8 @@ class RigOverlayPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     for (final bone in rig.bones) {
       if (showOnlySelected &&
-          (selectedBoneId == null || bone.id != selectedBoneId)) {
+          bone.id != selectedBoneId &&
+          !(visibleBoneIds?.contains(bone.id) ?? false)) {
         continue;
       }
       final frame = pose.frameOf(bone.id);
