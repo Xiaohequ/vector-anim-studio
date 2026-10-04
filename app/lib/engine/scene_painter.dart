@@ -15,6 +15,7 @@ class ScenePainter extends CustomPainter {
     required this.timeMs,
     this.selectedShapeId,
     this.selectedLayerId,
+    this.selectedBoneId,
     this.transparentBackground = false,
     this.showFrame = false,
     this.embeddedProjects = const {},
@@ -31,6 +32,10 @@ class ScenePainter extends CustomPainter {
   /// Couche sélectionnée à l'intérieur de la forme sélectionnée (éditeur de
   /// forme) : prioritaire sur la sélection de forme pour l'overlay.
   final String? selectedLayerId;
+
+  /// Os explicitement sélectionné dans le Studio. Sur un groupe squelette,
+  /// permet de faire suivre le groupe par l'os choisi plutôt que son porteur.
+  final String? selectedBoneId;
   final bool transparentBackground;
 
   /// Dessine la bordure du cadre projet (édition uniquement, jamais en export).
@@ -136,11 +141,23 @@ class ScenePainter extends CustomPainter {
     }
   }
 
-  /// Os portant une forme (rig maître), pour la composition de rendu.
+  /// Os portant une forme (rig maître), ou os sélectionné de la chaîne d'un
+  /// groupe — permet de prévisualiser le groupe suivant l'os édité.
   BoneFrame? _rigFrameFor(AnimationProject project, VectorShape shape) {
-    if (!project.isSkeleton || project.skeleton == null) return null;
-    final pose = SkeletonPose.evaluate(project.skeleton!, timeMs);
-    return pose.frameOf(project.skeleton!.carrierBoneId(shape.id));
+    final rig = project.skeleton;
+    if (!project.isSkeleton || rig == null) return null;
+    final pose = SkeletonPose.evaluate(rig, timeMs);
+    return pose.frameOf(_boneIdForShapeFrame(rig, shape));
+  }
+
+  String? _boneIdForShapeFrame(SkeletonRig rig, VectorShape shape) {
+    final carrierId = rig.carrierBoneId(shape.id);
+    final selectedId = selectedBoneId;
+    if (shape.isInstance && selectedId != null && carrierId != null &&
+        rig.chainFrom(carrierId).any((bone) => bone.id == selectedId)) {
+      return selectedId;
+    }
+    return carrierId;
   }
 
   /// Peint toutes les formes d'un projet à un instant (le projet principal
@@ -166,7 +183,7 @@ class ScenePainter extends CustomPainter {
       if (!shape.isVisibleAt(timeMs)) return;
       BoneFrame? frame;
       if (rigPose != null) {
-        frame = rigPose.frameOf(rig!.boneIdForShape(shape.id));
+        frame = rigPose.frameOf(_boneIdForShapeFrame(rig!, shape));
       }
       _paintShape(
         canvas,
