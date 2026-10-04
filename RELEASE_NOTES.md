@@ -1,14 +1,16 @@
-# Keyform Studio 0.28.2
+# Keyform Studio 0.28.3
 
-## Groupes squelette : liaison d'os opérante
+## Groupes squelette : transport par l'os sans keyframe
 
-- Le groupe importé suit maintenant le mouvement de l'os du rig hôte réellement
-  sélectionné (y compris les os enfants), et pas seulement l'os porteur.
-- Ajout d'une régression de rendu mesurant le déplacement du groupe sous
-  l'animation de l'os enfant.
-- Le libellé de timeline d'une instance affiche uniquement son nom, sans emoji.
+- Lorsqu'un os hôte bouge ou pivote en pose de repos, le groupe squelette lié
+  est maintenant transporté avec lui, comme une forme normale.
+- Les keyframes propres au groupe restent conservées ; l'auto-key de l'os
+  continue d'utiliser son chemin d'animation distinct.
+- Le nom du groupe sur la timeline reste sans emoji.
 
 ### Vérifications
 
-- La CI confirme analyse, tests complets et compilation de l'APK avant
+- Test de rendu mesurant le déplacement du groupe après le déplacement de repos
+  d'un os, sans créer de keyframe sur le groupe.
+- La CI doit confirmer l'analyse, la suite complète et le build APK avant
   publication.
