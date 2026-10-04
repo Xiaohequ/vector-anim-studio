@@ -31,6 +31,7 @@ class ShapePropertiesSheet extends StatefulWidget {
     this.onOpenBoneEditor,
     this.onDeleteBone,
     this.onMirror,
+    this.allowBoneEditorForInstance = false,
   });
 
   final AnimationProject project;
@@ -69,6 +70,9 @@ class ShapePropertiesSheet extends StatefulWidget {
   /// Miroir du groupe de couches (v0.19) : [horizontal] = miroir d'axe
   /// vertical (gauche ↔ droite), sinon d'axe horizontal (haut ↔ bas).
   final void Function(bool horizontal)? onMirror;
+
+  /// Un groupe squelette imbriqué peut être lié au rig du projet hôte.
+  final bool allowBoneEditorForInstance;
 
   /// Écrit le pivot de rotation (offset dx/dy depuis le centre, unités
   /// scène) — v0.13. Statique (non animable) : pas d'auto-key.
@@ -176,7 +180,9 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                 // « Ajouter » ouvre l'éditeur d'os (dessin sur la forme,
                 // forme ancrée au milieu de l'écran) ; « Supprimer » part
                 // avec la descendance et toutes les keyframes de l'os.
-                if (widget.skeletonPiece && widget.onOpenBoneEditor != null)
+                if (widget.skeletonPiece &&
+                    widget.onOpenBoneEditor != null &&
+                    (!shape.isInstance || widget.allowBoneEditorForInstance))
                   Padding(
                     padding: const EdgeInsets.only(bottom: 2),
                     child: Row(
@@ -213,14 +219,16 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                               Navigator.of(context).pop();
                               widget.onDeleteBone!();
                             },
-                            icon: const Icon(
-                              Icons.delete_outline,
+                            icon: Icon(
+                              shape.isInstance
+                                  ? Icons.link_off
+                                  : Icons.delete_outline,
                               size: 16,
-                              color: Color(0xFFF2949A),
+                              color: const Color(0xFFF2949A),
                             ),
-                            label: const Text(
-                              'Supprimer l’os',
-                              style: TextStyle(color: Color(0xFFF2949A)),
+                            label: Text(
+                              shape.isInstance ? 'Délier du rig' : 'Supprimer l’os',
+                              style: const TextStyle(color: Color(0xFFF2949A)),
                             ),
                           ),
                       ],
@@ -228,10 +236,9 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                   ),
                 // Miroir (v0.19) : reflète le groupe de couches — contenu
                 // dessiné (flag de flip), position et rotation de chaque
-                // couche. Non proposé pour les instances (pas de couches).
+                // couche ; sur une instance, reflète le groupe complet.
                 if (widget.onMirror != null &&
-                    !shape.isInstance &&
-                    shape.layers.isNotEmpty)
+                    (shape.isInstance || shape.layers.isNotEmpty))
                   Row(
                     children: <Widget>[
                       TextButton.icon(
@@ -263,7 +270,8 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                 // les sliders : le message reste visible même si la liste
                 // est paresseuse sous la hauteur max de la sheet.
                 if (widget.skeletonRig != null &&
-                    widget.skeletonRig!.isAttached(shape.id))
+                    widget.skeletonRig!.isAttached(shape.id) &&
+                    !shape.isInstance)
                   Padding(
                     padding: const EdgeInsets.only(top: 2, bottom: 2),
                     child: Text(
@@ -545,6 +553,7 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
     final transformLocked =
         rig != null &&
         rig.isAttached(shape.id) &&
+        !shape.isInstance &&
         _transformProperties.contains(property);
     return Row(
       children: <Widget>[

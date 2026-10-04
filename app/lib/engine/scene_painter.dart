@@ -140,7 +140,7 @@ class ScenePainter extends CustomPainter {
   BoneFrame? _rigFrameFor(AnimationProject project, VectorShape shape) {
     if (!project.isSkeleton || project.skeleton == null) return null;
     final pose = SkeletonPose.evaluate(project.skeleton!, timeMs);
-    return pose.frameOf(project.skeleton!.boneIdForShape(shape.id));
+    return pose.frameOf(project.skeleton!.carrierBoneId(shape.id));
   }
 
   /// Peint toutes les formes d'un projet à un instant (le projet principal
@@ -236,7 +236,7 @@ class ScenePainter extends CustomPainter {
       canvas.translate(x, y);
       canvas.translate(cx * px, cy * py);
       canvas.rotate(rotation);
-      canvas.scale(cx, cy);
+      canvas.scale(cx * (shape.flipH ? -1 : 1), cy * (shape.flipV ? -1 : 1));
       canvas.translate(-px, -py);
       _paintInstance(canvas, shape, opacity, depth, sampleMs);
       canvas.restore();
@@ -284,7 +284,7 @@ class ScenePainter extends CustomPainter {
       canvas.translate(x, y);
       canvas.translate(cx * px, cy * py);
       canvas.rotate(rotation);
-      canvas.scale(cx, cy);
+      canvas.scale(cx * (shape.flipH ? -1 : 1), cy * (shape.flipV ? -1 : 1));
       canvas.translate(-px, -py);
       _paintLayer(
         canvas,
@@ -339,6 +339,8 @@ class ScenePainter extends CustomPainter {
     }
     if (depth >= 1) return;
     final subTime = instanceTimeMs(sampleMs, shape.startMs, sub.durationMs);
+    // Le repère local de l'instance est son centre ; réaligner la scène source
+    // (dont l'origine est en haut à gauche) sur la boîte centrée du groupe.
     if (opacity < 1) {
       canvas.saveLayer(
         null,
@@ -347,7 +349,13 @@ class ScenePainter extends CustomPainter {
     }
     // Le sous-projet (vectoriel ou squelette) est rendu à son temps de
     // boucle ; son rig, s'il en a un, est évalué par _paintProjectShapes.
+    // Son origine (0,0) est en haut à gauche, alors que le groupe hôte est
+    // ancré par son centre : recentrer la scène enfant dans la boîte locale.
+    canvas.save();
+    canvas.translate(-w / 2, -h / 2);
+    canvas.scale(w / sub.width, h / sub.height);
     _paintProjectShapes(canvas, sub, subTime, depth: depth + 1);
+    canvas.restore();
     if (opacity < 1) canvas.restore();
   }
 

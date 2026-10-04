@@ -48,7 +48,8 @@ class ProjectRepository {
   /// (vector/skeleton) + rig squelette sérialisé en JSON sur la ligne projet.
   /// v5 : facteurs d'axe + pivot + bezier. v6 (v0.15) : couleur animée et
   /// morph de points par keyframe (maps JSON layer_colors / layer_points).
-  static const int schemaVersion = 7;
+  /// v8 : type d'instance imbriquée et miroir de groupe.
+  static const int schemaVersion = 8;
 
   final DatabaseFactory _factory;
   final String? databasePath;
@@ -103,6 +104,9 @@ class ProjectRepository {
               embedded_project_id TEXT,
               embedded_width REAL NOT NULL DEFAULT 0,
               embedded_height REAL NOT NULL DEFAULT 0,
+              embedded_is_skeleton INTEGER NOT NULL DEFAULT 0,
+              flip_h INTEGER NOT NULL DEFAULT 0,
+              flip_v INTEGER NOT NULL DEFAULT 0,
               z INTEGER NOT NULL,
               FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
             )
@@ -161,6 +165,7 @@ class ProjectRepository {
           if (oldVersion < 5) await _addAxisPivotAndBezierColumns(db);
           if (oldVersion < 6) await _addLayerKeyframeColumns(db);
           if (oldVersion < 7) await _addLayerFlipColumns(db);
+          if (oldVersion < 8) await _addInstanceGroupColumns(db);
         },
       ),
     );
@@ -227,6 +232,19 @@ class ProjectRepository {
     );
     await db.execute(
       'ALTER TABLE layers ADD COLUMN flip_v INTEGER NOT NULL DEFAULT 0',
+    );
+  }
+
+  /// Schéma v7 → v8 : propriétés propres au groupe d'une instance.
+  Future<void> _addInstanceGroupColumns(Database db) async {
+    await db.execute(
+      'ALTER TABLE shapes ADD COLUMN embedded_is_skeleton INTEGER NOT NULL DEFAULT 0',
+    );
+    await db.execute(
+      'ALTER TABLE shapes ADD COLUMN flip_h INTEGER NOT NULL DEFAULT 0',
+    );
+    await db.execute(
+      'ALTER TABLE shapes ADD COLUMN flip_v INTEGER NOT NULL DEFAULT 0',
     );
   }
 
@@ -497,6 +515,10 @@ class ProjectRepository {
         embeddedProjectId: shapeRow['embedded_project_id'] as String?,
         embeddedWidth: (shapeRow['embedded_width'] as num?)?.toDouble() ?? 0,
         embeddedHeight: (shapeRow['embedded_height'] as num?)?.toDouble() ?? 0,
+        embeddedIsSkeleton:
+            (shapeRow['embedded_is_skeleton'] as num?)?.toInt() == 1,
+        flipH: (shapeRow['flip_h'] as num?)?.toInt() == 1,
+        flipV: (shapeRow['flip_v'] as num?)?.toInt() == 1,
       );
 
       final layerRows = await db.query(
@@ -629,6 +651,9 @@ class ProjectRepository {
           'embedded_project_id': shape.embeddedProjectId,
           'embedded_width': shape.embeddedWidth,
           'embedded_height': shape.embeddedHeight,
+          'embedded_is_skeleton': shape.embeddedIsSkeleton ? 1 : 0,
+          'flip_h': shape.flipH ? 1 : 0,
+          'flip_v': shape.flipV ? 1 : 0,
           'z': i,
         });
         for (var j = 0; j < shape.layers.length; j++) {

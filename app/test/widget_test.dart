@@ -36,6 +36,7 @@ class _MemoryRepository extends ProjectRepository {
       ProjectSummary(
         id: project.id,
         name: project.name,
+        type: project.type,
         width: project.width,
         height: project.height,
         durationMs: project.durationMs,
@@ -784,6 +785,113 @@ void main() {
     },
   );
 
+  testWidgets(
+    'un projet squelette s’insère comme groupe dans un projet squelette',
+    (tester) async {
+      final repository = _MemoryRepository();
+      final source = AnimationProject.blank(
+        name: 'Personnage source',
+        type: ProjectType.skeleton,
+      );
+      source.shapes.add(
+        VectorShape(
+          name: 'Corps',
+          x: 180,
+          y: 320,
+          startMs: 0,
+          endMs: 2000,
+          layers: <ShapeLayer>[
+            ShapeLayer(
+              name: 'L',
+              kind: ShapeKind.rect,
+              width: 120,
+              height: 160,
+            ),
+          ],
+        ),
+      );
+      source.skeleton = SkeletonRig(
+        bones: <RigBone>[
+          RigBone(name: 'Torso', offsetX: 180, offsetY: 320, length: 80),
+        ],
+      );
+      await repository.save(source);
+      final host = AnimationProject.blank(
+        name: 'Scène squelette',
+        type: ProjectType.skeleton,
+      );
+      await pumpStudio(tester, repository, host);
+
+      await tester.tap(find.byTooltip('Formes'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Insérer un projet squelette…'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Personnage source'));
+      await tester.pumpAndSettle();
+
+      final group = host.shapes.single;
+      expect(group.isInstance, isTrue);
+      expect(group.embeddedIsSkeleton, isTrue);
+      expect(group.embeddedProjectId, source.id);
+      expect(find.text('🦴 Personnage source'), findsOneWidget);
+
+      // Le groupe a des transformations et ses propres keyframes, et peut être
+      // pris en charge par le rig hôte sans perdre sa manipulation de groupe.
+      await tester.tap(find.byTooltip('Propriétés de la forme'));
+      await tester.pumpAndSettle();
+      expect(find.text('Miroir H'), findsOneWidget);
+      expect(find.text('Miroir V'), findsOneWidget);
+      await tester.tap(find.text('Miroir H'));
+      await tester.pumpAndSettle();
+      expect(group.flipH, isTrue);
+      await tester.tapAt(const Offset(8, 8)); // ferme la feuille de propriétés
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Ajouter une keyframe au curseur'));
+      await tester.pumpAndSettle();
+      expect(group.keyframes, hasLength(1));
+    },
+  );
+
+  testWidgets('importer un VASF squelette dans le studio ajoute une instance', (
+    tester,
+  ) async {
+    final repository = _MemoryRepository();
+    final host = AnimationProject.blank(
+      name: 'Hôte rig',
+      type: ProjectType.skeleton,
+    );
+    await pumpStudio(tester, repository, host);
+
+    final original = FilePickerPlatform.instance;
+    addTearDown(() => FilePickerPlatform.instance = original);
+    FilePickerPlatform.instance = _FakePickerPlatform(
+      Uint8List.fromList(
+        utf8.encode(
+          '{"version":1,"name":"VASF importé",'
+          '"canvas":{"width":360,"height":640,"fps":25},'
+          '"shapes":[{"name":"Torso","type":"rect",'
+          '"width":90,"height":140,"x":180,"y":320,"end":2}],'
+          '"skeleton":{"name":"Rig","bones":['
+          '{"name":"Root","joint":[180,320],"angle":-90,"length":80}]}}',
+        ),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Formes'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Importer un VASF comme groupe…'));
+    await tester.pumpAndSettle();
+
+    expect(host.shapes, hasLength(1));
+    expect(host.shapes.single.embeddedIsSkeleton, isTrue);
+    final savedSource = await repository.load(
+      host.shapes.single.embeddedProjectId!,
+    );
+    expect(savedSource.name, 'VASF importé');
+    expect(savedSource.isSkeleton, isTrue);
+    expect(find.text('🦴 VASF importé'), findsOneWidget);
+  });
+
   testWidgets('une instance de projet squelette s’anime dans un vectoriel', (
     tester,
   ) async {
@@ -809,13 +917,14 @@ void main() {
         embeddedProjectId: skeleton.id,
         embeddedWidth: skeleton.width,
         embeddedHeight: skeleton.height,
+        embeddedIsSkeleton: true,
         startMs: 0,
         endMs: 2000,
       ),
     );
 
     await pumpStudio(tester, repository, host);
-    expect(find.textContaining('\u{1F3AC} Rat'), findsOneWidget);
+    expect(find.textContaining('🦴 Rat'), findsOneWidget);
 
     // Lecture : le rig du sous-projet est échantillonné à son temps de
     // boucle, sans planter (rendu à chaque frame).
@@ -830,7 +939,9 @@ void main() {
     tester,
   ) async {
     final repository = _MemoryRepository();
-    await pumpStudio(tester, repository, seededProject());
+    await repository.save(seededProject());
+    await tester.pumpWidget(VectorAnimStudioApp(repository: repository));
+    await tester.pumpAndSettle();
 
     // Faux sélecteur : un fichier « demo.json » en mémoire.
     final original = FilePickerPlatform.instance;
@@ -844,10 +955,8 @@ void main() {
       ),
     );
 
-    // Menu Export ▸ Importer un fichier JSON…
-    await tester.tap(find.byTooltip('Export'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Importer un fichier JSON…'));
+    // L'action d'import est maintenant sur l'écran liste des projets.
+    await tester.tap(find.byTooltip('Importer un fichier JSON'));
     await tester.pumpAndSettle();
 
     // Le nouveau projet est ouvert (titre AppBar) et enregistré.
@@ -858,13 +967,17 @@ void main() {
     final imported = summaries.lastWhere((s) => s.name == 'Importé');
     expect(imported.width, 720);
     expect(imported.height, 1280);
+    expect(summaries, hasLength(2)); // le projet d'origine n'a pas été écrasé.
+    expect(find.text('Importer un fichier JSON…'), findsNothing);
   });
 
   testWidgets(
     'fichier JSON invalide : les erreurs s’affichent dans un dialogue',
     (tester) async {
       final repository = _MemoryRepository();
-      await pumpStudio(tester, repository, seededProject());
+      await repository.save(seededProject());
+      await tester.pumpWidget(VectorAnimStudioApp(repository: repository));
+      await tester.pumpAndSettle();
 
       final original = FilePickerPlatform.instance;
       addTearDown(() => FilePickerPlatform.instance = original);
@@ -872,9 +985,7 @@ void main() {
         Uint8List.fromList(utf8.encode('{"version": 9, "shapes": []}')),
       );
 
-      await tester.tap(find.byTooltip('Export'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Importer un fichier JSON…'));
+      await tester.tap(find.byTooltip('Importer un fichier JSON'));
       await tester.pumpAndSettle();
 
       // Les problèmes sont listés (version + shapes vides)…
@@ -883,9 +994,10 @@ void main() {
       expect(find.textContaining('au moins une forme'), findsOneWidget);
       // …dans un dialogue fermable.
       expect(find.text('Fermer'), findsOneWidget);
-      // Le dépôt reste inchangé.
+      // Le dépôt reste inchangé (seul le projet préexistant est conservé).
       final summaries = await repository.listSummaries();
-      expect(summaries.map((s) => s.name), isNot(contains('Importé')));
+      expect(summaries, hasLength(1));
+      expect(summaries.single.name, 'Film');
     },
   );
 

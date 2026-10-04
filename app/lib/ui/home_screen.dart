@@ -1,7 +1,11 @@
+import 'dart:convert';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../data/project_repository.dart';
 import '../data/project_store.dart';
+import '../engine/json_project_import.dart';
 import '../models/animation.dart';
 import 'studio_screen.dart';
 
@@ -38,6 +42,68 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
     await _store.refresh();
+  }
+
+  Future<void> _importJsonFile() async {
+    final List<PlatformFile> picked;
+    try {
+      picked = await FilePicker.pickFiles(
+        dialogTitle: 'Importer une animation',
+        type: FileType.custom,
+        allowedExtensions: <String>['json'],
+      );
+    } catch (error) {
+      _snack('Sélecteur de fichiers indisponible : $error');
+      return;
+    }
+    if (picked.isEmpty || !mounted) return;
+
+    String text;
+    try {
+      text = utf8.decode(await picked.first.readAsBytes());
+    } catch (error) {
+      _snack('Fichier illisible : $error');
+      return;
+    }
+
+    final result = JsonProjectImport.parse(text);
+    final imported = result.project;
+    if (imported == null) {
+      await _showImportProblems(result.error ?? 'JSON invalide');
+      return;
+    }
+    await widget.repository.save(imported);
+    await _store.refresh();
+    if (!mounted) return;
+    await _open(imported.id);
+  }
+
+  void _snack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _showImportProblems(String problems) {
+    return showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Import impossible'),
+        content: SingleChildScrollView(
+          child: Text(
+            problems,
+            style: const TextStyle(fontSize: 12, color: Color(0xFFFF8A8A)),
+          ),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Fermer'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _newProject() async {
@@ -116,6 +182,11 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('Keyform Studio'),
         actions: <Widget>[
+          IconButton(
+            tooltip: 'Importer un fichier JSON',
+            onPressed: _importJsonFile,
+            icon: const Icon(Icons.file_open_outlined),
+          ),
           IconButton(
             tooltip: 'Actualiser',
             onPressed: _store.refresh,

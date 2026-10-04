@@ -12,10 +12,10 @@ import 'package:share_plus/share_plus.dart';
 import '../data/project_repository.dart';
 import '../engine/animation_presets.dart';
 import '../engine/export_service.dart';
+import '../engine/json_project_import.dart';
 import '../engine/rig_overlay_painter.dart';
 import '../engine/scene_painter.dart';
 import '../engine/selection_geometry.dart';
-import '../engine/simple_animation_format.dart';
 import '../engine/timeline_controller.dart';
 import '../engine/timeline_zoom.dart';
 import '../engine/undo_stack.dart';
@@ -213,9 +213,7 @@ class _StudioScreenState extends State<StudioScreen>
     }
   }
 
-  /// Insère une instance d'animation : barre violette sur la timeline, la
-  /// source tourne en boucle sur la fenêtre d'affichage, début posé à la
-  /// tête de lecture.
+  /// Insère une animation depuis un projet existant.
   Future<void> _insertAnimation() async {
     final project = _project;
     if (project == null) return;
@@ -223,7 +221,10 @@ class _StudioScreenState extends State<StudioScreen>
     if (controller == null) return;
     final summaries = await widget.repository.listSummaries();
     if (!mounted) return;
-    final others = summaries.where((s) => s.id != widget.projectId).toList();
+    final others = summaries
+        .where((s) => s.id != widget.projectId)
+        .where((s) => !project.isSkeleton || s.type == ProjectType.skeleton)
+        .toList();
     final picked = await showModalBottomSheet<ProjectSummary>(
       context: context,
       builder: (context) => SafeArea(
@@ -261,25 +262,95 @@ class _StudioScreenState extends State<StudioScreen>
     if (picked == null || !mounted) return;
     final sub = await widget.repository.load(picked.id);
     if (!mounted) return;
-    _pushUndo(); // annuler l'insertion doit restaurer l'état sans l'instance
+    await _insertSubproject(sub);
+  }
+
+  /// Importe un fichier JSON VASF et l'insère comme instance de groupe.
+  Future<void> _importVasfAsGroup() async {
+    final List<PlatformFile> picked;
+    try {
+      picked = await FilePicker.pickFiles(
+        dialogTitle: 'Importer un projet squelette VASF',
+        type: FileType.custom,
+        allowedExtensions: <String>['json'],
+      );
+    } catch (error) {
+      _snack('Sélecteur de fichiers indisponible : $error');
+      return;
+    }
+    if (picked.isEmpty || !mounted) return;
+    try {
+      final text = utf8.decode(await picked.first.readAsBytes());
+      final raw = jsonDecode(text);
+      if (raw is! Map || !raw.containsKey('version')) {
+        await _showImportProblems('Un fichier VASF est attendu.');
+        return;
+      }
+      final result = JsonProjectImport.parse(text);
+      final sub = result.project;
+      if (sub == null) {
+        await _showImportProblems(result.error ?? 'VASF invalide');
+        return;
+      }
+      if (!result.isVasf) {
+        await _showImportProblems('Le fichier doit être au format JSON VASF.');
+        return;
+      }
+      if (!sub.isSkeleton) {
+        await _showImportProblems(
+          'Ce fichier VASF ne décrit pas un projet squelette.',
+        );
+        return;
+      }
+      await widget.repository.save(sub);
+      if (!mounted) return;
+      await _insertSubproject(sub);
+    } catch (error) {
+      if (mounted) await _showImportProblems('Fichier illisible : $error');
+    }
+  }
+
+  Future<void> _showImportProblems(String problems) => showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Import impossible'),
+      content: SingleChildScrollView(child: Text(problems)),
+      actions: <Widget>[
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: const Text('Fermer'),
+        ),
+      ],
+    ),
+  );
+
+  Future<void> _insertSubproject(AnimationProject sub) async {
+    final project = _project;
+    final controller = _controller;
+    if (project == null || controller == null) return;
+    if (project.isSkeleton && !sub.isSkeleton) {
+      _snack(
+        'Un projet squelette hôte accepte uniquement un sous-projet squelette.',
+      );
+      return;
+    }
+    _pushUndo(); // annuler l'insertion restaure le projet hôte sans instance
     final start = controller.timeMs;
-    final end = math.min(
-      project.durationMs,
-      math.max(start + sub.durationMs, start + 100),
-    );
     final shape = VectorShape(
       name: sub.name,
       embeddedProjectId: sub.id,
       embeddedWidth: sub.width,
       embeddedHeight: sub.height,
+      embeddedIsSkeleton: sub.isSkeleton,
       x: project.width / 2,
       y: project.height / 2,
       startMs: start,
-      endMs: end,
+      endMs: start + math.max(sub.durationMs, 100),
     );
     setState(() {
       project.shapes.add(shape);
       _selectedId = shape.id;
+      _selectedBoneId = null;
       _embedded[sub.id] = sub;
     });
     await _flushSave();
@@ -766,6 +837,7 @@ class _StudioScreenState extends State<StudioScreen>
         onOpenBoneEditor: () => _editShapeBone(shape),
         onDeleteBone: () => _deleteShapeBone(shape),
         onMirror: _mirrorShape,
+        allowBoneEditorForInstance: shape.isInstance && shape.embeddedIsSkeleton,
       ),
     );
     if (mounted) setState(() {});
@@ -773,9 +845,16 @@ class _StudioScreenState extends State<StudioScreen>
 
   /// État de liaison d'une pièce au rig, affiché dans sa bottom sheet.
   String? _bindingNote(VectorShape shape) {
+    if (shape.isInstance) {
+      final rig = _rig;
+      final carrier = rig?.boneById(rig.carrierBoneId(shape.id));
+      return carrier == null
+          ? 'Groupe non lié au rig'
+          : 'Groupe lié à l’os « ${carrier.name} »';
+    }
     final rig = _rig;
     if (rig == null) return null;
-    final boneId = rig.boneIdForShape(shape.id);
+    final boneId = rig.carrierBoneId(shape.id);
     final bone = rig.boneById(boneId);
     return bone == null
         ? 'Pièce non liée au rig (os : —)'
@@ -842,8 +921,8 @@ class _StudioScreenState extends State<StudioScreen>
   /// (✓ de l'éditeur). Morph, couleurs et opacité sont conservées (D.2).
   Future<void> _editShapeBone(VectorShape shape) async {
     final project = _project;
-    if (project == null) return;
-    final transforms = shape.transformKeyframeCount;
+    if (project == null || (shape.isInstance && !shape.embeddedIsSkeleton)) return;
+    final transforms = shape.isInstance ? 0 : shape.transformKeyframeCount;
     if (transforms > 0) {
       final confirmed = await showDialog<bool>(
         context: context,
@@ -874,6 +953,7 @@ class _StudioScreenState extends State<StudioScreen>
           project: project,
           shape: shape,
           timeMs: _controller?.timeMs ?? 0,
+          embeddedProjects: _embedded,
         ),
       ),
     );
@@ -887,8 +967,8 @@ class _StudioScreenState extends State<StudioScreen>
       rig.bones.removeWhere((bone) => result.replacedIds.contains(bone.id));
       rig.bones.addAll(result.bones);
       rig.bindShape(shape.id, result.carrierBoneId);
-      shape.clearTransformKeyframes();
-      // Sélection exclusive : c'est l'OS qui porte la pièce désormais.
+      if (!shape.isInstance) shape.clearTransformKeyframes();
+      // Sélection exclusive : l'os porte la pièce ou le groupe désormais.
       _selectedBoneId = result.carrierBoneId;
       _selectedId = null;
     });
@@ -928,6 +1008,41 @@ class _StudioScreenState extends State<StudioScreen>
     final project = _project;
     final rig = project?.skeleton;
     if (project == null || rig == null) return;
+    if (shape.isInstance) {
+      final carrier = rig.boneById(rig.carrierBoneId(shape.id));
+      final chain = carrier == null ? const <RigBone>[] : rig.chainFrom(carrier.id);
+      var keyframes = 0;
+      for (final bone in chain) {
+        keyframes += rig.trackOf(bone.id)?.length ?? 0;
+      }
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Délier le groupe ?'),
+          content: Text(
+            'Le groupe « ${shape.name} » sera détaché. Les os du rig hôte '
+            'restent dans le projet.'
+            '${keyframes > 0 ? ' Les $keyframes keyframes associées aux os restent sur le rig.' : ''}',
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Annuler'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Délier'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+      _pushUndo();
+      setState(() => rig.unbindShape(shape.id));
+      await _flushSave();
+      _snack('Groupe dissocié de l’os');
+      return;
+    }
     final carrier = rig.boneById(rig.carrierBoneId(shape.id));
     if (carrier == null) return;
     final chain = rig.chainFrom(carrier.id);
@@ -968,6 +1083,8 @@ class _StudioScreenState extends State<StudioScreen>
     _snack('Os supprimé (descendance et keyframes compris)');
   }
 
+  /// Autorise une keyframe d'os si le curseur est sur une pièce ou un groupe
+  /// qui est attaché à cet os (un groupe squelette a son propre segment).
   bool _boneKeyframeAllowed(RigBone bone, int timeMs) {
     final project = _project;
     final rig = _rig;
@@ -1215,7 +1332,13 @@ class _StudioScreenState extends State<StudioScreen>
             ..y = reflectY(baseY)
             ..rotation = reflectShapeAngle(baseRotation);
         }
-        if (!shape.isInstance && shape.layers.isNotEmpty) {
+        if (shape.isInstance) {
+          if (horizontal) {
+            shape.flipH = !shape.flipH;
+          } else {
+            shape.flipV = !shape.flipV;
+          }
+        } else if (shape.layers.isNotEmpty) {
           shape.mirror(horizontal: horizontal);
         }
       }
@@ -1296,7 +1419,7 @@ class _StudioScreenState extends State<StudioScreen>
     return SkeletonPose.evaluate(
       project.skeleton!,
       timeMs,
-    ).frameOf(project.skeleton!.boneIdForShape(shape.id));
+    ).frameOf(project.skeleton!.carrierBoneId(shape.id));
   }
 
   /// Pièce touchée par un point canvas (du premier plan vers l'arrière-plan),
@@ -1506,7 +1629,7 @@ class _StudioScreenState extends State<StudioScreen>
     // doigt est posé SUR la pièce (ailleurs = geste ignoré, comme avant).
     // Les gestes d'os (IK, poignée de rotation) sont traités AU-DESSUS et
     // restent libres.
-    if (rig != null && rig.isAttached(shape.id)) {
+    if (rig != null && rig.isAttached(shape.id) && !shape.isInstance) {
       _gesture = _CanvasGesture.none;
       if (SelectionGeometry.hit(bounds, pose, geo, details.localFocalPoint)) {
         final bone = rig.boneById(rig.carrierBoneId(shape.id));
@@ -1690,8 +1813,9 @@ class _StudioScreenState extends State<StudioScreen>
         if (frame != null &&
             frame.worldDelta == 0 &&
             rig != null &&
-            shape!.keyframes.isEmpty) {
-          final bone = rig.boneById(rig.boneIdForShape(shape.id));
+            !shape!.isInstance &&
+            shape.keyframes.isEmpty) {
+          final bone = rig.boneById(rig.carrierBoneId(shape.id));
           if (bone != null) {
             // L'os suit la pièce ET la pièce suit le doigt : translation
             // de l'ancrage + emport des pièces liées à l'os.
@@ -1875,7 +1999,7 @@ class _StudioScreenState extends State<StudioScreen>
       // v0.19.1 : une pièce PORTÉE par un os n'est plus sélectionnable au
       // doigt (aucune manipulation possible) — elle reste choisissable via
       // le menu Formes pour l'ouvrir dans la sheet ⚙ ou la délier.
-      if (rig != null && rig.isAttached(hit.id)) {
+      if (rig != null && rig.isAttached(hit.id) && !hit.isInstance) {
         final bone = rig.boneById(rig.carrierBoneId(hit.id));
         _snack(
           '« ${hit.name} » est liée à l’os « ${bone?.name ?? '?'} » : '
@@ -2097,100 +2221,6 @@ class _StudioScreenState extends State<StudioScreen>
       if (!mounted) return;
       _snack('Export JSON simple impossible : $error');
     }
-  }
-
-  String? _lastImportError;
-
-  /// Décode un contenu JSON : format simple « vasf » (champ version) ou
-  /// projet complet — null + [_lastImportError] en cas de problème.
-  AnimationProject? _parseImportText(String text) {
-    _lastImportError = null;
-    Map<String, Object?> decoded;
-    try {
-      final value = jsonDecode(text);
-      if (value is Map) {
-        decoded = value.cast<String, Object?>();
-      } else {
-        throw const FormatException('objet JSON attendu');
-      }
-    } on FormatException catch (error) {
-      _lastImportError = 'JSON illisible : ${error.message}';
-      return null;
-    }
-    try {
-      if (SimpleAnimationFormat.isSimpleFormat(decoded)) {
-        return SimpleAnimationFormat.fromJson(
-          decoded,
-          fallbackName: 'Animation importée',
-        );
-      }
-      return AnimationProject.fromJson(decoded);
-    } on SimpleFormatException catch (error) {
-      _lastImportError = error.toString();
-      return null;
-    }
-  }
-
-  /// Import d'une animation depuis un FICHIER (.json) : sélecteur système
-  /// (SAF sous Android, aucune permission à déclarer). La réussite crée un
-  /// NOUVEAU projet (jamais de remplacement à l'aveugle) et l'ouvre.
-  Future<void> _importJsonFile() async {
-    _lastImportError = null;
-    final List<PlatformFile> picked;
-    try {
-      picked = await FilePicker.pickFiles(
-        dialogTitle: 'Importer une animation',
-        type: FileType.custom,
-        allowedExtensions: <String>['json'],
-      );
-    } catch (error) {
-      _snack('Sélecteur de fichiers indisponible : $error');
-      return;
-    }
-    if (picked.isEmpty || !mounted) return; // annulé par l'utilisateur
-    String text;
-    try {
-      text = utf8.decode(await picked.first.readAsBytes());
-    } catch (error) {
-      _snack('Fichier illisible : $error');
-      return;
-    }
-    final imported = _parseImportText(text);
-    if (imported == null) {
-      await _showImportProblems(_lastImportError ?? 'JSON invalide');
-      return;
-    }
-    await widget.repository.save(imported);
-    if (!mounted) return;
-    await Navigator.of(context).pushReplacement(
-      MaterialPageRoute<void>(
-        builder: (_) =>
-            StudioScreen(projectId: imported.id, repository: widget.repository),
-      ),
-    );
-    _snack('Projet importé : ${imported.name}');
-  }
-
-  /// Liste des problèmes d'un JSON refusé — dialogue défilant, fermable.
-  Future<void> _showImportProblems(String problems) {
-    return showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Import impossible'),
-        content: SingleChildScrollView(
-          child: Text(
-            problems,
-            style: const TextStyle(fontSize: 12, color: Color(0xFFFF8A8A)),
-          ),
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Fermer'),
-          ),
-        ],
-      ),
-    );
   }
 
   Future<void> _share(File file, String mimeType) async {
@@ -2874,6 +2904,8 @@ class _StudioScreenState extends State<StudioScreen>
           _addShape();
         } else if (value == 'insert_anim') {
           _insertAnimation();
+        } else if (value == 'import_vasf_group') {
+          _importVasfAsGroup();
         } else if (value.startsWith('select:')) {
           setState(() {
             _selectedId = value.substring(7);
@@ -2903,16 +2935,27 @@ class _StudioScreenState extends State<StudioScreen>
             title: Text('Ajouter une forme…'),
           ),
         ),
-        // Projet squelette : pas d'instances imbriquées (0.9 — l'import
-        // d'animation squelette dans le vectoriel arrive en 0.9.1).
-        if (!project.isSkeleton)
+        PopupMenuItem<String>(
+          value: 'insert_anim',
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.movie_outlined),
+            title: Text(
+              project.isSkeleton
+                  ? 'Insérer un projet squelette…'
+                  : 'Insérer une animation…',
+            ),
+          ),
+        ),
+        if (project.isSkeleton)
           const PopupMenuItem<String>(
-            value: 'insert_anim',
+            value: 'import_vasf_group',
             child: ListTile(
               dense: true,
               contentPadding: EdgeInsets.zero,
-              leading: Icon(Icons.movie_outlined),
-              title: Text('Insérer une animation…'),
+              leading: Icon(Icons.file_open_outlined),
+              title: Text('Importer un VASF comme groupe…'),
             ),
           ),
         const PopupMenuDivider(),
@@ -3092,7 +3135,6 @@ class _StudioScreenState extends State<StudioScreen>
         'json' => _exportJson(),
         'clipboard' => _copyJson(),
         'simple' => _exportSimpleJson(),
-        'import' => _importJsonFile(),
         _ => null,
       },
       itemBuilder: (context) => const <PopupMenuEntry<String>>[
@@ -3108,11 +3150,6 @@ class _StudioScreenState extends State<StudioScreen>
         PopupMenuItem<String>(
           value: 'simple',
           child: Text('JSON simple — agents IA (vasf)'),
-        ),
-        PopupMenuDivider(),
-        PopupMenuItem<String>(
-          value: 'import',
-          child: Text('Importer un fichier JSON…'),
         ),
       ],
     );
