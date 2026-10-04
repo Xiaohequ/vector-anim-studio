@@ -159,6 +159,7 @@ class _BoneEditorScreenState extends State<BoneEditorScreen> {
         ? const <RigBone>[]
         : [for (final bone in rig.chainFrom(carrierId)) bone.copy()];
     _existingIds = [for (final bone in chain) bone.id];
+    final chainIds = <String>{for (final bone in chain) bone.id};
     // Liste MODIFIABLE : le cas « aucune pièce liée » arrive avec une liste
     // `const` vide, qui refuse l'ajout au premier dessin.
     _bones = List<RigBone>.of(chain);

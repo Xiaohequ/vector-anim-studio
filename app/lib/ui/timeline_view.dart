@@ -240,7 +240,7 @@ class _TimelineViewState extends State<TimelineView> {
         } else {
           widget.onDeleteKeyframe(shape, time);
         }
-      }
+      },
       onGestureStart: () => widget.onGestureStart(shape),
       onFollowEdge: _followEdge,
     );
