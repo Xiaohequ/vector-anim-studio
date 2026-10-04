@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:vector_anim_studio/data/project_repository.dart';
+import 'package:vector_anim_studio/engine/rig_overlay_painter.dart';
 import 'package:vector_anim_studio/engine/scene_painter.dart';
 import 'package:vector_anim_studio/engine/selection_geometry.dart';
 import 'package:vector_anim_studio/main.dart';
@@ -849,6 +850,70 @@ void main() {
       await tester.tap(find.byTooltip('Ajouter une keyframe au curseur'));
       await tester.pumpAndSettle();
       expect(group.keyframes, hasLength(1));
+    },
+  );
+
+  testWidgets(
+    'la re-sélection du groupe restaure les os ajoutés dans le preview',
+    (tester) async {
+      final repository = _MemoryRepository();
+      final host = AnimationProject.blank(
+        name: 'Hôte',
+        type: ProjectType.skeleton,
+      );
+      final group = VectorShape(
+        name: 'Groupe squelette',
+        embeddedProjectId: 'source-id',
+        embeddedWidth: 360,
+        embeddedHeight: 640,
+        embeddedIsSkeleton: true,
+        startMs: 0,
+        endMs: 4000,
+      );
+      final other = VectorShape(name: 'Autre élément', startMs: 0, endMs: 4000);
+      other.layers.add(ShapeLayer(name: 'L', kind: ShapeKind.rect));
+      host.shapes.addAll(<VectorShape>[group, other]);
+
+      final rig = SkeletonRig();
+      final root = RigBone(name: 'Os groupe', offsetX: 180, offsetY: 260, length: 80);
+      final child = RigBone(
+        name: 'Os ajouté',
+        parentId: root.id,
+        offsetX: 80,
+        offsetY: 0,
+        length: 70,
+      );
+      rig.bones.addAll(<RigBone>[root, child]);
+      rig.bindShape(group.id, root.id);
+      host.skeleton = rig;
+      await repository.save(host);
+
+      await pumpStudio(tester, repository, host);
+      await tester.tap(find.byTooltip('Formes'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Autre élément').last);
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Propriétés de l’os'), findsNothing);
+
+      await tester.tap(find.byTooltip('Formes'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Groupe squelette').last);
+      await tester.pumpAndSettle();
+
+      final overlay = tester.widget<CustomPaint>(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is CustomPaint && widget.painter is RigOverlayPainter,
+        ),
+      );
+      final painter = overlay.painter! as RigOverlayPainter;
+      expect(painter.visibleBoneIds, containsAll(<String>{root.id, child.id}));
+      expect(find.byTooltip('Propriétés de la forme'), findsOneWidget);
+
+      final (topLeft, geo) = canvasHarness(tester, host);
+      await tester.tapAt(topLeft + geo.sceneToCanvas(const Offset(220, 260)));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Propriétés de l’os'), findsOneWidget);
     },
   );
 

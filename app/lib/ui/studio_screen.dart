@@ -104,6 +104,25 @@ class _StudioScreenState extends State<StudioScreen>
     return bone != null && _boneVisibleAt(bone, timeMs);
   }
 
+  /// Os à montrer quand un groupe squelette est sélectionné. L'overlay Studio
+  /// réduit le dessin au groupe actif, mais inclut toute sa chaîne porteuse.
+  Set<String>? _visibleBonesForSelectedGroup(int timeMs) {
+    final project = _project;
+    final rig = _rig;
+    final shape = _selected;
+    if (project == null ||
+        rig == null ||
+        shape == null ||
+        !shape.isInstance ||
+        !shape.embeddedIsSkeleton ||
+        !shape.isVisibleAt(timeMs)) {
+      return null;
+    }
+    final carrierId = rig.carrierBoneId(shape.id);
+    if (carrierId == null) return null;
+    return <String>{for (final bone in rig.chainFrom(carrierId)) bone.id};
+  }
+
   /// Os en cours de rotation (glisser de la poignée) ou de déplacement
   /// (glisser du bouton ✥).
   String? _dragBoneId;
@@ -2416,6 +2435,9 @@ class _StudioScreenState extends State<StudioScreen>
                             ? _selectedBoneId
                             : null,
                         showOnlySelected: true,
+                        visibleBoneIds: _visibleBonesForSelectedGroup(
+                          controller.timeMs,
+                        ),
                       ),
                     ),
                   ),
