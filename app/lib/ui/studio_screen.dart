@@ -856,7 +856,8 @@ class _StudioScreenState extends State<StudioScreen>
         onOpenBoneEditor: () => _editShapeBone(shape),
         onDeleteBone: () => _deleteShapeBone(shape),
         onMirror: _mirrorShape,
-        allowBoneEditorForInstance: shape.isInstance && shape.embeddedIsSkeleton,
+        allowBoneEditorForInstance:
+            shape.isInstance && shape.embeddedIsSkeleton,
       ),
     );
     if (mounted) setState(() {});
@@ -935,22 +936,35 @@ class _StudioScreenState extends State<StudioScreen>
   /// Ouvre l'éditeur d'os de [shape] (dessin + déplacement, forme ancrée au
   /// milieu de l'écran) : création ou modification de la chaîne.
   ///
-  /// Confirmation AVANT : si la forme porte des keyframes de TRANSFORMATION,
-  /// un dialogue prévient — elles seront supprimées au moment de la liaison
-  /// (✓ de l'éditeur). Morph, couleurs et opacité sont conservées (D.2).
+  /// Confirmation AVANT : les transformations d'une pièce sont supprimées à
+  /// la liaison. Pour un groupe squelette, toutes ses keyframes de forme sont
+  /// supprimées : le segment devient celui de l'os porteur.
   Future<void> _editShapeBone(VectorShape shape) async {
     final project = _project;
-    if (project == null || (shape.isInstance && !shape.embeddedIsSkeleton)) return;
+    if (project == null || (shape.isInstance && !shape.embeddedIsSkeleton)) {
+      return;
+    }
     final transforms = shape.isInstance ? 0 : shape.transformKeyframeCount;
-    if (transforms > 0) {
+    final groupKeyframes = shape.isInstance && shape.embeddedIsSkeleton
+        ? shape.keyframes.length
+        : 0;
+    if (transforms > 0 || groupKeyframes > 0) {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('Lier la pièce à un os ?'),
+          title: Text(
+            shape.isInstance
+                ? 'Lier le groupe à un os ?'
+                : 'Lier la pièce à un os ?',
+          ),
           content: Text(
-            '« ${shape.name} » porte $transforms transformation(s) '
-            'keyframée(s) (position, rotation, échelle). Les lier à un os '
-            'les supprimera — morph, couleurs et opacité sont conservées.',
+            shape.isInstance
+                ? '« ${shape.name} » porte $groupKeyframes keyframe(s) de groupe. '
+                      'Elles seront toutes supprimées à la liaison ; le segment '
+                      'et son animation dépendront ensuite de l’os.'
+                : '« ${shape.name} » porte $transforms transformation(s) '
+                      'keyframée(s) (position, rotation, échelle). Les lier à un os '
+                      'les supprimera — morph, couleurs et opacité sont conservées.',
           ),
           actions: <Widget>[
             TextButton(
@@ -986,7 +1000,12 @@ class _StudioScreenState extends State<StudioScreen>
       rig.bones.removeWhere((bone) => result.replacedIds.contains(bone.id));
       rig.bones.addAll(result.bones);
       rig.bindShape(shape.id, result.carrierBoneId);
-      if (!shape.isInstance) shape.clearTransformKeyframes();
+      if (shape.isInstance && shape.embeddedIsSkeleton) {
+        // Un groupe lié suit l'os, sans piste d'animation de forme concurrente.
+        shape.keyframes.clear();
+      } else if (!shape.isInstance) {
+        shape.clearTransformKeyframes();
+      }
       // Sélection exclusive : l'os porte la pièce ou le groupe désormais.
       _selectedBoneId = result.carrierBoneId;
       _selectedId = null;
@@ -1029,7 +1048,9 @@ class _StudioScreenState extends State<StudioScreen>
     if (project == null || rig == null) return;
     if (shape.isInstance) {
       final carrier = rig.boneById(rig.carrierBoneId(shape.id));
-      final chain = carrier == null ? const <RigBone>[] : rig.chainFrom(carrier.id);
+      final chain = carrier == null
+          ? const <RigBone>[]
+          : rig.chainFrom(carrier.id);
       var keyframes = 0;
       for (final bone in chain) {
         keyframes += rig.trackOf(bone.id)?.length ?? 0;

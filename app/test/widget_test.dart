@@ -876,7 +876,12 @@ void main() {
       host.shapes.addAll(<VectorShape>[group, other]);
 
       final rig = SkeletonRig();
-      final root = RigBone(name: 'Os groupe', offsetX: 180, offsetY: 260, length: 80);
+      final root = RigBone(
+        name: 'Os groupe',
+        offsetX: 180,
+        offsetY: 260,
+        length: 80,
+      );
       final child = RigBone(
         name: 'Os ajouté',
         parentId: root.id,
@@ -908,10 +913,7 @@ void main() {
         ),
       );
       final painter = overlay.painter! as RigOverlayPainter;
-      expect(
-        painter.visibleBoneIds,
-        containsAll(<String>{root.id, child.id}),
-      );
+      expect(painter.visibleBoneIds, containsAll(<String>{root.id, child.id}));
       expect(find.byTooltip('Propriétés de la forme'), findsOneWidget);
 
       final (topLeft, geo) = canvasHarness(tester, host);
@@ -1717,6 +1719,58 @@ void main() {
         find.byKey(const ValueKey<String>('keyform-top-message')),
         findsNothing,
       );
+    },
+  );
+
+  testWidgets(
+    'lier un groupe squelette supprime toutes ses keyframes propres',
+    (tester) async {
+      final repository = _MemoryRepository();
+      final host = AnimationProject.blank(
+        name: 'Hôte',
+        type: ProjectType.skeleton,
+      );
+      final group = VectorShape(
+        name: 'Groupe importé',
+        embeddedProjectId: 'source-id',
+        embeddedWidth: 360,
+        embeddedHeight: 640,
+        embeddedIsSkeleton: true,
+        startMs: 0,
+        endMs: 4000,
+      );
+      group.upsertKeyframe(0, group.poseAt(0));
+      group.upsertKeyframe(2000, <AnimatableProperty, double>{
+        ...group.poseAt(2000),
+        AnimatableProperty.x: 420,
+      });
+      host.shapes.add(group);
+      host.skeleton = SkeletonRig(name: 'Hôte');
+
+      await pumpStudio(tester, repository, host);
+      await tester.tap(find.byTooltip('Propriétés de la forme'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Ajouter un os…'));
+      await tester.pumpAndSettle();
+      expect(find.text('Lier le groupe à un os ?'), findsOneWidget);
+      expect(find.textContaining('2 keyframe(s) de groupe'), findsOneWidget);
+      await tester.tap(find.widgetWithText(FilledButton, 'Ouvrir l’éditeur'));
+      await tester.pumpAndSettle();
+
+      final canvas = find.byWidgetPredicate(
+        (widget) => widget is CustomPaint && widget.painter is ScenePainter,
+      );
+      final center = tester.getCenter(canvas);
+      await tester.tapAt(center);
+      await tester.pump();
+      await tester.tapAt(center + const Offset(70, 0));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Enregistrer l’os'));
+      await tester.pumpAndSettle();
+
+      expect(group.keyframes, isEmpty);
+      expect(host.skeleton!.carrierBoneId(group.id), isNotNull);
+      expect(find.byTooltip('Propriétés de l’os'), findsOneWidget);
     },
   );
 

@@ -220,10 +220,11 @@ class _TimelineViewState extends State<TimelineView> {
       pinching: _pinching,
       moving: _movingShape?.id == shape.id,
       movingOriginMs: _movingOriginMs,
-      selected: shape.id == widget.selectedShapeId ||
+      selected:
+          shape.id == widget.selectedShapeId ||
           (carrier != null && carrier.id == widget.selectedBoneId),
       onSelect: () {
-        if (carrier != null && !shape.isInstance) {
+        if (carrier != null) {
           widget.onSelectBone?.call(carrier);
         } else {
           widget.onSelect(shape);
@@ -235,7 +236,7 @@ class _TimelineViewState extends State<TimelineView> {
       onMoveChanged: (target) => _handleMoveUpdate(shape, target),
       onMoveEnd: () => _handleMoveEnd(shape),
       onDeleteKeyframe: (time) {
-        if (carrier != null && !shape.isInstance) {
+        if (carrier != null) {
           widget.onDeleteBoneKeyframe?.call(carrier, time);
         } else {
           widget.onDeleteKeyframe(shape, time);
@@ -501,20 +502,20 @@ class _ShapeBar extends StatelessWidget {
     // Épinglée au bord droit : une barre plus large que son minimum doit
     // rester visible quand sa fin touche le bord droit de la vue.
     final pinnedLeft = math.min(left, math.max(0.0, width - 24));
-    // Segment de groupe squelette : orange ; os lié : vert ; instance
-    final bound = carrier != null && !shape.isInstance;
-    final color = shape.isInstance && shape.embeddedIsSkeleton
-        ? const Color(0xFFFF9F43)
-        : bound
+    // Tout élément lié représente son os sur la timeline (y compris un groupe
+    // squelette importé) ; seul un groupe non lié garde sa couleur orange.
+    final bound = carrier != null;
+    final color = bound
         ? const Color(0xFF3ECF8E)
+        : shape.isInstance && shape.embeddedIsSkeleton
+        ? const Color(0xFFFF9F43)
         : shape.isInstance
         ? const Color(0xFFC084FC)
         : Theme.of(context).colorScheme.primary;
-    // Keyframes affichées : celles de l'OS pour une pièce liée (les
-    // keyframes de la forme ne sont plus « prises en compte », choix
-    // utilisateur v0.21.0), sinon celles de la forme.
+    // Keyframes affichées : celles de l'OS pour tout élément lié, y compris
+    // un groupe squelette ; sinon celles de la forme.
     final List<int> keyTimes;
-    if (bound && !shape.isInstance) {
+    if (bound) {
       keyTimes = <int>{
         for (final key in rig!.trackOf(carrier!.id) ?? const <BoneKeyframe>[])
           if (key.timeMs >= shape.startMs && key.timeMs <= shape.endMs)

@@ -3,6 +3,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vector_anim_studio/engine/timeline_zoom.dart';
 import 'package:vector_anim_studio/models/animation.dart';
+import 'package:vector_anim_studio/models/skeleton.dart';
 import 'package:vector_anim_studio/ui/timeline_view.dart';
 
 /// Enregistreurs de callbacks pour les tests de la timeline.
@@ -10,6 +11,8 @@ class _Rec {
   int? seeked;
   final List<(String, int)> moved = <(String, int)>[];
   String? ended;
+  String? selectedShape;
+  String? selectedBone;
 }
 
 AnimationProject _project() {
@@ -33,7 +36,12 @@ Widget _host(AnimationProject project, TimelineZoomState zoom, _Rec rec) {
         timeMs: 0,
         zoom: zoom,
         selectedShapeId: null,
-        onSelect: (_) {},
+        skeletonRig: project.skeleton,
+        onSelect: (shape) => rec.selectedShape = shape.id,
+        onSelectBone: (bone) => rec.selectedBone = bone.id,
+        onDeleteBoneKeyframe: (bone, time) {
+          project.skeleton?.removeKeyframeAt(bone.id, time);
+        },
         onRangeChanged: (shape, start, end) {
           shape.startMs = start;
           shape.endMs = end;
@@ -167,5 +175,54 @@ void main() {
     expect(rec.moved, isEmpty);
     expect(rec.ended, isNull);
     expect(shape.startMs, 0);
+  });
+
+  testWidgets('groupe squelette lié : segment = keyframes et sélection de l’os', (
+    tester,
+  ) async {
+    final project = AnimationProject.blank(type: ProjectType.skeleton);
+    final group = VectorShape(
+      name: 'Groupe importé',
+      embeddedProjectId: 'source',
+      embeddedWidth: 360,
+      embeddedHeight: 640,
+      embeddedIsSkeleton: true,
+      startMs: 0,
+      endMs: 2000,
+    );
+    // Cette pose propre au groupe ne doit plus être représentée sur son segment.
+    group.upsertKeyframe(1000, group.poseAt(1000));
+    project.shapes.add(group);
+    final rig = SkeletonRig();
+    final bone = RigBone(name: 'Os groupe');
+    rig.addBone(bone);
+    rig.bindShape(group.id, bone.id);
+    rig.tracks[bone.id] = <BoneKeyframe>[
+      BoneKeyframe(timeMs: 500),
+      BoneKeyframe(timeMs: 1500),
+    ];
+    project.skeleton = rig;
+    final rec = _Rec();
+    await tester.pumpWidget(
+      _host(project, TimelineZoomState(durationOf: () => 4000), rec),
+    );
+
+    // Deux losanges (keyframes de l’os), jamais celui du groupe (1000 ms).
+    final boneDiamonds = find.byWidgetPredicate(
+      (widget) =>
+          widget is Container && widget.color == const Color(0xFFF2C94C),
+    );
+    expect(boneDiamonds, findsNWidgets(2));
+    expect(
+      tester.widget<Container>(boneDiamonds.at(0)).color,
+      const Color(0xFFF2C94C),
+    );
+
+    await tester.tap(find.text('Groupe importé'));
+    await tester.pump();
+    expect(rec.selectedBone, bone.id);
+    expect(rec.selectedShape, isNull);
+
+    expect(group.keyframes, hasLength(1));
   });
 }
