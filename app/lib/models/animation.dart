@@ -1177,6 +1177,12 @@ class AnimationProject {
   /// projet vectoriel. Sérialisé en JSON dans la colonne `skeleton`.
   SkeletonRig? skeleton;
 
+  /// Les projets ont tous accès au rig ; ce prédicat conserve les comportements
+  /// particuliers d'édition lorsque le projet est historique « squelette » ou
+  /// qu'un rig a effectivement été créé/importé.
+  bool get usesRigWorkflow => isSkeleton || skeleton != null;
+
+  /// Legacy type retained on disk; it no longer determines capabilities.
   bool get isSkeleton => type == ProjectType.skeleton;
 
   double width;
@@ -1191,20 +1197,17 @@ class AnimationProject {
   DateTime? updatedAt;
   final List<VectorShape> shapes;
 
-  /// Durée du projet : le maximum des fins de segments des formes ; pour un
-  /// projet squelette, on y ajoute les keyframes d'os, avec un plancher de
-  /// 4 s tant qu'un rig existe ou qu'une pièce est posée — pour que le
-  /// curseur reste déplaçable avant la première keyframe. Projet vide → 0.
+  /// Durée du projet : le maximum des fins de segments des formes ; les
+  /// keyframes du rig s'ajoutent quel que soit le type historique du projet,
+  /// avec un plancher de 4 s tant qu'un rig ou une forme existe. Projet vide → 0.
   int get durationMs {
     var max = 0;
     for (final shape in shapes) {
       if (shape.endMs > max) max = shape.endMs;
     }
-    if (isSkeleton) {
-      final rig = skeleton;
-      if (rig != null && (rig.bones.isNotEmpty || shapes.isNotEmpty)) {
-        max = math.max(math.max(max, rig.maxKeyframeTimeMs), 4000);
-      }
+    final rig = skeleton;
+    if (rig != null && (rig.bones.isNotEmpty || shapes.isNotEmpty)) {
+      max = math.max(math.max(max, rig.maxKeyframeTimeMs), 4000);
     }
     return max;
   }

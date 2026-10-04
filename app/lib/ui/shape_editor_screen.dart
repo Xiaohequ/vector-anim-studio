@@ -578,7 +578,7 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
         .where((k) => (k.layerPoints[layer.id] ?? const <Offset>[]).isNotEmpty)
         .length;
     if (_draft.keyframes.isEmpty) {
-      return widget.project.isSkeleton
+      return widget.project.usesRigWorkflow
           ? 'Déplace un point : la 1ʳᵉ pose se crée automatiquement · '
                 '◆ pose d’autres instants · appui long : supprimer'
           : 'Sans keyframe : tu dessines la base · ◆ pour commencer à '
@@ -841,7 +841,7 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
           // d'éditer la base en silence (le rig est là pour animer ;
           // l'utilisateur s'attend à l'auto-key). La pose est semée du
           // rendu courant : visuellement neutre.
-          if (_draft.keyframes.isEmpty && widget.project.isSkeleton) {
+          if (_draft.keyframes.isEmpty && widget.project.usesRigWorkflow) {
             _draft.addKeyframeAt(_pointTargetMs);
             _gestureWrotePose = true;
           } else if (_draft.keyframes.isNotEmpty) {
