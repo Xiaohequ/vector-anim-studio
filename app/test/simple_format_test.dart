@@ -1766,5 +1766,25 @@ void main() {
       final trackB = rig.tracks[b.id]!;
       expect(trackB.map((k) => k.timeMs).toSet(), {0, 2000, 4000});
     });
+    test('un rig est exporté même si le projet garde le type vectoriel', () {
+      final project = AnimationProject.blank(
+        name: 'Projet mixte',
+        type: ProjectType.vector,
+      );
+      final rig = SkeletonRig();
+      final bone = RigBone(
+        name: 'Bras',
+        offsetX: 100,
+        offsetY: 200,
+        length: 80,
+      );
+      rig.addBone(bone);
+      rig.upsertKeyframe(bone.id, 1000, 0.4);
+      project.skeleton = rig;
+
+      final json = SimpleAnimationFormat.toJson(project);
+      expect(json['skeleton'], isA<Map<String, Object?>>());
+      expect((json['skeleton'] as Map<String, Object?>)['bones'], isNotEmpty);
+    });
   });
 }

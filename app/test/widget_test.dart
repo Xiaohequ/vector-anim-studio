@@ -254,37 +254,45 @@ void main() {
     expect(find.text('Forme 1'), findsNothing);
   });
 
-  testWidgets('le dialogue de création propose vectorielle ou squelette', (
-    tester,
-  ) async {
+  testWidgets('création unifiée : pas de choix de type', (tester) async {
     await tester.pumpWidget(VectorAnimStudioApp(repository: repository));
     await tester.pumpAndSettle();
 
     await tester.tap(find.widgetWithText(FilledButton, 'Nouveau projet'));
     await tester.pumpAndSettle();
-    expect(find.text('Vectorielle'), findsOneWidget);
-    expect(find.text('Squelette'), findsOneWidget);
-
-    // Créer un projet squelette : le studio s'ouvre en mode squelette.
-    await tester.tap(find.text('Squelette'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).first, 'Rat rig');
+    expect(find.text('Vectorielle'), findsNothing);
+    expect(find.text('Squelette'), findsNothing);
+    expect(find.text('Type d’animation'), findsNothing);
+    await tester.enterText(find.byType(TextField).first, 'Projet mixte');
     await tester.tap(find.widgetWithText(FilledButton, 'Créer'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Rat rig'), findsWidgets);
-    // Menu Squelette SUPPRIMÉ (v0.20) : l'os se dessine dans l'éditeur d'os
-    // (bouton de la sheet ⚙), le bas de barre garde Formes + Animations.
-    expect(find.byTooltip('Squelettes'), findsNothing);
-    expect(find.byTooltip('Animations'), findsOneWidget);
+    final project = await repository.load(repository._projects.keys.single);
+    expect(project.type, ProjectType.vector, reason: 'ancien champ conservé');
+    expect(project.usesRigWorkflow, isFalse, reason: 'le rig reste optionnel');
+    expect(find.text('Projet mixte'), findsWidgets);
+    expect(find.textContaining(' fps'), findsNothing);
+    expect(find.textContaining(' / '), findsNothing);
   });
 
-  testWidgets('le ◆ du playbar anime l’os sélectionné (projet squelette)', (
+  testWidgets('un ancien projet vectoriel expose les outils de rig', (
     tester,
   ) async {
+    final project = seededProject();
+    await pumpStudio(tester, repository, project);
+
+    await tester.tap(find.byTooltip('Propriétés de la forme'));
+    await tester.pumpAndSettle();
+    expect(find.text('Ajouter un os…'), findsOneWidget);
+    await tester.tap(find.text('Ajouter un os…'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Os de « Bloc »'), findsOneWidget);
+  });
+
+  testWidgets('le ◆ du playbar anime l’os en projet vectoriel', (tester) async {
     final project = AnimationProject.blank(
       name: 'Rat',
-      type: ProjectType.skeleton,
+      type: ProjectType.vector,
     );
     final piece = VectorShape(name: 'Bloc', startMs: 0, endMs: 2000);
     piece.layers.add(ShapeLayer(name: 'L', kind: ShapeKind.rect));
@@ -297,8 +305,7 @@ void main() {
 
     await pumpStudio(tester, repository, project);
 
-    // Sélectionner l'os en TAPANT dessus (le menu Squelette n'existe plus :
-    // la sélection d'os passe par le canvas ou la sélection de segment).
+    // Le type historique reste vectoriel ; le rig est néanmoins actif.
     final (topLeft, geo) = canvasHarness(tester, project);
     await tester.tapAt(topLeft + geo.sceneToCanvas(const Offset(180, 320)));
     await tester.pumpAndSettle();
@@ -825,7 +832,7 @@ void main() {
 
       await tester.tap(find.byTooltip('Formes'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Insérer un projet squelette…'));
+      await tester.tap(find.text('Insérer une animation…'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Personnage source'));
       await tester.pumpAndSettle();

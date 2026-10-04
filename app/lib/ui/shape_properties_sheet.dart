@@ -48,14 +48,14 @@ class ShapePropertiesSheet extends StatefulWidget {
   /// Ouvre le projet source (instances d'animation uniquement).
   final VoidCallback? onOpenSource;
 
-  /// Pièce d'un projet squelette : la forme est un élément statique du rig,
-  /// pas d'animation de pose propre — keyframes/interpolation masquées.
+  /// Tous les projets prennent en charge les rigs ; une pièce peut donc être
+  /// attachée à un os et pilotée par lui.
   final bool skeletonPiece;
 
-  /// État de liaison au rig (projet squelette), affiché sous le titre.
+  /// État de liaison au rig, affiché sous le titre.
   final String? skeletonNote;
 
-  /// Rig du projet (projet squelette) : active la section « Os de la
+  /// Rig du projet : active la section « Os de la
   /// forme » (l'os n'existe que par une forme, v0.20).
   final SkeletonRig? skeletonRig;
 
@@ -180,8 +180,7 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                 // « Ajouter » ouvre l'éditeur d'os (dessin sur la forme,
                 // forme ancrée au milieu de l'écran) ; « Supprimer » part
                 // avec la descendance et toutes les keyframes de l'os.
-                if (widget.skeletonPiece &&
-                    widget.onOpenBoneEditor != null &&
+                if (widget.onOpenBoneEditor != null &&
                     (!shape.isInstance || widget.allowBoneEditorForInstance))
                   Padding(
                     padding: const EdgeInsets.only(bottom: 2),
@@ -227,7 +226,9 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                               color: const Color(0xFFF2949A),
                             ),
                             label: Text(
-                              shape.isInstance ? 'Délier du rig' : 'Supprimer l’os',
+                              shape.isInstance
+                                  ? 'Délier du rig'
+                                  : 'Supprimer l’os',
                               style: const TextStyle(color: Color(0xFFF2949A)),
                             ),
                           ),

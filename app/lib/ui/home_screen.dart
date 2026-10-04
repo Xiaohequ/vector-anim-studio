@@ -121,7 +121,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final project = await _store.createProject(
       name: result.name,
       format: result.format,
-      type: result.type,
     );
     if (!mounted) return;
     await _open(project.id);
@@ -272,10 +271,8 @@ class _ProjectTile extends StatelessWidget {
         ? ''
         : ' · ${updated.day.toString().padLeft(2, '0')}/'
               '${updated.month.toString().padLeft(2, '0')}/${updated.year}';
-    final kind = summary.type == ProjectType.skeleton ? 'Squelette · ' : '';
-    final unit = summary.type == ProjectType.skeleton ? 'pièce(s)' : 'forme(s)';
-    return '$kind${summary.width.round()} × ${summary.height.round()} · '
-        '$seconds s · ${summary.fps} fps · ${summary.shapeCount} $unit$date';
+    return '${summary.width.round()} × ${summary.height.round()} · '
+        '$seconds s · ${summary.fps} fps · ${summary.shapeCount} élément(s)$date';
   }
 
   @override
@@ -297,12 +294,8 @@ class _ProjectTile extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
-                  summary.type == ProjectType.skeleton
-                      ? Icons.accessibility_new
-                      : Icons.animation,
-                  color: summary.type == ProjectType.skeleton
-                      ? const Color(0xFF3ECF8E)
-                      : Theme.of(context).colorScheme.primary,
+                  Icons.movie_outlined,
+                  color: Theme.of(context).colorScheme.primary,
                 ),
               ),
               const SizedBox(width: 12),
@@ -399,13 +392,11 @@ class _NewProjectResult {
   const _NewProjectResult({
     required this.name,
     required this.format,
-    this.type = ProjectType.vector,
     this.sample = false,
   });
 
   final String name;
   final ProjectFormat format;
-  final ProjectType type;
   final bool sample;
 }
 
@@ -419,7 +410,6 @@ class _NewProjectDialog extends StatefulWidget {
 class _NewProjectDialogState extends State<_NewProjectDialog> {
   final TextEditingController _name = TextEditingController();
   ProjectFormat _format = ProjectFormat.portrait;
-  ProjectType _type = ProjectType.vector;
 
   @override
   void dispose() {
@@ -443,34 +433,6 @@ class _NewProjectDialogState extends State<_NewProjectDialog> {
                 labelText: 'Nom du projet',
                 hintText: 'Mon animation',
               ),
-            ),
-            const SizedBox(height: 16),
-            const Text('Type d’animation', style: TextStyle(fontSize: 12)),
-            const SizedBox(height: 6),
-            SegmentedButton<ProjectType>(
-              showSelectedIcon: false,
-              segments: const <ButtonSegment<ProjectType>>[
-                ButtonSegment<ProjectType>(
-                  value: ProjectType.vector,
-                  icon: Icon(Icons.animation, size: 16),
-                  label: Text('Vectorielle', style: TextStyle(fontSize: 12)),
-                ),
-                ButtonSegment<ProjectType>(
-                  value: ProjectType.skeleton,
-                  icon: Icon(Icons.accessibility_new, size: 16),
-                  label: Text('Squelette', style: TextStyle(fontSize: 12)),
-                ),
-              ],
-              selected: <ProjectType>{_type},
-              onSelectionChanged: (selection) =>
-                  setState(() => _type = selection.first),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              _type == ProjectType.skeleton
-                  ? 'Un rig d’os anime les pièces du personnage (rig maître).'
-                  : 'Formes animées par keyframes de pose.',
-              style: const TextStyle(fontSize: 11, color: Colors.white38),
             ),
             const SizedBox(height: 16),
             const Text('Format', style: TextStyle(fontSize: 12)),
@@ -513,9 +475,9 @@ class _NewProjectDialogState extends State<_NewProjectDialog> {
           child: const Text('Créer avec la démo'),
         ),
         FilledButton(
-          onPressed: () => Navigator.of(context).pop(
-            _NewProjectResult(name: _name.text, format: _format, type: _type),
-          ),
+          onPressed: () => Navigator.of(
+            context,
+          ).pop(_NewProjectResult(name: _name.text, format: _format)),
           child: const Text('Créer'),
         ),
       ],

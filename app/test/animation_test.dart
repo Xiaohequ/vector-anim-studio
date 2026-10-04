@@ -749,4 +749,15 @@ void main() {
       expect(square, (width: 480, height: 480));
     });
   });
+
+  test('la durée inclut les keyframes du rig même en type vectoriel', () {
+    final project = AnimationProject.blank(type: ProjectType.vector);
+    final rig = SkeletonRig();
+    final bone = RigBone(name: 'Bras');
+    rig.addBone(bone);
+    rig.upsertKeyframe(bone.id, 7000, 0.4);
+    project.skeleton = rig;
+
+    expect(project.durationMs, 7000);
+  });
 }

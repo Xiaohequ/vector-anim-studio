@@ -145,7 +145,7 @@ class ScenePainter extends CustomPainter {
   /// groupe — permet de prévisualiser le groupe suivant l'os édité.
   BoneFrame? _rigFrameFor(AnimationProject project, VectorShape shape) {
     final rig = project.skeleton;
-    if (!project.isSkeleton || rig == null) return null;
+    if (rig == null) return null;
     final pose = SkeletonPose.evaluate(rig, timeMs);
     return pose.frameOf(_boneIdForShapeFrame(rig, shape));
   }
@@ -153,7 +153,9 @@ class ScenePainter extends CustomPainter {
   String? _boneIdForShapeFrame(SkeletonRig rig, VectorShape shape) {
     final carrierId = rig.carrierBoneId(shape.id);
     final selectedId = selectedBoneId;
-    if (shape.isInstance && selectedId != null && carrierId != null &&
+    if (shape.isInstance &&
+        selectedId != null &&
+        carrierId != null &&
         rig.chainFrom(carrierId).any((bone) => bone.id == selectedId)) {
       return selectedId;
     }
@@ -170,8 +172,7 @@ class ScenePainter extends CustomPainter {
     required int depth,
   }) {
     final rig = project.skeleton;
-    final SkeletonPose? rigPose =
-        project.isSkeleton && rig != null && rig.bones.isNotEmpty
+    final SkeletonPose? rigPose = rig != null && rig.bones.isNotEmpty
         ? SkeletonPose.evaluate(rig, timeMs)
         : null;
 

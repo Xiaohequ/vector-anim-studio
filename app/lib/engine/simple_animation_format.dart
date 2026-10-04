@@ -57,7 +57,7 @@ class SimpleAnimationFormat {
     // Une forme avec une liaison de COUCHE est exportée en layers[] (avec
     // une seule couche si besoin) : le nom de couche doit survivre au
     // round-trip pour que « Forme/Couche » reste importable.
-    final layerBoundIds = project.isSkeleton && project.skeleton != null
+    final layerBoundIds = project.skeleton != null
         ? project.skeleton!.bindings
               .where((b) => b.layerId != null)
               .map((b) => b.shapeId)
@@ -74,7 +74,7 @@ class SimpleAnimationFormat {
       shapes.add(_shapeToJson(shape, forceLayers: forceLayers));
     }
     final rig = project.skeleton;
-    if (project.isSkeleton && rig != null) {
+    if (rig != null) {
       for (final track in rig.tracks.values) {
         if (track.any((k) => k.easing == EasingKind.customBezier)) {
           usesV2 = true;
@@ -100,7 +100,7 @@ class SimpleAnimationFormat {
       },
       'shapes': shapes,
     };
-    if (project.isSkeleton && rig != null) {
+    if (rig != null) {
       json['skeleton'] = _skeletonToJson(rig, project);
     }
     return json;

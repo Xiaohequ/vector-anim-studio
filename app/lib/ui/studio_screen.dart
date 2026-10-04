@@ -104,8 +104,8 @@ class _StudioScreenState extends State<StudioScreen>
     return bone != null && _boneVisibleAt(bone, timeMs);
   }
 
-  /// Os à montrer quand un groupe squelette est sélectionné. L'overlay Studio
-  /// réduit le dessin au groupe actif, mais inclut toute sa chaîne porteuse.
+  /// Os à montrer quand un groupe lié à un rig embarqué est sélectionné.
+  /// L'overlay Studio réduit le dessin au groupe actif, mais inclut toute sa chaîne porteuse.
   Set<String>? _visibleBonesForSelectedGroup(int timeMs) {
     final project = _project;
     final rig = _rig;
@@ -240,10 +240,7 @@ class _StudioScreenState extends State<StudioScreen>
     if (controller == null) return;
     final summaries = await widget.repository.listSummaries();
     if (!mounted) return;
-    final others = summaries
-        .where((s) => s.id != widget.projectId)
-        .where((s) => !project.isSkeleton || s.type == ProjectType.skeleton)
-        .toList();
+    final others = summaries.where((s) => s.id != widget.projectId).toList();
     final picked = await showModalBottomSheet<ProjectSummary>(
       context: context,
       builder: (context) => SafeArea(
@@ -267,10 +264,8 @@ class _StudioScreenState extends State<StudioScreen>
                 leading: const Icon(Icons.movie_outlined),
                 title: Text(summary.name),
                 subtitle: Text(
-                  '${summary.type.label} · '
                   '${(summary.durationMs / 1000).toStringAsFixed(1)} s · '
-                  '${summary.shapeCount} '
-                  '${summary.type == ProjectType.skeleton ? 'pièce(s)' : 'forme(s)'}',
+                  '${summary.shapeCount} élément(s)',
                 ),
                 onTap: () => Navigator.of(context).pop(summary),
               ),
@@ -315,7 +310,7 @@ class _StudioScreenState extends State<StudioScreen>
         await _showImportProblems('Le fichier doit être au format JSON VASF.');
         return;
       }
-      if (!sub.isSkeleton) {
+      if (sub.skeleton == null) {
         await _showImportProblems(
           'Ce fichier VASF ne décrit pas un projet squelette.',
         );
@@ -347,12 +342,6 @@ class _StudioScreenState extends State<StudioScreen>
     final project = _project;
     final controller = _controller;
     if (project == null || controller == null) return;
-    if (project.isSkeleton && !sub.isSkeleton) {
-      _snack(
-        'Un projet squelette hôte accepte uniquement un sous-projet squelette.',
-      );
-      return;
-    }
     _pushUndo(); // annuler l'insertion restaure le projet hôte sans instance
     final start = controller.timeMs;
     final shape = VectorShape(
@@ -360,7 +349,7 @@ class _StudioScreenState extends State<StudioScreen>
       embeddedProjectId: sub.id,
       embeddedWidth: sub.width,
       embeddedHeight: sub.height,
-      embeddedIsSkeleton: sub.isSkeleton,
+      embeddedIsSkeleton: sub.skeleton != null,
       x: project.width / 2,
       y: project.height / 2,
       startMs: start,
@@ -850,14 +839,13 @@ class _StudioScreenState extends State<StudioScreen>
         onPivotChanged: _setPivot,
         onLayerColorChanged: _setLayerColor,
         onToggleLayerColor: _toggleLayerColor,
-        skeletonPiece: project.isSkeleton,
+        skeletonPiece: project.skeleton?.isAttached(shape.id) ?? false,
         skeletonNote: _bindingNote(shape),
-        skeletonRig: project.isSkeleton ? project.skeleton : null,
+        skeletonRig: project.skeleton,
         onOpenBoneEditor: () => _editShapeBone(shape),
         onDeleteBone: () => _deleteShapeBone(shape),
         onMirror: _mirrorShape,
-        allowBoneEditorForInstance:
-            shape.isInstance && shape.embeddedIsSkeleton,
+        allowBoneEditorForInstance: shape.isInstance,
       ),
     );
     if (mounted) setState(() {});
@@ -941,13 +929,11 @@ class _StudioScreenState extends State<StudioScreen>
   /// supprimées : le segment devient celui de l'os porteur.
   Future<void> _editShapeBone(VectorShape shape) async {
     final project = _project;
-    if (project == null || (shape.isInstance && !shape.embeddedIsSkeleton)) {
+    if (project == null) {
       return;
     }
     final transforms = shape.isInstance ? 0 : shape.transformKeyframeCount;
-    final groupKeyframes = shape.isInstance && shape.embeddedIsSkeleton
-        ? shape.keyframes.length
-        : 0;
+    final groupKeyframes = shape.isInstance ? shape.keyframes.length : 0;
     if (transforms > 0 || groupKeyframes > 0) {
       final confirmed = await showDialog<bool>(
         context: context,
@@ -1000,10 +986,10 @@ class _StudioScreenState extends State<StudioScreen>
       rig.bones.removeWhere((bone) => result.replacedIds.contains(bone.id));
       rig.bones.addAll(result.bones);
       rig.bindShape(shape.id, result.carrierBoneId);
-      if (shape.isInstance && shape.embeddedIsSkeleton) {
+      if (shape.isInstance) {
         // Un groupe lié suit l'os, sans piste d'animation de forme concurrente.
         shape.keyframes.clear();
-      } else if (!shape.isInstance) {
+      } else {
         shape.clearTransformKeyframes();
       }
       // Sélection exclusive : l'os porte la pièce ou le groupe désormais.
@@ -1455,7 +1441,7 @@ class _StudioScreenState extends State<StudioScreen>
     VectorShape shape,
     int timeMs,
   ) {
-    if (!project.isSkeleton || project.skeleton == null) return null;
+    if (project.skeleton == null) return null;
     return SkeletonPose.evaluate(
       project.skeleton!,
       timeMs,
@@ -1565,7 +1551,7 @@ class _StudioScreenState extends State<StudioScreen>
     // Priorité rig : poignée de rotation de l'os sélectionné uniquement —
     // v0.9.3 : pivoter via l'extrémité de l'os (2e point) est désactivé.
     final rig = project.skeleton;
-    if (project.isSkeleton && rig != null && rig.bones.isNotEmpty) {
+    if (rig != null && rig.bones.isNotEmpty) {
       final selectedBone = rig.boneById(_selectedBoneId);
       final pose = SkeletonPose.evaluate(rig, controller.timeMs);
       final geo = _canvasGeometry(project, canvasSize);
@@ -2017,7 +2003,7 @@ class _StudioScreenState extends State<StudioScreen>
     // Sélection d'os d'abord (mode squelette) — exclusive avec la pièce :
     // soit un os, soit une forme (jamais les deux).
     final rig = project.skeleton;
-    if (project.isSkeleton && rig != null && rig.bones.isNotEmpty) {
+    if (rig != null && rig.bones.isNotEmpty) {
       final pose = SkeletonPose.evaluate(rig, controller.timeMs);
       final boneId = RigOverlayPainter.hitBone(
         pose,
@@ -2443,7 +2429,7 @@ class _StudioScreenState extends State<StudioScreen>
                   ),
                 ),
               ),
-              if (project.isSkeleton && project.skeleton != null)
+              if (project.skeleton != null)
                 Positioned.fill(
                   child: IgnorePointer(
                     child: CustomPaint(
@@ -2737,12 +2723,6 @@ class _StudioScreenState extends State<StudioScreen>
         children: <Widget>[
           Row(
             children: <Widget>[
-              Text(
-                '${(controller.timeMs / 1000).toStringAsFixed(2)} s'
-                ' / ${(project.durationMs / 1000).toStringAsFixed(2)} s'
-                ' · ${project.fps} fps',
-                style: const TextStyle(fontSize: 11),
-              ),
               const Spacer(),
               if (zoom != null) ...<Widget>[
                 IconButton(
@@ -2814,7 +2794,7 @@ class _StudioScreenState extends State<StudioScreen>
                         setState(() => shape.removeKeyframeAt(timeMs));
                         _scheduleSave();
                       },
-                      skeletonRig: project.isSkeleton ? project.skeleton : null,
+                      skeletonRig: project.skeleton,
                       selectedBoneId: _selectedBoneId,
                       // Sélection depuis le segment (v0.21.0) : un segment
                       // LIÉ sélectionne l'OS dans le preview (sélection
@@ -2931,7 +2911,7 @@ class _StudioScreenState extends State<StudioScreen>
           _layersMenu(project),
           const Spacer(),
           Text(
-            '${project.shapes.length} ${project.isSkeleton ? 'pièce(s)' : 'forme(s)'}',
+            '${project.shapes.length} élément(s)',
             style: const TextStyle(fontSize: 12),
           ),
         ],
@@ -2987,23 +2967,18 @@ class _StudioScreenState extends State<StudioScreen>
             dense: true,
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.movie_outlined),
-            title: Text(
-              project.isSkeleton
-                  ? 'Insérer un projet squelette…'
-                  : 'Insérer une animation…',
-            ),
+            title: const Text('Insérer une animation…'),
           ),
         ),
-        if (project.isSkeleton)
-          const PopupMenuItem<String>(
-            value: 'import_vasf_group',
-            child: ListTile(
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(Icons.file_open_outlined),
-              title: Text('Importer un VASF comme groupe…'),
-            ),
+        const PopupMenuItem<String>(
+          value: 'import_vasf_group',
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.file_open_outlined),
+            title: Text('Importer un VASF comme groupe…'),
           ),
+        ),
         const PopupMenuDivider(),
         if (project.shapes.isEmpty)
           const PopupMenuItem<String>(
