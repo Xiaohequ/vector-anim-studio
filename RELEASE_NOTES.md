@@ -1,21 +1,31 @@
-# Keyform Studio 0.29.0
+# Keyform Studio 0.30.0
 
-## Projets unifiés et rig disponible partout
+## Outils du Studio regroupés et projets unifiés
 
-- Suppression du choix « vectoriel / squelette » à la création : un projet neuf
-  utilise le type historique vectoriel, mais propose dès le départ les outils de
-  rig et de liaison des formes aux os.
-- Les projets existants conservent leurs données et leurs rigs ; l'ancien champ
-  de type est maintenu pour compatibilité, sans restreindre les fonctions.
-- Tous les projets peuvent désormais imbriquer des animations, dessiner et
-  sélectionner des os, utiliser l'IK et transporter les éléments liés.
-- Export VASF : un rig présent est exporté même si le projet a été créé comme
-  projet vectoriel ; les projets VASF avec squelette gardent leur représentation.
-- Suppression de la ligne « temps actuel / durée totale · fps » au-dessus de la
-  timeline, sans changement des commandes de lecture ni des options d'export.
+- Nouvelle barre d’outils fixe en bas avec trois accès nommés : **Éléments**,
+  **Animation** et **Os**. Les actions fréquentes sont regroupées dans des
+  panneaux organisés et défilants ; l’export reste dans la barre supérieure.
+- **Éléments** : ajout/sélection, visibilité, ordre d’affichage, propriétés,
+  modification des couches, duplication, renommage et suppression ; insertion
+  d’animations et import VASF comme groupe.
+- **Animation** : presets et suppression des animations de l’élément sélectionné.
+  La pose/keyframe au curseur reste dans la barre de lecture.
+- **Os** : création/modification et liaison à l’élément sélectionné, sélection
+  des os du projet et accès rapide à leurs propriétés ; disponible sur les
+  projets historiques vectoriels comme sur les projets avec rig.
+- Suppression des anciens menus redondants « Formes », « Animations » et
+  « Calques ».
+- Les projets sont unifiés : le choix « vectoriel / squelette » n’est plus
+  demandé à la création. Le type historique reste conservé pour compatibilité,
+  sans restreindre les fonctions de rig.
+- Les projets existants conservent leurs données et rigs ; les projets peuvent
+  imbriquer des animations, dessiner/sélectionner des os, utiliser l’IK et
+  transporter les éléments liés.
+- Export VASF : un rig présent est exporté même si le projet a été créé avec le
+  type historique vectoriel.
 
 ### Vérifications
 
-- Tests couvrant création unifiée, disponibilité du rig dans un ancien projet
-  vectoriel, keyframes d'os et durée avec rig.
-- Suite complète, analyse statique et build APK CI requis avant publication.
+- Tests de widgets pour les trois panneaux, les actions de sélection et le
+  maintien de l’export en haut.
+- Suite complète des tests et `flutter analyze` requis avant publication.
