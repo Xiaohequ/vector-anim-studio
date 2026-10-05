@@ -137,6 +137,38 @@ void main() {
     return project;
   }
 
+  testWidgets('la barre du bas regroupe éléments, animation et os', (
+    tester,
+  ) async {
+    final project = seededProject();
+    await pumpStudio(tester, repository, project);
+
+    expect(find.text('Éléments'), findsOneWidget);
+    expect(find.text('Animation'), findsOneWidget);
+    expect(find.text('Os'), findsOneWidget);
+    expect(find.byTooltip('Export'), findsOneWidget);
+    expect(find.text('Formes'), findsNothing);
+
+    await tester.tap(find.text('Éléments'));
+    await tester.pumpAndSettle();
+    expect(find.text('Ajouter une forme…'), findsOneWidget);
+    expect(find.text('DANS LE PROJET · 1 ÉLÉMENTS'), findsOneWidget);
+    expect(find.text('Bloc'), findsWidgets);
+    await tester.tap(find.text('Bloc').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Animation'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('ANIMATIONS RAPIDES'), findsOneWidget);
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Os'));
+    await tester.pumpAndSettle();
+    expect(find.text('Créer et lier un os'), findsOneWidget);
+    expect(find.text('Aucun os créé'), findsOneWidget);
+  });
+
   /// Point GLOBAL du canvas + géométrie scène↔canvas réelle de l'app.
   /// Déclaré en tête : les tests d'os (tap sur l'os) l'utilisent avant les
   /// tests IK qui suivent.
@@ -185,7 +217,7 @@ void main() {
             ),
           )
           .size;
-      await tester.tap(find.byTooltip('Formes').first);
+      await tester.tap(find.text('Éléments').first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Masquée').last);
       await tester.pumpAndSettle();
@@ -214,10 +246,11 @@ void main() {
     // Aucune annulation disponible au départ.
     expect(undoButton().onPressed, isNull);
 
-    // Supprimer la forme via le menu Formes.
-    await tester.tap(find.byTooltip('Formes'));
+    // Supprimer la forme via le panneau Éléments.
+    await tester.tap(find.text('Éléments'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Supprimer'));
+    await tester.ensureVisible(find.text('Supprimer').last);
+    await tester.tap(find.text('Supprimer').last);
     await tester.pumpAndSettle();
     expect(project.shapes, isEmpty);
     expect(undoButton().onPressed, isNotNull);
@@ -237,8 +270,8 @@ void main() {
       find.widgetWithIcon(IconButton, Icons.undo).last,
     );
 
-    // Ajouter une forme : menu Formes ▸ Ajouter une forme… puis Enregistrer.
-    await tester.tap(find.byTooltip('Formes'));
+    // Ajouter une forme : panneau Éléments ▸ Ajouter une forme… puis Enregistrer.
+    await tester.tap(find.text('Éléments'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Ajouter une forme…'));
     await tester.pumpAndSettle();
@@ -354,8 +387,8 @@ void main() {
 
       await pumpStudio(tester, repository, project);
 
-      // Sélectionner la pièce via le menu Formes (sélection exclusive).
-      await tester.tap(find.byTooltip('Formes'));
+      // Sélectionner la pièce via le panneau Éléments (sélection exclusive).
+      await tester.tap(find.text('Éléments'));
       await tester.pumpAndSettle();
       await tester.tap(find.textContaining('Bloc').last);
       await tester.pumpAndSettle();
@@ -405,7 +438,7 @@ void main() {
 
       await pumpStudio(tester, repository, project);
 
-      await tester.tap(find.byTooltip('Formes'));
+      await tester.tap(find.text('Éléments'));
       await tester.pumpAndSettle();
       await tester.tap(find.textContaining('Bloc').last);
       await tester.pumpAndSettle();
@@ -484,7 +517,7 @@ void main() {
       await pumpStudio(tester, repository, project);
 
       // Sélectionner la pièce, ◆ pose à 0 s.
-      await tester.tap(find.byTooltip('Formes'));
+      await tester.tap(find.text('Éléments'));
       await tester.pumpAndSettle();
       await tester.tap(find.textContaining('Chemin').last);
       await tester.pumpAndSettle();
@@ -830,9 +863,9 @@ void main() {
       );
       await pumpStudio(tester, repository, host);
 
-      await tester.tap(find.byTooltip('Formes'));
+      await tester.tap(find.text('Éléments'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Insérer une animation…'));
+      await tester.tap(find.text('Insérer une animation…').last);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Personnage source'));
       await tester.pumpAndSettle();
@@ -902,13 +935,13 @@ void main() {
       await repository.save(host);
 
       await pumpStudio(tester, repository, host);
-      await tester.tap(find.byTooltip('Formes'));
+      await tester.tap(find.text('Éléments'));
       await tester.pumpAndSettle();
       await tester.tap(find.textContaining('Autre élément').last);
       await tester.pumpAndSettle();
       expect(find.byTooltip('Propriétés de l’os'), findsNothing);
 
-      await tester.tap(find.byTooltip('Formes'));
+      await tester.tap(find.text('Éléments'));
       await tester.pumpAndSettle();
       await tester.tap(find.textContaining('Groupe squelette').last);
       await tester.pumpAndSettle();
@@ -955,7 +988,7 @@ void main() {
       ),
     );
 
-    await tester.tap(find.byTooltip('Formes'));
+    await tester.tap(find.text('Éléments'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Importer un VASF comme groupe…'));
     await tester.pumpAndSettle();
@@ -1108,10 +1141,10 @@ void main() {
     return project;
   }
 
-  /// Sélectionne la pièce via le menu Formes (le TAP au canvas est ignoré
+  /// Sélectionne la pièce via le panneau Éléments (le TAP au canvas est ignoré
   /// pour une pièce liée — v0.19.1) et vérifie que le bouton ⚙ apparaît.
   Future<void> selectPieceViaMenu(WidgetTester tester) async {
-    await tester.tap(find.byTooltip('Formes'));
+    await tester.tap(find.text('Éléments'));
     await tester.pumpAndSettle();
     await tester.tap(find.textContaining('Bloc').last);
     await tester.pumpAndSettle();
@@ -1206,7 +1239,7 @@ void main() {
     await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
 
-    // Passerelle : le menu Formes la choisit quand même (sheet + Délier).
+    // Passerelle : le panneau Éléments la choisit quand même (sheet + Délier).
     await selectPieceViaMenu(tester);
   });
 
