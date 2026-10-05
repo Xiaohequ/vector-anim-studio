@@ -6,10 +6,12 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Nom technique / dépôt : `vector_anim_studio` / https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`). Nom d'affichage : **Keyform Studio** depuis v0.26.0.
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
-- **Dernière version : v0.27.0 VALIDÉE** — build `v0.27.0-build58`, APK
-  `vector-anim-studio-0.27.0.apk` (51,6 Mo), CI run #58 verte. Choix résolution
-  MP4 480p/720p/1080p, messages en haut et nom d'affichage Keyform Studio validés
-  par l'utilisateur.
+- **Dernière release : v0.30.0 VALIDÉE PAR L’UTILISATEUR** — `v0.30.0-build75`,
+  APK `vector-anim-studio-0.30.0.apk` (54,4 Mo), CI #75 verte.
+  Barre Studio **Éléments / Animation / Os** ; export en haut. Projets unifiés v0.29
+  inclus. Retour utilisateur : « Je valide v0.30 ».
+- **v0.31.0 en préparation** : barre inférieure dédiée à l’éditeur de forme
+  **Couches / Points / Aperçu** ; détails et CI dans la PR de release.
 - Version précédente : **v0.25.0** — build `v0.25.0-build56`, APK
   `vector-anim-studio-0.25.0.apk` (51,7 Mo) ; CI run #56 verte (commit `bf3a1f5`).
 - **v0.25.0 = nouvelle icône « TRAIL », VALIDÉE APPAREIL (02/10)** — retour :
@@ -19,7 +21,8 @@ v0.9.0, l'**animation squelette** (rig maître).
   Une variante CLAIRE existe (`tmp/icones/trail/clair_1024.png`), non retenue.
 - **Reste à valider sur appareil** (v0.23.0 `build52` et v0.24.0 `build53`) :
   zoom caméra jusqu’à 800 %, mode « Déplacer la vue », plein écran Studio.
-- **v0.27.0 VALIDÉE APPAREIL** : choix résolution MP4 480p/720p/1080p et messages en haut de l'écran validés par l'utilisateur.
+- **v0.30.0 VALIDÉE PAR L’UTILISATEUR** : panneaux bas **Éléments / Animation / Os**, export toujours en haut ; projets unifiés v0.29 inclus. Release `v0.30.0-build75`, APK 54,4 Mo, CI #75 verte.
+- **v0.29.0 publiée** : accès au rig unifié quel que soit le type historique du projet ; release `v0.29.0-build73`.
 - **v0.21.2 VALIDÉE APPAREIL (01/10)** — retour : « Les 3 modifications
   marchent » (éditeur d'os recentré à la pose du playhead + keyframes ignorées,
   os masqués hors fenêtre de leur forme, keyframes d'os interdites hors segment ;
@@ -879,6 +882,23 @@ v0.9.0, l'**animation squelette** (rig maître).
 - CI PR #1 verte sur les ressources ; merge squash sur `main` → release `v0.25.0-build56`.
 - Vérification dans l'APK publié : 10 ressources d'icône présentes (5 mipmaps RGB
   48→192 px + 5 avant-plans RGBA 108→432 px), `resources.arsc` OK.
+
+### v0.31.0 (préparation de release)
+- Éditeur de forme : barre basse **Couches / Points / Aperçu** en bottom sheets ; retrait de la liste permanente pour agrandir le preview ; Enregistrer en haut, keyframe et curseur temporel conservés près du preview.
+- Couches : liste, sélection, visibilité, duplication, réordonnancement, suppression, ajout de primitives et fenêtre d’affichage. Points : ajout segment, déplacement direct, suppression par appui long et aide morph. Aperçu : pan, zoom, ajuster, snap rotation.
+- Tests widgets dédiés et validation complète à consigner après CI/release.
+
+### v0.30.0 (publiée — CI run #75, `v0.30.0-build75` — VALIDÉE PAR L’UTILISATEUR)
+- Barre fixe en bas avec les boutons nommés **Éléments**, **Animation** et **Os** ; ouverture de panneaux bottom-sheet structurés et défilants.
+- Éléments : ajout/sélection, visibilité, propriétés, gestion des couches, ordre, duplication, renommage, suppression, insertion d’animation et import VASF comme groupe.
+- Animation : presets et effacement des animations ; keyframe conservée dans la playbar. Os : création/modification/liaison de l’os porté par une forme, liste de sélection des os et accès aux propriétés.
+- Export maintenu dans l’AppBar, conforme à la règle « actions fréquentes en bas, fonctions occasionnelles en haut ».
+- Aucune ancienne entrée Formes/Animations/Calques perdue ; suite 281 tests, analyse sans erreur ; CI analyse + tests + build APK + release verte.
+- Commits intégrés par squash dans `main` ; PR #9. Retour utilisateur : « Je valide v0.30 ».
+
+### v0.29.0 (publiée — CI run #73, `v0.29.0-build73`)
+- Projets unifiés : le choix vectoriel/squelette est supprimé à la création ; type historique conservé pour la compatibilité, capacités rig accessibles partout.
+- Os, IK, liaisons, transport et export/import VASF de rigs utilisables indépendamment du type historique du projet.
 
 ### v0.27.0 (publiée — CI run #58, `v0.27.0-build58` — VALIDÉE par l'utilisateur)
 - **Export MP4 : résolution au choix** — 480p, 720p (défaut), 1080p ; orientation

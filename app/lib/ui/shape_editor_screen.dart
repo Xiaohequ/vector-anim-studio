@@ -80,9 +80,6 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
     setState(() => _previewPan = _panBase + position - _panStart);
   }
 
-  void _togglePreviewPanMode() =>
-      setState(() => _previewPanMode = !_previewPanMode);
-
   // Option : aimanter la rotation aux multiples de 90° (bouton du preview).
   bool _snapRotation = false;
 
@@ -316,7 +313,6 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final layer = _selectedLayer;
     return Scaffold(
       appBar: AppBar(
         title: Text(_isNew ? 'Nouvelle forme' : 'Modifier la forme'),
@@ -334,10 +330,10 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
       ),
       body: Column(
         children: <Widget>[
-          _buildPreview(),
+          Expanded(child: _buildPreview()),
           _buildPlayhead(),
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
             child: TextField(
               controller: _name,
               decoration: const InputDecoration(
@@ -346,22 +342,270 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
               ),
             ),
           ),
-          Expanded(
-            child: LayerPanel(
-              shape: _draft,
-              durationMs: _windowMaxMs(),
-              selectedLayer: layer,
-              onSelect: (value) => setState(() => _selectedLayerId = value.id),
-              onAdd: _addLayer,
-              onDuplicate: _duplicateLayer,
-              onMove: _moveLayer,
-              onChanged: () => setState(() {}),
-            ),
+        ],
+      ),
+      bottomNavigationBar: _buildEditorToolbar(),
+    );
+  }
+
+  // ----------------------------------------------------------- barre éditeur
+
+  Widget _buildEditorToolbar() => SafeArea(
+    top: false,
+    child: Container(
+      padding: const EdgeInsets.fromLTRB(8, 4, 8, 6),
+      decoration: const BoxDecoration(
+        color: Color(0xFF11141B),
+        border: Border(top: BorderSide(color: Color(0xFF282D38))),
+      ),
+      child: Row(
+        children: <Widget>[
+          _editorToolButton(
+            icon: Icons.layers_outlined,
+            label: 'Couches',
+            onPressed: _showLayersSheet,
+          ),
+          _editorToolButton(
+            icon: Icons.polyline_outlined,
+            label: 'Points',
+            onPressed: _showPointsSheet,
+          ),
+          _editorToolButton(
+            icon: Icons.center_focus_strong,
+            label: 'Aperçu',
+            onPressed: _showPreviewSheet,
           ),
         ],
       ),
+    ),
+  );
+
+  Widget _editorToolButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+  }) => Expanded(
+    child: TextButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 19),
+      label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+      style: TextButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+    ),
+  );
+
+  Future<void> _showLayersSheet() => showModalBottomSheet<void>(
+    context: context,
+    useSafeArea: true,
+    isScrollControlled: true,
+    showDragHandle: true,
+    backgroundColor: const Color(0xFF151922),
+    builder: (sheetContext) => StatefulBuilder(
+      builder: (context, setSheetState) => SizedBox(
+        height: MediaQuery.sizeOf(sheetContext).height * 0.72,
+        child: LayerPanel(
+          shape: _draft,
+          durationMs: _windowMaxMs(),
+          selectedLayer: _selectedLayer,
+          onSelect: (value) {
+            setState(() => _selectedLayerId = value.id);
+            setSheetState(() {});
+          },
+          onAdd: (kind) {
+            _addLayer(kind);
+            setSheetState(() {});
+          },
+          onDuplicate: (layer) {
+            _duplicateLayer(layer);
+            setSheetState(() {});
+          },
+          onMove: (index, delta) {
+            _moveLayer(index, delta);
+            setSheetState(() {});
+          },
+          onChanged: () {
+            setState(() {});
+            setSheetState(() {});
+          },
+        ),
+      ),
+    ),
+  );
+
+  Future<void> _showEditorSheet({
+    required String title,
+    required IconData icon,
+    required List<Widget> children,
+  }) => showModalBottomSheet<void>(
+    context: context,
+    useSafeArea: true,
+    isScrollControlled: true,
+    showDragHandle: true,
+    backgroundColor: const Color(0xFF151922),
+    builder: (sheetContext) => Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.72,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: <Widget>[
+                  Icon(icon, color: Theme.of(sheetContext).colorScheme.primary),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: Theme.of(sheetContext).textTheme.titleLarge,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: children,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  Widget _editorAction(
+    BuildContext sheetContext, {
+    required IconData icon,
+    required String title,
+    String? subtitle,
+    required VoidCallback? onTap,
+  }) => ListTile(
+    leading: Icon(icon),
+    title: Text(title),
+    subtitle: subtitle == null ? null : Text(subtitle),
+    enabled: onTap != null,
+    onTap: onTap == null
+        ? null
+        : () {
+            Navigator.of(sheetContext).pop();
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) onTap();
+            });
+          },
+  );
+
+  Future<void> _showPointsSheet() {
+    final isPath = _selectedLayer?.kind == ShapeKind.path;
+    return _showEditorSheet(
+      title: 'Points',
+      icon: Icons.polyline_outlined,
+      children: <Widget>[
+        if (!isPath)
+          const ListTile(
+            leading: Icon(Icons.touch_app_outlined),
+            title: Text('Sélectionne une couche Chemin'),
+            subtitle: Text('Les outils de points concernent les chemins.'),
+          )
+        else ...<Widget>[
+          Builder(
+            builder: (sheetContext) => SwitchListTile(
+              secondary: Icon(
+                _addPointMode ? Icons.add_circle : Icons.add_circle_outline,
+                color: _addPointMode ? const Color(0xFF3ECF8E) : null,
+              ),
+              title: const Text('Ajouter un point'),
+              subtitle: const Text('Active, puis touche un segment du chemin.'),
+              value: _addPointMode,
+              onChanged: (value) {
+                setState(() => _addPointMode = value);
+                Navigator.of(sheetContext).pop();
+              },
+            ),
+          ),
+          const ListTile(
+            leading: Icon(Icons.open_with),
+            title: Text('Déplacer un point'),
+            subtitle: Text('Glisse directement une poignée dans l’aperçu.'),
+          ),
+          const ListTile(
+            leading: Icon(Icons.delete_outline),
+            title: Text('Supprimer un point'),
+            subtitle: Text('Appui long sur sa poignée dans l’aperçu.'),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: Text(
+              _morphHint(),
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 12, color: Colors.white54),
+            ),
+          ),
+        ],
+      ],
     );
   }
+
+  Future<void> _showPreviewSheet() => _showEditorSheet(
+    title: 'Aperçu',
+    icon: Icons.center_focus_strong,
+    children: <Widget>[
+      Builder(
+        builder: (sheetContext) => SwitchListTile(
+          secondary: Icon(
+            _previewPanMode ? Icons.pan_tool : Icons.pan_tool_outlined,
+          ),
+          title: const Text('Déplacer la vue'),
+          subtitle: const Text('Glisse dans l’aperçu sans déplacer la couche.'),
+          value: _previewPanMode,
+          onChanged: (value) {
+            setState(() => _previewPanMode = value);
+            Navigator.of(sheetContext).pop();
+          },
+        ),
+      ),
+      ListTile(
+        leading: const Icon(Icons.zoom_out),
+        title: const Text('Zoom arrière'),
+        onTap: () => setState(() => _changePreviewZoom(1 / 1.2)),
+      ),
+      ListTile(
+        leading: const Icon(Icons.zoom_in),
+        title: const Text('Zoom avant'),
+        onTap: () => setState(() => _changePreviewZoom(1.2)),
+      ),
+      Builder(
+        builder: (sheetContext) => _editorAction(
+          sheetContext,
+          icon: Icons.fit_screen_outlined,
+          title: 'Ajuster à l’écran',
+          subtitle: 'Recentrer et remettre le zoom à 100 %.',
+          onTap: _fitPreview,
+        ),
+      ),
+      Builder(
+        builder: (sheetContext) => SwitchListTile(
+          secondary: const Icon(Icons.rotate_90_degrees_ccw_outlined),
+          title: const Text('Snap rotation 90°'),
+          subtitle: const Text('Aimanter la rotation aux multiples de 90°.'),
+          value: _snapRotation,
+          onChanged: (value) {
+            setState(() => _snapRotation = value);
+            Navigator.of(sheetContext).pop();
+          },
+        ),
+      ),
+    ],
+  );
 
   // ----------------------------------------------------------------- preview
 
@@ -423,49 +667,6 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
                   ),
                 ),
               ),
-              Positioned(
-                left: 8,
-                top: 8,
-                child: IconButton(
-                  tooltip: 'Ajouter un point — touche un segment du chemin',
-                  isSelected: _addPointMode,
-                  onPressed: () =>
-                      setState(() => _addPointMode = !_addPointMode),
-                  icon: const Icon(Icons.add_circle_outline, size: 20),
-                  selectedIcon: const Icon(
-                    Icons.add_circle,
-                    size: 20,
-                    color: Color(0xFF3ECF8E),
-                  ),
-                  style: IconButton.styleFrom(
-                    backgroundColor: const Color(0xCC151922),
-                    foregroundColor: Colors.white70,
-                  ),
-                ),
-              ),
-              Positioned(
-                right: 8,
-                top: 8,
-                child: IconButton(
-                  tooltip: 'Snap rotation 90°',
-                  isSelected: _snapRotation,
-                  onPressed: () =>
-                      setState(() => _snapRotation = !_snapRotation),
-                  icon: const Icon(
-                    Icons.rotate_90_degrees_ccw_outlined,
-                    size: 20,
-                  ),
-                  selectedIcon: const Icon(
-                    Icons.rotate_90_degrees_ccw,
-                    size: 20,
-                    color: Color(0xFF7DD3FC),
-                  ),
-                  style: IconButton.styleFrom(
-                    backgroundColor: const Color(0xCC151922),
-                    foregroundColor: Colors.white70,
-                  ),
-                ),
-              ),
               if (_previewPanMode)
                 Positioned.fill(
                   child: Listener(
@@ -477,11 +678,6 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
                     child: const SizedBox.expand(),
                   ),
                 ),
-              Positioned(
-                right: 8,
-                bottom: 8,
-                child: _buildPreviewZoomControls(),
-              ),
               if (layer != null && layer.visible)
                 _buildLayerButton(layer, canvasSize),
             ],
@@ -591,52 +787,6 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
     return 'Morph : les points s’interpolent entre les poses · '
         '◆ au curseur ajoute/retire une pose';
   }
-
-  Widget _buildPreviewZoomControls() => DecoratedBox(
-    decoration: BoxDecoration(
-      color: const Color(0xCC151922),
-      borderRadius: BorderRadius.circular(20),
-    ),
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        IconButton(
-          tooltip: _previewPanMode
-              ? 'Désactiver le déplacement de la vue'
-              : 'Déplacer la vue',
-          isSelected: _previewPanMode,
-          visualDensity: VisualDensity.compact,
-          onPressed: _togglePreviewPanMode,
-          icon: Icon(
-            _previewPanMode ? Icons.pan_tool : Icons.pan_tool_outlined,
-            size: 18,
-          ),
-        ),
-        IconButton(
-          tooltip: 'Zoom arrière du preview',
-          visualDensity: VisualDensity.compact,
-          onPressed: () => _changePreviewZoom(1 / 1.2),
-          icon: const Icon(Icons.zoom_out, size: 20),
-        ),
-        Text(
-          '${(_previewZoom * 100).round()}%',
-          style: const TextStyle(fontSize: 11),
-        ),
-        IconButton(
-          tooltip: 'Zoom avant du preview',
-          visualDensity: VisualDensity.compact,
-          onPressed: () => _changePreviewZoom(1.2),
-          icon: const Icon(Icons.zoom_in, size: 20),
-        ),
-        IconButton(
-          tooltip: 'Ajuster le preview',
-          visualDensity: VisualDensity.compact,
-          onPressed: _fitPreview,
-          icon: const Icon(Icons.fit_screen_outlined, size: 18),
-        ),
-      ],
-    ),
-  );
 
   /// Bouton « réglages » ancré au coin bas-gauche du rectangle de la couche.
   Widget _buildLayerButton(ShapeLayer layer, Size canvasSize) {

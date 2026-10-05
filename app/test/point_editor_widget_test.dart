@@ -268,9 +268,10 @@ void main() {
     await tester.pumpAndSettle();
     final handles = _handlePositions(tester, project, shape);
 
-    await tester.tap(
-      find.byTooltip('Ajouter un point — touche un segment du chemin'),
-    );
+    await tester.tap(find.text('Points'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ajouter un point'));
+    await tester.pumpAndSettle();
     await tester.pump();
     // Milieu du segment (0 → 1) : distance ~0.
     final midGlobal =
@@ -422,31 +423,78 @@ void main() {
         tester.widget<CustomPaint>(paintFinder).painter! as ScenePainter;
     expect(painter.previewZoom, 1);
 
-    await tester.tap(find.byTooltip('Zoom avant du preview'));
-    await tester.pump();
+    await tester.tap(find.text('Aperçu').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Zoom avant'));
+    await tester.pumpAndSettle();
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
     painter = tester.widget<CustomPaint>(paintFinder).painter! as ScenePainter;
     expect(painter.previewZoom, closeTo(1.2, 0.0001));
     expect(shape.x, initialX);
 
-    await tester.tap(find.byTooltip('Déplacer la vue'));
-    await tester.pump();
-    expect(
-      find.byTooltip('Désactiver le déplacement de la vue'),
-      findsOneWidget,
-    );
+    await tester.tap(find.text('Aperçu').first);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Déplacer la vue').last);
+    await tester.tap(find.text('Déplacer la vue'));
+    await tester.pumpAndSettle();
     final startPan = tester.getCenter(_previewCanvas());
     await tester.dragFrom(startPan, const Offset(45, 20));
     await tester.pump();
     painter = tester.widget<CustomPaint>(paintFinder).painter! as ScenePainter;
     expect(painter.previewPan, const Offset(45, 20));
 
-    await tester.tap(find.byTooltip('Désactiver le déplacement de la vue'));
-    await tester.pump();
-    await tester.tap(find.byTooltip('Ajuster le preview'));
-    await tester.pump();
+    await tester.tap(find.text('Aperçu').first);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Déplacer la vue').last);
+    await tester.tap(find.text('Déplacer la vue'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Aperçu').first);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Ajuster à l’écran'));
+    await tester.tap(find.text('Ajuster à l’écran'));
+    await tester.pumpAndSettle();
     painter = tester.widget<CustomPaint>(paintFinder).painter! as ScenePainter;
     expect(painter.previewZoom, 1);
     expect(painter.previewPan, Offset.zero);
     expect(shape.x, initialX);
+  });
+
+  testWidgets('barre éditeur : panneau Couches sélectionne et ajoute', (
+    tester,
+  ) async {
+    final project = _project();
+    final shape = _pathShape(withKeyframes: false);
+    VectorShape? saved;
+    shape.layers.first.name = 'Chemin principal';
+    await tester.pumpWidget(
+      MaterialApp(
+        home: _Host(
+          project: project,
+          shape: shape,
+          onSaved: (value) => saved = value,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Couches'), findsOneWidget);
+    expect(find.text('Points'), findsOneWidget);
+    expect(find.text('Aperçu'), findsOneWidget);
+    expect(find.byTooltip('Enregistrer'), findsOneWidget);
+
+    await tester.tap(find.text('Couches'));
+    await tester.pumpAndSettle();
+    expect(find.text('Chemin principal'), findsOneWidget);
+    await tester.tap(find.text('Rectangle'));
+    await tester.pumpAndSettle();
+    expect(find.text('Rectangle'), findsWidgets);
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Enregistrer'));
+    await tester.pumpAndSettle();
+    expect(saved, isNotNull);
+    expect(saved!.layers, hasLength(2));
+    expect(saved!.layers.last.kind, ShapeKind.rect);
   });
 }
