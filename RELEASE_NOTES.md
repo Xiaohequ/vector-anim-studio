@@ -1,31 +1,25 @@
-# Keyform Studio 0.30.0
+# Keyform Studio 0.31.0
 
-## Outils du Studio regroupés et projets unifiés
+## Barre d’outils dédiée à l’éditeur de forme
 
-- Nouvelle barre d’outils fixe en bas avec trois accès nommés : **Éléments**,
-  **Animation** et **Os**. Les actions fréquentes sont regroupées dans des
-  panneaux organisés et défilants ; l’export reste dans la barre supérieure.
-- **Éléments** : ajout/sélection, visibilité, ordre d’affichage, propriétés,
-  modification des couches, duplication, renommage et suppression ; insertion
-  d’animations et import VASF comme groupe.
-- **Animation** : presets et suppression des animations de l’élément sélectionné.
-  La pose/keyframe au curseur reste dans la barre de lecture.
-- **Os** : création/modification et liaison à l’élément sélectionné, sélection
-  des os du projet et accès rapide à leurs propriétés ; disponible sur les
-  projets historiques vectoriels comme sur les projets avec rig.
-- Suppression des anciens menus redondants « Formes », « Animations » et
-  « Calques ».
-- Les projets sont unifiés : le choix « vectoriel / squelette » n’est plus
-  demandé à la création. Le type historique reste conservé pour compatibilité,
-  sans restreindre les fonctions de rig.
-- Les projets existants conservent leurs données et rigs ; les projets peuvent
-  imbriquer des animations, dessiner/sélectionner des os, utiliser l’IK et
-  transporter les éléments liés.
-- Export VASF : un rig présent est exporté même si le projet a été créé avec le
-  type historique vectoriel.
+- L’éditeur de forme dispose désormais d’une barre d’outils fixe en bas, alignée
+  sur le Studio : **Couches**, **Points** et **Aperçu**.
+- **Couches** ouvre un panneau contenant la liste/sélection des couches, leur
+  visibilité, duplication, réordonnancement, suppression, ajout de primitives
+  et réglage de la fenêtre d’affichage.
+- **Points** centralise les outils pour les couches Chemin : mode d’ajout par
+  toucher d’un segment, déplacement direct des poignées, suppression par appui
+  long et aide contextuelle du morph. Les commandes restent disponibles dans
+  l’aperçu pour les chemins.
+- **Aperçu** regroupe le déplacement de la caméra, zoom avant/arrière,
+  recentrage/ajustement et snap de rotation à 90°.
+- La liste permanente des couches est retirée de la page principale pour donner
+  plus de place au preview ; le preview s’étend à l’espace libéré.
+- **Enregistrer** reste dans la barre supérieure ; le curseur temporel et ◆
+  restent près du preview.
 
 ### Vérifications
 
-- Tests de widgets pour les trois panneaux, les actions de sélection et le
-  maintien de l’export en haut.
+- Tests widgets pour les panneaux de l’éditeur, l’ajout de couche, le mode point
+  et les commandes de caméra.
 - Suite complète des tests et `flutter analyze` requis avant publication.
