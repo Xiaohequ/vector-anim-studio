@@ -2899,249 +2899,428 @@ class _StudioScreenState extends State<StudioScreen>
     );
   }
 
-  /// Barre d'outils en bas : menus Formes, Animations (ou Squelettes),
-  /// Calques.
+  /// Actions fréquentes regroupées en bas ; l'export occasionnel reste en haut.
   Widget _buildToolbar(AnimationProject project) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-      child: Row(
-        children: <Widget>[
-          _shapesMenu(project),
-          _animationsMenu(),
-          _layersMenu(project),
-          const Spacer(),
-          Text(
-            '${project.shapes.length} élément(s)',
-            style: const TextStyle(fontSize: 12),
-          ),
-        ],
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(8, 4, 8, 6),
+        decoration: const BoxDecoration(
+          color: Color(0xFF11141B),
+          border: Border(top: BorderSide(color: Color(0xFF282D38))),
+        ),
+        child: Row(
+          children: <Widget>[
+            _toolbarButton(
+              icon: Icons.category_outlined,
+              label: 'Éléments',
+              onPressed: () => _showElementsSheet(project),
+            ),
+            _toolbarButton(
+              icon: Icons.animation,
+              label: 'Animation',
+              onPressed: _showAnimationSheet,
+            ),
+            _toolbarButton(
+              icon: Icons.accessibility_new,
+              label: 'Os',
+              onPressed: () => _showRigSheet(project),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  // ------------------------------------------------------------------ menus
+  Widget _toolbarButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+  }) => Expanded(
+    child: TextButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 19),
+      label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+      style: TextButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+    ),
+  );
 
-  Widget _shapesMenu(AnimationProject project) {
-    return PopupMenuButton<String>(
-      tooltip: 'Formes',
-      icon: const Icon(Icons.category_outlined),
-      onSelected: (value) {
-        if (value == 'add') {
-          _addShape();
-        } else if (value == 'insert_anim') {
-          _insertAnimation();
-        } else if (value == 'import_vasf_group') {
-          _importVasfAsGroup();
-        } else if (value.startsWith('select:')) {
-          setState(() {
-            _selectedId = value.substring(7);
-            _selectedBoneId = null; // sélection exclusive
-          });
-        } else if (value == 'edit') {
-          final shape = _selected;
-          if (shape != null && !shape.isInstance) _editShape(shape);
-        } else if (value == 'rename') {
-          final shape = _selected;
-          if (shape != null) _renameShape(shape);
-        } else if (value == 'duplicate') {
-          final shape = _selected;
-          if (shape != null) _cloneShape(shape);
-        } else if (value == 'delete') {
-          final shape = _selected;
-          if (shape != null) _deleteShape(shape);
-        }
-      },
-      itemBuilder: (context) => <PopupMenuEntry<String>>[
-        const PopupMenuItem<String>(
-          value: 'add',
-          child: ListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            leading: Icon(Icons.add),
-            title: Text('Ajouter une forme…'),
-          ),
+  Future<void> _showToolSheet({
+    required String title,
+    required IconData icon,
+    required List<Widget> children,
+  }) => showModalBottomSheet<void>(
+    context: context,
+    useSafeArea: true,
+    isScrollControlled: true,
+    showDragHandle: true,
+    backgroundColor: const Color(0xFF151922),
+    builder: (sheetContext) => Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.72,
         ),
-        PopupMenuItem<String>(
-          value: 'insert_anim',
-          child: ListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.movie_outlined),
-            title: const Text('Insérer une animation…'),
-          ),
-        ),
-        const PopupMenuItem<String>(
-          value: 'import_vasf_group',
-          child: ListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            leading: Icon(Icons.file_open_outlined),
-            title: Text('Importer un VASF comme groupe…'),
-          ),
-        ),
-        const PopupMenuDivider(),
-        if (project.shapes.isEmpty)
-          const PopupMenuItem<String>(
-            enabled: false,
-            value: 'none',
-            child: Text('Aucune forme'),
-          ),
-        for (final shape in project.shapes.reversed)
-          PopupMenuItem<String>(
-            value: 'select:${shape.id}',
-            child: ListTile(
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(
-                shape.id == _selectedId
-                    ? Icons.check_circle
-                    : Icons.radio_button_unchecked,
-                size: 18,
-              ),
-              title: Text(shape.name),
-              subtitle: Text(
-                '${(shape.durationMs / 1000).toStringAsFixed(1)} s · '
-                '${shape.layers.length} couche(s)',
-                style: const TextStyle(fontSize: 11),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: <Widget>[
+                  Icon(icon, color: Theme.of(sheetContext).colorScheme.primary),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: Theme.of(sheetContext).textTheme.titleLarge,
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
-        const PopupMenuDivider(),
-        PopupMenuItem<String>(
-          value: 'edit',
-          enabled: _selected != null && !_selected!.isInstance,
-          child: const Text('Modifier les couches…'),
-        ),
-        PopupMenuItem<String>(
-          value: 'rename',
-          enabled: _selected != null,
-          child: const Text('Renommer…'),
-        ),
-        PopupMenuItem<String>(
-          value: 'duplicate',
-          enabled: _selected != null,
-          child: const Text('Dupliquer (avec ses keyframes)'),
-        ),
-        PopupMenuItem<String>(
-          value: 'delete',
-          enabled: _selected != null,
-          child: const Text('Supprimer'),
-        ),
-      ],
-    );
-  }
-
-  Widget _animationsMenu() {
-    final shape = _selected;
-    return PopupMenuButton<String>(
-      tooltip: 'Animations',
-      enabled: shape != null,
-      icon: const Icon(Icons.animation),
-      onSelected: (value) {
-        if (value == 'clear') {
-          _clearAnimations();
-          return;
-        }
-        if (value.startsWith('preset:')) {
-          final preset = AnimationPreset.values.firstWhere(
-            (p) => p.name == value.substring(7),
-            orElse: () => AnimationPreset.apparition,
-          );
-          _applyPreset(preset);
-          return;
-        }
-        if (value == 'keyframe') {
-          _toggleKeyframe();
-        }
-      },
-      itemBuilder: (context) => <PopupMenuEntry<String>>[
-        const PopupMenuItem<String>(
-          enabled: false,
-          value: 'header',
-          child: Text('Animations rapides'),
-        ),
-        for (final preset in AnimationPreset.values)
-          PopupMenuItem<String>(
-            value: 'preset:${preset.name}',
-            child: ListTile(
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(preset.icon, size: 20),
-              title: Text(preset.label),
-              subtitle: Text(
-                preset.description,
-                style: const TextStyle(fontSize: 11),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: children,
+                ),
               ),
             ),
-          ),
-        const PopupMenuDivider(),
-        const PopupMenuItem<String>(
-          value: 'keyframe',
-          child: Text('Ajouter/retirer la keyframe au curseur'),
+          ],
         ),
-        const PopupMenuDivider(),
-        const PopupMenuItem<String>(
-          value: 'clear',
-          child: Text('Effacer toutes les animations'),
-        ),
-      ],
-    );
-  }
+      ),
+    ),
+  );
 
-  /// Menu « Squelettes » (projet squelette) : création d'os, liaison des
-  /// pièces, sélection d'os, propriétés.
-  Widget _layersMenu(AnimationProject project) {
-    return PopupMenuButton<String>(
-      tooltip: 'Calques',
-      icon: const Icon(Icons.layers_outlined),
-      onSelected: (value) {
-        if (value.startsWith('vis:')) {
-          final shape = project.shapeById(value.substring(4));
-          if (shape != null) _toggleVisibility(shape);
-        } else if (value == 'up' || value == 'down') {
-          final shape = _selected;
-          if (shape != null) _moveShape(shape, value == 'up' ? 1 : -1);
-        } else if (value == 'delete') {
-          final shape = _selected;
-          if (shape != null) _deleteShape(shape);
-        }
-      },
-      itemBuilder: (context) => <PopupMenuEntry<String>>[
-        const PopupMenuItem<String>(
-          enabled: false,
-          value: 'header',
-          child: Text('Ordre des calques (avant → arrière)'),
+  Widget _toolSection(String title) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+    child: Text(
+      title.toUpperCase(),
+      style: const TextStyle(
+        fontSize: 11,
+        letterSpacing: 1.1,
+        color: Colors.white54,
+        fontWeight: FontWeight.w600,
+      ),
+    ),
+  );
+
+  Widget _toolAction(
+    BuildContext sheetContext, {
+    required IconData icon,
+    required String title,
+    String? subtitle,
+    required VoidCallback? onTap,
+    bool destructive = false,
+  }) => ListTile(
+    leading: Icon(icon, color: destructive ? Colors.redAccent : null),
+    title: Text(title),
+    subtitle: subtitle == null ? null : Text(subtitle),
+    enabled: onTap != null,
+    onTap: onTap == null
+        ? null
+        : () {
+            Navigator.of(sheetContext).pop();
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) onTap();
+            });
+          },
+  );
+
+  Future<void> _showElementsSheet(AnimationProject project) => _showToolSheet(
+    title: 'Éléments',
+    icon: Icons.category_outlined,
+    children: <Widget>[
+      _toolSection('Ajouter'),
+      Builder(
+        builder: (sheetContext) => _toolAction(
+          sheetContext,
+          icon: Icons.add,
+          title: 'Ajouter une forme…',
+          onTap: _addShape,
         ),
-        for (final shape in project.shapes.reversed)
-          PopupMenuItem<String>(
-            value: 'vis:${shape.id}',
-            child: ListTile(
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(
+      ),
+      Builder(
+        builder: (sheetContext) => _toolAction(
+          sheetContext,
+          icon: Icons.movie_outlined,
+          title: 'Insérer une animation…',
+          onTap: _insertAnimation,
+        ),
+      ),
+      Builder(
+        builder: (sheetContext) => _toolAction(
+          sheetContext,
+          icon: Icons.file_open_outlined,
+          title: 'Importer un VASF comme groupe…',
+          onTap: _importVasfAsGroup,
+        ),
+      ),
+      _toolSection('Dans le projet · ${project.shapes.length} éléments'),
+      if (project.shapes.isEmpty)
+        const ListTile(
+          leading: Icon(Icons.layers_clear_outlined),
+          title: Text('Aucun élément pour le moment'),
+        ),
+      for (final shape in project.shapes.reversed)
+        Builder(
+          builder: (sheetContext) => ListTile(
+            leading: Icon(
+              shape.id == _selectedId
+                  ? Icons.radio_button_checked
+                  : Icons.radio_button_unchecked,
+              color: shape.visible ? null : Colors.white38,
+            ),
+            title: Text(
+              shape.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: Text(
+              '${shape.visible ? 'Visible' : 'Masqué'} · '
+              '${(shape.durationMs / 1000).toStringAsFixed(1)} s · '
+              '${shape.layers.length} couche(s)',
+            ),
+            trailing: IconButton(
+              tooltip: shape.visible ? 'Masquer' : 'Afficher',
+              icon: Icon(
                 shape.visible ? Icons.visibility : Icons.visibility_off,
-                size: 18,
               ),
-              title: Text(shape.name),
+              onPressed: () => _toggleVisibility(shape),
+            ),
+            onTap: () {
+              Navigator.of(sheetContext).pop();
+              setState(() {
+                _selectedId = shape.id;
+                _selectedBoneId = null;
+              });
+            },
+          ),
+        ),
+      if (_selected != null) ...<Widget>[
+        _toolSection('Élément sélectionné · ${_selected!.name}'),
+        Builder(
+          builder: (sheetContext) => _toolAction(
+            sheetContext,
+            icon: Icons.tune,
+            title: 'Propriétés',
+            onTap: () {
+              Navigator.of(sheetContext).pop();
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) _showPropertiesSheet();
+              });
+            },
+          ),
+        ),
+        if (!_selected!.isInstance)
+          Builder(
+            builder: (sheetContext) => _toolAction(
+              sheetContext,
+              icon: Icons.edit_outlined,
+              title: 'Modifier les couches',
+              onTap: () => _editShape(_selected!),
             ),
           ),
-        const PopupMenuDivider(),
-        PopupMenuItem<String>(
-          value: 'up',
-          enabled: _selected != null,
-          child: const Text('Monter la forme sélectionnée'),
+        Builder(
+          builder: (sheetContext) => _toolAction(
+            sheetContext,
+            icon: Icons.drive_file_rename_outline,
+            title: 'Renommer',
+            onTap: () => _renameShape(_selected!),
+          ),
         ),
-        PopupMenuItem<String>(
-          value: 'down',
-          enabled: _selected != null,
-          child: const Text('Descendre la forme sélectionnée'),
+        Builder(
+          builder: (sheetContext) => _toolAction(
+            sheetContext,
+            icon: Icons.content_copy,
+            title: 'Dupliquer avec les keyframes',
+            onTap: () => _cloneShape(_selected!),
+          ),
         ),
-        PopupMenuItem<String>(
-          value: 'delete',
-          enabled: _selected != null,
-          child: const Text('Supprimer la forme sélectionnée'),
+        Builder(
+          builder: (sheetContext) => _toolAction(
+            sheetContext,
+            icon: Icons.vertical_align_top,
+            title: 'Monter dans l’ordre d’affichage',
+            onTap: () => _moveShape(_selected!, 1),
+          ),
+        ),
+        Builder(
+          builder: (sheetContext) => _toolAction(
+            sheetContext,
+            icon: Icons.vertical_align_bottom,
+            title: 'Descendre dans l’ordre d’affichage',
+            onTap: () => _moveShape(_selected!, -1),
+          ),
+        ),
+        Builder(
+          builder: (sheetContext) => _toolAction(
+            sheetContext,
+            icon: Icons.delete_outline,
+            title: 'Supprimer',
+            destructive: true,
+            onTap: () => _deleteShape(_selected!),
+          ),
         ),
       ],
+    ],
+  );
+
+  Future<void> _showAnimationSheet() {
+    final shape = _selected;
+    return _showToolSheet(
+      title: 'Animation',
+      icon: Icons.animation,
+      children: <Widget>[
+        if (shape == null)
+          const ListTile(
+            leading: Icon(Icons.touch_app_outlined),
+            title: Text('Sélectionne un élément pour l’animer'),
+          )
+        else ...<Widget>[
+          _toolSection('Animations rapides · ${shape.name}'),
+          for (final preset in AnimationPreset.values)
+            Builder(
+              builder: (sheetContext) => _toolAction(
+                sheetContext,
+                icon: preset.icon,
+                title: preset.label,
+                subtitle: preset.description,
+                onTap: () => _applyPreset(preset),
+              ),
+            ),
+          _toolSection('Autres actions'),
+          Builder(
+            builder: (sheetContext) => _toolAction(
+              sheetContext,
+              icon: Icons.delete_sweep_outlined,
+              title: 'Effacer les animations de cet élément',
+              onTap: _clearAnimations,
+              destructive: true,
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: Text(
+              'La pose au curseur se gère avec ◆ dans la barre de lecture.',
+              style: TextStyle(color: Colors.white54, fontSize: 12),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Future<void> _showRigSheet(AnimationProject project) {
+    final rig = project.skeleton;
+    final shape = _selected;
+    final bone = _selectedBone;
+    final children = <Widget>[
+      _toolSection('Élément sélectionné'),
+      if (shape == null)
+        const ListTile(
+          leading: Icon(Icons.touch_app_outlined),
+          title: Text('Sélectionne un élément pour créer ou gérer son os'),
+        )
+      else ...<Widget>[
+        ListTile(
+          leading: Icon(
+            rig?.isAttached(shape.id) == true ? Icons.link : Icons.link_off,
+          ),
+          title: Text(shape.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+          subtitle: Text(_bindingNote(shape) ?? 'Aucun os associé'),
+        ),
+        Builder(
+          builder: (sheetContext) => _toolAction(
+            sheetContext,
+            icon: Icons.add_link,
+            title: rig?.isAttached(shape.id) == true
+                ? 'Modifier l’os de cet élément'
+                : 'Créer et lier un os',
+            subtitle: 'Ouvrir l’éditeur d’os',
+            onTap: () => _editShapeBone(shape),
+          ),
+        ),
+        if (rig?.isAttached(shape.id) == true)
+          Builder(
+            builder: (sheetContext) => _toolAction(
+              sheetContext,
+              icon: Icons.link_off,
+              title: 'Délier et supprimer cet os',
+              subtitle: 'L’élément redevient libre',
+              destructive: true,
+              onTap: () => _deleteShapeBone(shape),
+            ),
+          ),
+      ],
+      _toolSection('Os du projet · ${rig?.bones.length ?? 0}'),
+      if (rig == null || rig.bones.isEmpty)
+        const ListTile(
+          leading: Icon(Icons.accessibility_new_outlined),
+          title: Text('Aucun os créé'),
+          subtitle: Text('Choisis un élément pour commencer.'),
+        ),
+      if (rig != null)
+        for (final item in rig.bones)
+          Builder(
+            builder: (sheetContext) => ListTile(
+              leading: Icon(
+                item.id == _selectedBoneId
+                    ? Icons.radio_button_checked
+                    : Icons.accessibility_new,
+                color: item.id == _selectedBoneId
+                    ? const Color(0xFF3ECF8E)
+                    : null,
+              ),
+              title: Text(item.name),
+              subtitle: Text(item.parentId == null ? 'Os racine' : 'Os enfant'),
+              trailing: IconButton(
+                tooltip: 'Propriétés de ${item.name}',
+                icon: const Icon(Icons.tune),
+                onPressed: () {
+                  Navigator.of(sheetContext).pop();
+                  setState(() {
+                    _selectedBoneId = item.id;
+                    _selectedId = null;
+                  });
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) _showBoneSheet();
+                  });
+                },
+              ),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                setState(() {
+                  _selectedBoneId = item.id;
+                  _selectedId = null;
+                });
+              },
+            ),
+          ),
+      if (bone != null)
+        Builder(
+          builder: (sheetContext) => _toolAction(
+            sheetContext,
+            icon: Icons.tune,
+            title: 'Propriétés de l’os sélectionné · ${bone.name}',
+            onTap: () {
+              Navigator.of(sheetContext).pop();
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) _showBoneSheet();
+              });
+            },
+          ),
+        ),
+    ];
+    return _showToolSheet(
+      title: 'Os',
+      icon: Icons.accessibility_new,
+      children: children,
     );
   }
 
