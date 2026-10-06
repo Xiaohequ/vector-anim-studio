@@ -1,25 +1,18 @@
-# Keyform Studio 0.31.0
+# Keyform Studio 0.32.0
 
-## Barre d’outils dédiée à l’éditeur de forme
+## Retour d’usage : éditeur de forme
 
-- L’éditeur de forme dispose désormais d’une barre d’outils fixe en bas, alignée
-  sur le Studio : **Couches**, **Points** et **Aperçu**.
-- **Couches** ouvre un panneau contenant la liste/sélection des couches, leur
-  visibilité, duplication, réordonnancement, suppression, ajout de primitives
-  et réglage de la fenêtre d’affichage.
-- **Points** centralise les outils pour les couches Chemin : mode d’ajout par
-  toucher d’un segment, déplacement direct des poignées, suppression par appui
-  long et aide contextuelle du morph. Les commandes restent disponibles dans
-  l’aperçu pour les chemins.
-- **Aperçu** regroupe le déplacement de la caméra, zoom avant/arrière,
-  recentrage/ajustement et snap de rotation à 90°.
-- La liste permanente des couches est retirée de la page principale pour donner
-  plus de place au preview ; le preview s’étend à l’espace libéré.
-- **Enregistrer** reste dans la barre supérieure ; le curseur temporel et ◆
-  restent près du preview.
+- Les couches/« formes » reviennent dans l’écran principal de l’éditeur, sous le
+  preview ; elles ne sont plus cachées dans une feuille.
+- Le réglage de fenêtre d’affichage est retiré de l’éditeur.
+- Les lignes de couche n’affichent plus le type, la taille, la position ni le
+  bouton de visibilité ; elles proposent **Propriétés**, duplication et ordre.
+- Le bouton inférieur **Couches** devient **Formes** et ouvre une grille de
+  primitives à **3 colonnes**.
+- **Points** et **Aperçu** restent dans la barre basse. Enregistrer reste en
+  haut ; le curseur temporel et la keyframe restent près du preview.
 
 ### Vérifications
 
-- Tests widgets pour les panneaux de l’éditeur, l’ajout de couche, le mode point
-  et les commandes de caméra.
+- Test widget : grille 3 colonnes et ajout d’une primitive.
 - Suite complète des tests et `flutter analyze` requis avant publication.

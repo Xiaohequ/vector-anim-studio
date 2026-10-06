@@ -2,7 +2,7 @@ name: vector_anim_studio
 description: "Keyform Studio — studio d'animation 2D mobile : formes, couches, keyframes, rig par os, export MP4/GIF."
 publish_to: 'none'
 
-version: 0.31.0+1
+version: 0.32.0+1
 
 environment:
   sdk: ^3.12.0
