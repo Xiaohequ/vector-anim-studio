@@ -1,18 +1,13 @@
-# Keyform Studio 0.32.0
+# Keyform Studio 0.32.1
 
-## Retour d’usage : éditeur de forme
+## Correction des icônes de réordonnancement des formes
 
-- Les couches/« formes » reviennent dans l’écran principal de l’éditeur, sous le
-  preview ; elles ne sont plus cachées dans une feuille.
-- Le réglage de fenêtre d’affichage est retiré de l’éditeur.
-- Les lignes de couche n’affichent plus le type, la taille, la position ni le
-  bouton de visibilité ; elles proposent **Propriétés**, duplication et ordre.
-- Le bouton inférieur **Couches** devient **Formes** et ouvre une grille de
-  primitives à **3 colonnes**.
-- **Points** et **Aperçu** restent dans la barre basse. Enregistrer reste en
-  haut ; le curseur temporel et la keyframe restent près du preview.
+- Dans l’éditeur de forme, les icônes des actions **Monter** et **Descendre**
+  sont interverties, conformément à la direction réelle du déplacement.
+- Les commandes d’ordre elles-mêmes et les autres fonctions de l’éditeur restent
+  inchangées.
 
 ### Vérifications
 
-- Test widget : grille 3 colonnes et ajout d’une primitive.
+- Test widget vérifiant les deux icônes à côté de leurs actions respectives.
 - Suite complète des tests et `flutter analyze` requis avant publication.

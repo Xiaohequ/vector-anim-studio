@@ -460,6 +460,41 @@ void main() {
     expect(shape.x, initialX);
   });
 
+  testWidgets('icônes Monter/Descendre reflètent le sens demandé', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: _Host(
+          project: _project(),
+          shape: _pathShape(withKeyframes: false),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final monterButton = find
+        .ancestor(
+          of: find.byTooltip('Monter'),
+          matching: find.byType(IconButton),
+        )
+        .first;
+    final descendreButton = find
+        .ancestor(
+          of: find.byTooltip('Descendre'),
+          matching: find.byType(IconButton),
+        )
+        .first;
+    expect(
+      (tester.widget<IconButton>(monterButton).icon as Icon).icon,
+      Icons.arrow_downward,
+    );
+    expect(
+      (tester.widget<IconButton>(descendreButton).icon as Icon).icon,
+      Icons.arrow_upward,
+    );
+  });
+
   testWidgets('barre éditeur : Formes ouvre une grille de 3 et ajoute', (
     tester,
   ) async {

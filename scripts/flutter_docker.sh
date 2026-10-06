@@ -2,12 +2,23 @@
 # Lance la CLI Flutter dans le conteneur officiel cirruslabs, monté sur le projet.
 # Usage: scripts/flutter_docker.sh create --platforms=android,ios .
 #        scripts/flutter_docker.sh pub get
-#        scripts/flutter_docker.sh build apk --debug
+#        Les builds APK doivent être lancés par GitHub Actions.
 # L'image n'a pas d'ENTRYPOINT (Cmd: /bin/bash) : « flutter » est préfixé
 # automatiquement. Passer « flutter » en premier argument reste accepté
 # (idempotent). Pour autre chose que flutter (dart, bash…), lancer
 # docker run directement.
 set -euo pipefail
+
+# Les builds Android sont réservés à GitHub Actions : le serveur Nanobot
+# ne doit jamais lancer de build APK, même dans le conteneur Flutter.
+ARGS=("$@")
+if [ "${ARGS[0]:-}" = "flutter" ]; then
+  ARGS=("${ARGS[@]:1}")
+fi
+if [ "${ARGS[0]:-}" = "build" ] && [ "${ARGS[1]:-}" = "apk" ]; then
+  printf '%s\n' 'Build APK interdit sur le serveur Nanobot. Utilisez GitHub Actions.' >&2
+  exit 1
+fi
 
 IMAGE="${FLUTTER_IMAGE:-ghcr.io/cirruslabs/flutter:stable}"
 PROJECT_DIR="${PROJECT_DIR:-/root/.nanobot/workspace/vector_anim_studio}"
