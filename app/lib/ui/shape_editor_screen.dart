@@ -285,17 +285,6 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
     _messageOverlay = null;
   }
 
-  /// Bornée de la fenêtre d'affichage éditable : la fin du dernier AUTRE
-  /// segment +10 s (le projet s'étend tout seul) — jamais sous la fin du
-  /// brouillon pour ne pas casser le RangeSlider.
-  int _windowMaxMs() {
-    var other = 0;
-    for (final shape in widget.project.shapes) {
-      if (shape.id != _draft.id && shape.endMs > other) other = shape.endMs;
-    }
-    return math.max(other + 10000, _draft.endMs);
-  }
-
   AnimationProject get _preview {
     final project = AnimationProject(
       name: _draft.name,
@@ -330,7 +319,7 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
       ),
       body: Column(
         children: <Widget>[
-          Expanded(child: _buildPreview()),
+          Expanded(flex: 5, child: _buildPreview()),
           _buildPlayhead(),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
@@ -340,6 +329,17 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
                 labelText: 'Nom de la forme',
                 isDense: true,
               ),
+            ),
+          ),
+          Expanded(
+            flex: 4,
+            child: LayerPanel(
+              shape: _draft,
+              selectedLayer: _selectedLayer,
+              onSelect: (value) => setState(() => _selectedLayerId = value.id),
+              onDuplicate: _duplicateLayer,
+              onMove: _moveLayer,
+              onProperties: _showLayerSheet,
             ),
           ),
         ],
@@ -361,9 +361,9 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
       child: Row(
         children: <Widget>[
           _editorToolButton(
-            icon: Icons.layers_outlined,
-            label: 'Couches',
-            onPressed: _showLayersSheet,
+            icon: Icons.category_outlined,
+            label: 'Formes',
+            onPressed: _showShapesSheet,
           ),
           _editorToolButton(
             icon: Icons.polyline_outlined,
@@ -396,39 +396,58 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
     ),
   );
 
-  Future<void> _showLayersSheet() => showModalBottomSheet<void>(
+  Future<void> _showShapesSheet() => showModalBottomSheet<void>(
     context: context,
     useSafeArea: true,
-    isScrollControlled: true,
     showDragHandle: true,
     backgroundColor: const Color(0xFF151922),
-    builder: (sheetContext) => StatefulBuilder(
-      builder: (context, setSheetState) => SizedBox(
-        height: MediaQuery.sizeOf(sheetContext).height * 0.72,
-        child: LayerPanel(
-          shape: _draft,
-          durationMs: _windowMaxMs(),
-          selectedLayer: _selectedLayer,
-          onSelect: (value) {
-            setState(() => _selectedLayerId = value.id);
-            setSheetState(() {});
-          },
-          onAdd: (kind) {
-            _addLayer(kind);
-            setSheetState(() {});
-          },
-          onDuplicate: (layer) {
-            _duplicateLayer(layer);
-            setSheetState(() {});
-          },
-          onMove: (index, delta) {
-            _moveLayer(index, delta);
-            setSheetState(() {});
-          },
-          onChanged: () {
-            setState(() {});
-            setSheetState(() {});
-          },
+    builder: (sheetContext) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              Text(
+                'Ajouter une forme',
+                style: Theme.of(sheetContext).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 12),
+              GridView.count(
+                crossAxisCount: 3,
+                shrinkWrap: true,
+                mainAxisSpacing: 8,
+                crossAxisSpacing: 8,
+                childAspectRatio: 1.15,
+                physics: const NeverScrollableScrollPhysics(),
+                children: <Widget>[
+                  for (final kind in ShapeKind.values)
+                    OutlinedButton(
+                      onPressed: () {
+                        Navigator.of(sheetContext).pop();
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (mounted) _addLayer(kind);
+                        });
+                      },
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: <Widget>[
+                          Icon(shapeKindIcon(kind), size: 24),
+                          const SizedBox(height: 4),
+                          Text(
+                            shapeKindLabel(kind),
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     ),
@@ -1123,114 +1142,45 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
   }
 }
 
-/// Durée minimale de la fenêtre d'affichage d'une forme (ms).
-class TimelineViewMinSpan {
-  const TimelineViewMinSpan._();
-
-  static const int ms = 100;
-}
-
-/// Liste des couches + fenêtre d'affichage de la forme. Les réglages fins de
-/// la couche sélectionnée sont dans la bottom sheet (`LayerPropertiesSheet`),
-/// ouverte depuis le bouton ⚙ du preview.
+/// Liste compacte des couches affichées directement dans l’éditeur de forme.
 class LayerPanel extends StatelessWidget {
   const LayerPanel({
     super.key,
     required this.shape,
-    required this.durationMs,
     required this.selectedLayer,
     required this.onSelect,
-    required this.onAdd,
     required this.onDuplicate,
     required this.onMove,
-    required this.onChanged,
+    required this.onProperties,
   });
 
   final VectorShape shape;
-  final int durationMs;
   final ShapeLayer? selectedLayer;
   final ValueChanged<ShapeLayer> onSelect;
-  final ValueChanged<ShapeKind> onAdd;
   final ValueChanged<ShapeLayer> onDuplicate;
   final void Function(int index, int delta) onMove;
-  final VoidCallback onChanged;
+  final ValueChanged<ShapeLayer> onProperties;
 
   @override
-  Widget build(BuildContext context) {
-    final layer = selectedLayer;
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
-      children: <Widget>[
-        Row(
-          children: <Widget>[
-            const Expanded(
-              child: Text(
-                'Couches (layers)',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
+  Widget build(BuildContext context) => ListView(
+    padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
+    children: <Widget>[
+      Row(
+        children: <Widget>[
+          const Expanded(
+            child: Text(
+              'Formes',
+              style: TextStyle(fontWeight: FontWeight.bold),
             ),
-            Text(
-              '${shape.layers.length}',
-              style: const TextStyle(fontSize: 12),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        for (var index = 0; index < shape.layers.length; index++)
-          _buildLayerTile(context, shape.layers[index], index),
-        const SizedBox(height: 8),
-        const Text('Ajouter une couche', style: TextStyle(fontSize: 12)),
-        const SizedBox(height: 6),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: <Widget>[
-            for (final kind in ShapeKind.values)
-              OutlinedButton.icon(
-                onPressed: () => onAdd(kind),
-                icon: Icon(shapeKindIcon(kind), size: 18),
-                label: Text(shapeKindLabel(kind)),
-              ),
-          ],
-        ),
-        if (layer != null) ...<Widget>[
-          const Divider(height: 28),
-          const Text(
-            'Fenêtre d’affichage (timeline)',
-            style: TextStyle(fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 4),
-          Text(
-            'Début ${(shape.startMs / 1000).toStringAsFixed(2)} s · '
-            'Fin ${(shape.endMs / 1000).toStringAsFixed(2)} s',
-            style: const TextStyle(fontSize: 12, color: Colors.white70),
-          ),
-          RangeSlider(
-            min: 0,
-            max: durationMs.toDouble(),
-            divisions: math.max(1, durationMs ~/ 50),
-            values: RangeValues(
-              shape.startMs.toDouble().clamp(0, durationMs.toDouble()),
-              shape.endMs.toDouble().clamp(0, durationMs.toDouble()),
-            ),
-            onChanged: (values) {
-              final start = values.start
-                  .round()
-                  .clamp(0, math.max(0, durationMs - TimelineViewMinSpan.ms))
-                  .toInt();
-              final end = values.end
-                  .round()
-                  .clamp(start + TimelineViewMinSpan.ms, durationMs)
-                  .toInt();
-              shape.startMs = start;
-              shape.endMs = end;
-              onChanged();
-            },
-          ),
+          Text('${shape.layers.length}', style: const TextStyle(fontSize: 12)),
         ],
-      ],
-    );
-  }
+      ),
+      const SizedBox(height: 6),
+      for (var index = 0; index < shape.layers.length; index++)
+        _buildLayerTile(context, shape.layers[index], index),
+    ],
+  );
 
   Widget _buildLayerTile(BuildContext context, ShapeLayer layer, int index) {
     final selected = layer.id == selectedLayer?.id;
@@ -1242,30 +1192,20 @@ class LayerPanel extends StatelessWidget {
         onTap: () => onSelect(layer),
         leading: Icon(shapeKindIcon(layer.kind)),
         title: Text(layer.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-        subtitle: Text(
-          '${layer.width.round()} × ${layer.height.round()} · '
-          '${layer.x.round()}, ${layer.y.round()}',
-          style: const TextStyle(fontSize: 11),
-        ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
+            IconButton(
+              tooltip: 'Propriétés',
+              iconSize: 18,
+              onPressed: () => onProperties(layer),
+              icon: const Icon(Icons.tune),
+            ),
             IconButton(
               tooltip: 'Dupliquer',
               iconSize: 18,
               onPressed: () => onDuplicate(layer),
               icon: const Icon(Icons.copy),
-            ),
-            IconButton(
-              tooltip: layer.visible ? 'Masquer' : 'Afficher',
-              iconSize: 18,
-              onPressed: () {
-                layer.visible = !layer.visible;
-                onChanged();
-              },
-              icon: Icon(
-                layer.visible ? Icons.visibility : Icons.visibility_off,
-              ),
             ),
             IconButton(
               tooltip: 'Monter',

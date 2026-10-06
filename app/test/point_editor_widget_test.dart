@@ -460,13 +460,12 @@ void main() {
     expect(shape.x, initialX);
   });
 
-  testWidgets('barre éditeur : panneau Couches sélectionne et ajoute', (
+  testWidgets('barre éditeur : Formes ouvre une grille de 3 et ajoute', (
     tester,
   ) async {
     final project = _project();
     final shape = _pathShape(withKeyframes: false);
     VectorShape? saved;
-    shape.layers.first.name = 'Chemin principal';
     await tester.pumpWidget(
       MaterialApp(
         home: _Host(
@@ -478,19 +477,29 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Couches'), findsOneWidget);
+    expect(find.text('Formes'), findsNWidgets(2));
     expect(find.text('Points'), findsOneWidget);
     expect(find.text('Aperçu'), findsOneWidget);
     expect(find.byTooltip('Enregistrer'), findsOneWidget);
+    expect(find.textContaining('Couches (layers)'), findsNothing);
+    expect(find.textContaining('Fenêtre d’affichage'), findsNothing);
 
-    await tester.tap(find.text('Couches'));
+    await tester.tap(find.text('Formes').last);
     await tester.pumpAndSettle();
-    expect(find.text('Chemin principal'), findsOneWidget);
-    await tester.tap(find.text('Rectangle'));
+    expect(find.text('Ajouter une forme'), findsOneWidget);
+    final grid = find.byWidgetPredicate(
+      (widget) =>
+          widget is GridView &&
+          widget.semanticChildCount == ShapeKind.values.length,
+    );
+    expect(grid, findsOneWidget);
+    await tester.tap(find.text('Rectangle').last);
     await tester.pumpAndSettle();
-    expect(find.text('Rectangle'), findsWidgets);
-    await tester.tapAt(const Offset(10, 10));
-    await tester.pumpAndSettle();
+    expect(
+      shape.layers,
+      hasLength(1),
+      reason: 'l’éditeur modifie un brouillon',
+    );
     await tester.tap(find.byTooltip('Enregistrer'));
     await tester.pumpAndSettle();
     expect(saved, isNotNull);
