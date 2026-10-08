@@ -144,7 +144,12 @@ void main() {
       sourceRig.bindShape(sourcePiece.id, sourceRig.bones.first.id);
 
       final hostRig = SkeletonRig();
-      final root = RigBone(name: 'Porteur', offsetX: 360, offsetY: 640, length: 100);
+      final root = RigBone(
+        name: 'Porteur',
+        offsetX: 360,
+        offsetY: 640,
+        length: 100,
+      );
       final child = RigBone(
         name: 'Os ajouté',
         parentId: root.id,
@@ -223,7 +228,12 @@ void main() {
       );
 
       final hostRig = SkeletonRig();
-      final bone = RigBone(name: 'Os hôte', offsetX: 360, offsetY: 640, length: 80);
+      final bone = RigBone(
+        name: 'Os hôte',
+        offsetX: 360,
+        offsetY: 640,
+        length: 80,
+      );
       hostRig.addBone(bone);
       final host = _project(rig: hostRig);
       final group = VectorShape(
@@ -589,4 +599,37 @@ void main() {
     );
     expect(mid.x - start.x, closeTo(100, 8));
   });
+
+  testWidgets(
+    'l’ordre z explicite des formes prévaut sur l’ordre de la liste',
+    (tester) async {
+      final project = AnimationProject(name: 'Ordre', width: 100, height: 100);
+      final red = VectorShape(name: 'Rouge', x: 50, y: 50, zIndex: 0);
+      red.layers.add(
+        ShapeLayer(
+          name: 'Rouge',
+          kind: ShapeKind.rect,
+          width: 60,
+          height: 60,
+          colorValue: 0xFFFF0000,
+        ),
+      );
+      final blue = VectorShape(name: 'Bleu', x: 50, y: 50, zIndex: 2);
+      blue.layers.add(
+        ShapeLayer(
+          name: 'Bleu',
+          kind: ShapeKind.rect,
+          width: 30,
+          height: 30,
+          colorValue: 0xFF0000FF,
+        ),
+      );
+      project.shapes.addAll([blue, red]);
+
+      final pixels = await _render(tester, project, 0, w: 100, h: 100);
+      final center = (50 * 100 + 50) * 4;
+      expect(pixels[center], 0);
+      expect(pixels[center + 2], 255);
+    },
+  );
 }

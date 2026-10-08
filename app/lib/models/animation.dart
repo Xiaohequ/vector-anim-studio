@@ -356,6 +356,11 @@ class ShapeLayer {
     this.visible = true,
     this.flipH = false,
     this.flipV = false,
+    this.cornerRadius = -1,
+    this.roundTopLeft = true,
+    this.roundTopRight = true,
+    this.roundBottomRight = true,
+    this.roundBottomLeft = true,
   }) : id = id ?? generateId('layer'),
        // Normalisé en liste modifiable : des points passés const (littéraux
        // par défaut de l'éditeur) doivent accepter l'insertion/suppression
@@ -386,6 +391,14 @@ class ShapeLayer {
   /// contenu d'origine, points et nuages de morph restent donc intacts.
   bool flipH;
   bool flipV;
+
+  /// Rayon commun des coins (rectangles uniquement). -1 signifie le rayon
+  /// automatique historique ; zéro explicite produit des coins carrés.
+  double cornerRadius;
+  bool roundTopLeft;
+  bool roundTopRight;
+  bool roundBottomRight;
+  bool roundBottomLeft;
 
   double baseOf(LayerProperty property) => switch (property) {
     LayerProperty.x => x,
@@ -437,6 +450,11 @@ class ShapeLayer {
     visible: visible,
     flipH: flipH,
     flipV: flipV,
+    cornerRadius: cornerRadius,
+    roundTopLeft: roundTopLeft,
+    roundTopRight: roundTopRight,
+    roundBottomRight: roundBottomRight,
+    roundBottomLeft: roundBottomLeft,
   );
 
   Map<String, Object?> toJson() => {
@@ -457,6 +475,11 @@ class ShapeLayer {
     'visible': visible,
     'flipH': flipH,
     'flipV': flipV,
+    'cornerRadius': cornerRadius,
+    'roundTopLeft': roundTopLeft,
+    'roundTopRight': roundTopRight,
+    'roundBottomRight': roundBottomRight,
+    'roundBottomLeft': roundBottomLeft,
   };
 
   factory ShapeLayer.fromJson(Map<String, Object?> json) => ShapeLayer(
@@ -483,6 +506,11 @@ class ShapeLayer {
     visible: json['visible'] as bool? ?? true,
     flipH: json['flipH'] as bool? ?? false,
     flipV: json['flipV'] as bool? ?? false,
+    cornerRadius: (json['cornerRadius'] as num?)?.toDouble() ?? -1,
+    roundTopLeft: json['roundTopLeft'] as bool? ?? true,
+    roundTopRight: json['roundTopRight'] as bool? ?? true,
+    roundBottomRight: json['roundBottomRight'] as bool? ?? true,
+    roundBottomLeft: json['roundBottomLeft'] as bool? ?? true,
   );
 }
 
@@ -534,6 +562,7 @@ class VectorShape {
     this.embeddedIsSkeleton = false,
     this.flipH = false,
     this.flipV = false,
+    this.zIndex = 0,
   }) : id = id ?? generateId('shape'),
        layers = layers ?? <ShapeLayer>[];
 
@@ -555,6 +584,10 @@ class VectorShape {
   /// Miroir du groupe complet, principalement utilisé sur les instances.
   bool flipH;
   bool flipV;
+
+  /// Ordre global explicite de dessin ; à égalité, l'ordre du projet puis
+  /// celui du rig départagent les formes.
+  int zIndex;
 
   bool get isInstance => embeddedProjectId != null;
 
@@ -1049,6 +1082,7 @@ class VectorShape {
       embeddedIsSkeleton: embeddedIsSkeleton,
       flipH: flipH,
       flipV: flipV,
+      zIndex: zIndex,
     );
     for (final key in keyframes) {
       clone.keyframes.add(key.copy());
@@ -1107,6 +1141,7 @@ class VectorShape {
     'embeddedIsSkeleton': embeddedIsSkeleton,
     'flipH': flipH,
     'flipV': flipV,
+    'zIndex': zIndex,
     'layers': layers.map((l) => l.toJson()).toList(),
     'keyframes': keyframes.map((k) => k.toJson()).toList(),
   };
@@ -1134,6 +1169,7 @@ class VectorShape {
       embeddedIsSkeleton: json['embeddedIsSkeleton'] as bool? ?? false,
       flipH: json['flipH'] as bool? ?? false,
       flipV: json['flipV'] as bool? ?? false,
+      zIndex: (json['zIndex'] as num?)?.toInt() ?? 0,
       layers: (json['layers'] as List<Object?>? ?? const [])
           .map((l) => ShapeLayer.fromJson((l as Map).cast<String, Object?>()))
           .toList(),

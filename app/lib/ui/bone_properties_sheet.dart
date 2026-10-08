@@ -33,6 +33,7 @@ class BonePropertiesSheet extends StatefulWidget {
     this.onToggleIk,
     this.onFlipBend,
     this.onOpenEditor,
+    this.onEditShape,
     this.onKeyframeAllowed,
     this.onMirror,
   });
@@ -61,9 +62,11 @@ class BonePropertiesSheet extends StatefulWidget {
   final VoidCallback? onToggleIk;
   final VoidCallback? onFlipBend;
 
-  /// Ouvre l'éditeur d'os (dessin/pivot sur la forme) — v0.20.2, demandé
-  /// pour ne pas repasser par la feuille de la FORME.
+  /// Ouvre l'éditeur de la chaîne d'os.
   final VoidCallback? onOpenEditor;
+
+  /// Ouvre l'éditeur de forme pour la forme portée par l'os.
+  final VoidCallback? onEditShape;
 
   /// Autorise l'ajout/retrait d'une keyframe selon la fenêtre de la forme
   /// portée par l'os.
@@ -207,10 +210,22 @@ class _BonePropertiesSheetState extends State<BonePropertiesSheet> {
                       ),
                     ],
                   ),
-                // v0.20.2 : accès direct à l'éditeur d'os depuis les
-                // propriétés de l'os (demande utilisateur) — le même
-                // écran que « Ajouter un os… » de la feuille de la forme,
-                // ouvert sur la pièce portée par cet os.
+                if (widget.onEditShape != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2, bottom: 2),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          widget.onEditShape!();
+                        },
+                        icon: const Icon(Icons.edit, size: 16),
+                        label: const Text('Modifier la forme…'),
+                      ),
+                    ),
+                  ),
+                // Accès à l'éditeur de la chaîne d'os.
                 if (widget.onOpenEditor != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 2, bottom: 2),

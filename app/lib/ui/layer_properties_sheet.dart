@@ -65,6 +65,10 @@ class _LayerPropertiesSheetState extends State<LayerPropertiesSheet> {
               ],
             ),
             _ColorRow(layer: layer, onChanged: _onChanged),
+            if (layer.kind == ShapeKind.rect) ...<Widget>[
+              _CornerRadiusSlider(layer: layer, onChanged: _onChanged),
+              _CornerSelection(layer: layer, onChanged: _onChanged),
+            ],
             Row(
               children: <Widget>[
                 const Text('Remplissage', style: TextStyle(fontSize: 12)),
@@ -133,6 +137,96 @@ class _ColorRow extends StatelessWidget {
                     ),
                   ),
                 ),
+              GestureDetector(
+                key: const ValueKey('custom-layer-color'),
+                onTap: () async {
+                  final initial = Color(layer.colorValue);
+                  var red = initial.r;
+                  var green = initial.g;
+                  var blue = initial.b;
+                  final picked = await showDialog<Color>(
+                    context: context,
+                    builder: (dialogContext) => StatefulBuilder(
+                      builder: (context, setDialogState) => AlertDialog(
+                        title: const Text('Couleur personnalisée'),
+                        content: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            Container(
+                              width: 56,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: Color.fromARGB(
+                                  255,
+                                  (red * 255).round(),
+                                  (green * 255).round(),
+                                  (blue * 255).round(),
+                                ),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            for (final entry in <(String, double)>[
+                              ('Rouge', red),
+                              ('Vert', green),
+                              ('Bleu', blue),
+                            ])
+                              Row(
+                                children: <Widget>[
+                                  SizedBox(width: 54, child: Text(entry.$1)),
+                                  Expanded(
+                                    child: Slider(
+                                      min: 0,
+                                      max: 1,
+                                      divisions: 255,
+                                      value: entry.$2,
+                                      onChanged: (value) => setDialogState(() {
+                                        if (entry.$1 == 'Rouge') red = value;
+                                        if (entry.$1 == 'Vert') green = value;
+                                        if (entry.$1 == 'Bleu') blue = value;
+                                      }),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                          ],
+                        ),
+                        actions: <Widget>[
+                          TextButton(
+                            onPressed: () => Navigator.pop(dialogContext),
+                            child: const Text('Annuler'),
+                          ),
+                          FilledButton(
+                            onPressed: () => Navigator.pop(
+                              dialogContext,
+                              Color.fromARGB(
+                                255,
+                                (red * 255).round(),
+                                (green * 255).round(),
+                                (blue * 255).round(),
+                              ),
+                            ),
+                            child: const Text('Valider'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                  if (picked == null) return;
+                  layer.colorValue = picked.toARGB32();
+                  onChanged();
+                },
+                child: Container(
+                  width: 24,
+                  height: 24,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: Color(layer.colorValue),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white70, width: 1.5),
+                  ),
+                  child: const Icon(Icons.colorize, size: 13),
+                ),
+              ),
             ],
           ),
         ),
@@ -197,4 +291,88 @@ class _LayerSlider extends StatelessWidget {
       ],
     );
   }
+}
+
+class _CornerRadiusSlider extends StatelessWidget {
+  const _CornerRadiusSlider({required this.layer, required this.onChanged});
+
+  final ShapeLayer layer;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final maxRadius = math.min(layer.width.abs(), layer.height.abs()) / 2;
+    final automaticRadius = math.min(
+      24.0,
+      math.min(layer.width.abs(), layer.height.abs()) * 0.15,
+    );
+    final value =
+        (layer.cornerRadius < 0 ? automaticRadius : layer.cornerRadius)
+            .clamp(0.0, math.max(1.0, maxRadius))
+            .toDouble();
+    return Row(
+      children: <Widget>[
+        const SizedBox(
+          width: 92,
+          child: Text('Rayon des coins', style: TextStyle(fontSize: 12)),
+        ),
+        Expanded(
+          child: Slider(
+            min: 0,
+            max: math.max(1.0, maxRadius),
+            divisions: 100,
+            value: value,
+            onChanged: (next) {
+              layer.cornerRadius = next;
+              onChanged();
+            },
+          ),
+        ),
+        SizedBox(
+          width: 36,
+          child: Text('${value.round()}', textAlign: TextAlign.end),
+        ),
+      ],
+    );
+  }
+}
+
+class _CornerSelection extends StatelessWidget {
+  const _CornerSelection({required this.layer, required this.onChanged});
+
+  final ShapeLayer layer;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) => Wrap(
+    alignment: WrapAlignment.center,
+    spacing: 4,
+    children: <Widget>[
+      _cornerButton('Haut gauche', layer.roundTopLeft, (value) {
+        layer.roundTopLeft = value;
+      }),
+      _cornerButton('Haut droit', layer.roundTopRight, (value) {
+        layer.roundTopRight = value;
+      }),
+      _cornerButton('Bas droit', layer.roundBottomRight, (value) {
+        layer.roundBottomRight = value;
+      }),
+      _cornerButton('Bas gauche', layer.roundBottomLeft, (value) {
+        layer.roundBottomLeft = value;
+      }),
+    ],
+  );
+
+  Widget _cornerButton(
+    String label,
+    bool selected,
+    ValueChanged<bool> update,
+  ) => FilterChip(
+    label: Text(label, style: const TextStyle(fontSize: 11)),
+    selected: selected,
+    onSelected: (value) {
+      update(value);
+      onChanged();
+    },
+  );
 }

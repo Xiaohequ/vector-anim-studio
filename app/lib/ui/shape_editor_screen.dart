@@ -25,6 +25,7 @@ class ShapeEditorScreen extends StatefulWidget {
     required this.project,
     this.shape,
     this.initialTimeMs,
+    this.isolateShape = false,
   });
 
   final AnimationProject project;
@@ -36,6 +37,9 @@ class ShapeEditorScreen extends StatefulWidget {
   /// démarre ICI (borné à la fenêtre de la forme) au lieu de startMs —
   /// bugfix v0.16.3 : scrubber le studio puis éditer écrivait tout à 0 s.
   final int? initialTimeMs;
+
+  /// Quand vrai, le preview ne rend que la forme en cours d'édition.
+  final bool isolateShape;
 
   @override
   State<ShapeEditorScreen> createState() => _ShapeEditorScreenState();
@@ -293,7 +297,8 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
       fps: widget.project.fps,
       backgroundValue: widget.project.backgroundValue,
       shapes: <VectorShape>[
-        if (!_isNew) ...widget.project.shapes.where((s) => s.id != _draft.id),
+        if (!_isNew && !widget.isolateShape)
+          ...widget.project.shapes.where((s) => s.id != _draft.id),
         _draft,
       ],
     );

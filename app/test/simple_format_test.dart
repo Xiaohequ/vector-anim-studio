@@ -476,7 +476,7 @@ void main() {
   });
 
   group('vasf-2', () {
-    test('versions 1/2/3/4 acceptées, version 5 rejetée (v0.19)', () {
+    test('versions 1/2/3/4/5 acceptées, version 6 rejetée', () {
       final imported = SimpleAnimationFormat.fromJson(<String, Object?>{
         'version': 2,
         'shapes': <Object?>[
@@ -502,9 +502,16 @@ void main() {
         ],
       });
       expect(v4.shapes, hasLength(1));
+      final v5 = SimpleAnimationFormat.fromJson(<String, Object?>{
+        'version': 5,
+        'shapes': <Object?>[
+          <String, Object?>{'name': 'Bloc', 'type': 'rect'},
+        ],
+      });
+      expect(v5.shapes, hasLength(1));
       expect(
         () => SimpleAnimationFormat.fromJson(<String, Object?>{
-          'version': 5,
+          'version': 6,
           'shapes': <Object?>[
             <String, Object?>{'name': 'Bloc', 'type': 'rect'},
           ],
@@ -513,14 +520,14 @@ void main() {
       );
       try {
         SimpleAnimationFormat.fromJson(<String, Object?>{
-          'version': 5,
+          'version': 6,
           'shapes': <Object?>[
             <String, Object?>{'name': 'Bloc', 'type': 'rect'},
           ],
         });
         fail('SimpleFormatException attendu');
       } on SimpleFormatException catch (error) {
-        expect(error.toString(), contains('version : 1, 2, 3 ou 4 attendu'));
+        expect(error.toString(), contains('version : 1, 2, 3, 4 ou 5 attendu'));
       }
     });
 
@@ -1785,6 +1792,100 @@ void main() {
       final json = SimpleAnimationFormat.toJson(project);
       expect(json['skeleton'], isA<Map<String, Object?>>());
       expect((json['skeleton'] as Map<String, Object?>)['bones'], isNotEmpty);
+    });
+  });
+
+  group('vasf-5 rectangle corners', () {
+    test('rayon auto, rayon nul et sélection des coins round-trip à plat', () {
+      final project = AnimationProject.blank(name: 'Coins');
+      final shape = VectorShape(name: 'Carte', zIndex: 8);
+      shape.layers.add(
+        ShapeLayer(
+          name: 'Rect',
+          kind: ShapeKind.rect,
+          cornerRadius: 18,
+          roundTopLeft: false,
+          roundBottomRight: false,
+        ),
+      );
+      project.shapes.add(shape);
+      final json = SimpleAnimationFormat.toJson(project);
+      expect(json['version'], SimpleAnimationFormat.version5);
+      final item = (json['shapes'] as List).single as Map<String, Object?>;
+      final exportedLayer = ((item['layers'] as List).single as Map)
+          .cast<String, Object?>();
+      expect(exportedLayer['cornerRadius'], 18);
+      expect(exportedLayer['roundTopLeft'], false);
+      expect(exportedLayer['roundBottomRight'], false);
+      final restored = SimpleAnimationFormat.fromJson(json);
+      final layer = restored.shapes.single.layers.single;
+      expect(layer.cornerRadius, 18);
+      expect(layer.roundTopLeft, false);
+      expect(layer.roundTopRight, true);
+      expect(layer.roundBottomRight, false);
+      expect(layer.roundBottomLeft, true);
+
+      // Un rectangle historique garde son rayon auto, tandis qu'un rayon 0
+      // explicite est exporté (pas confondu avec l'absence de réglage).
+      final legacy = AnimationProject.blank(name: 'Ancien');
+      final oldShape = VectorShape(name: 'Ancien rect');
+      oldShape.layers.add(ShapeLayer(name: 'Rect', kind: ShapeKind.rect));
+      legacy.shapes.add(oldShape);
+      final legacyJson = SimpleAnimationFormat.toJson(legacy);
+      expect(legacyJson['version'], SimpleAnimationFormat.version);
+      expect(
+        SimpleAnimationFormat.fromJson(
+          legacyJson,
+        ).shapes.single.layers.single.cornerRadius,
+        -1,
+      );
+
+      final square = AnimationProject.blank(name: 'Carré');
+      final squareShape = VectorShape(name: 'Rect carré');
+      squareShape.layers.add(
+        ShapeLayer(name: 'Rect', kind: ShapeKind.rect, cornerRadius: 0),
+      );
+      square.shapes.add(squareShape);
+      final squareJson = SimpleAnimationFormat.toJson(square);
+      expect(squareJson['version'], SimpleAnimationFormat.version5);
+      final squareShapeJson =
+          (squareJson['shapes'] as List).single as Map<String, Object?>;
+      final squareLayer =
+          (squareShapeJson['layers'] as List).single as Map<String, Object?>;
+      expect(squareLayer['cornerRadius'], 0);
+      expect(
+        SimpleAnimationFormat.fromJson(
+          squareJson,
+        ).shapes.single.layers.single.cornerRadius,
+        0,
+      );
+    });
+
+    test('coins conservés dans layers[]', () {
+      final project = AnimationProject.blank(name: 'Coins groupe');
+      final shape = VectorShape(name: 'Groupe');
+      shape.layers.addAll(<ShapeLayer>[
+        ShapeLayer(name: 'A', kind: ShapeKind.rect, cornerRadius: 9),
+        ShapeLayer(name: 'B', kind: ShapeKind.circle),
+      ]);
+      project.shapes.add(shape);
+      final json = SimpleAnimationFormat.toJson(project);
+      final layers =
+          ((json['shapes'] as List).single as Map<String, Object?>)['layers']
+              as List;
+      expect((layers.first as Map)['cornerRadius'], 9);
+      final imported = SimpleAnimationFormat.fromJson(json);
+      expect(imported.shapes.single.layers.first.cornerRadius, 9);
+    });
+
+    test('zIndex interne ne change pas l’ordre VASF existant', () {
+      final project = AnimationProject.blank(name: 'Z');
+      final shape = VectorShape(name: 'Carré', zIndex: 12);
+      shape.layers.add(ShapeLayer(name: 'Rect', kind: ShapeKind.rect));
+      project.shapes.add(shape);
+      final json = SimpleAnimationFormat.toJson(project);
+      final item = (json['shapes'] as List).single as Map<String, Object?>;
+      expect(item.containsKey('zIndex'), isFalse);
     });
   });
 }

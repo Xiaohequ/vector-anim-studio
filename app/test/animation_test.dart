@@ -55,6 +55,29 @@ void main() {
   });
 
   group('VectorShape', () {
+    test('zIndex et les coins arrondis survivent au JSON interne', () {
+      final shape = VectorShape(name: 'Styles', zIndex: 4);
+      final rect = ShapeLayer(
+        name: 'Rect',
+        kind: ShapeKind.rect,
+        cornerRadius: 17,
+        roundTopLeft: false,
+        roundBottomRight: false,
+      );
+      shape.layers.add(rect);
+      final copy = VectorShape.fromJson(shape.toJson());
+      expect(copy.zIndex, 4);
+      expect(copy.layers.single.cornerRadius, 17);
+      expect(copy.layers.single.roundTopLeft, isFalse);
+      expect(copy.layers.single.roundTopRight, isTrue);
+      expect(copy.layers.single.roundBottomRight, isFalse);
+      expect(copy.layers.single.roundBottomLeft, isTrue);
+      expect(
+        ShapeLayer(name: 'Default', kind: ShapeKind.rect).cornerRadius,
+        -1,
+      );
+    });
+
     test('valueAt retombe sur la valeur de base sans keyframe', () {
       final shape = VectorShape(name: 'A', x: 42);
       expect(shape.valueAt(AnimatableProperty.x, 500), 42);

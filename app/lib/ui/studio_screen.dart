@@ -575,7 +575,10 @@ class _StudioScreenState extends State<StudioScreen>
     await _flushSave();
   }
 
-  Future<void> _editShape(VectorShape shape) async {
+  Future<void> _editShape(
+    VectorShape shape, {
+    bool editBoneShape = false,
+  }) async {
     if (shape.isInstance) return; // une instance n'a pas de couches propres
     final project = _project;
     final controller = _controller;
@@ -585,9 +588,8 @@ class _StudioScreenState extends State<StudioScreen>
         builder: (_) => ShapeEditorScreen(
           project: project,
           shape: shape,
-          // Curseur de l'éditeur = playhead courant du studio (v0.16.3) :
-          // l'instant scrubé reste affiché dans l'éditeur, l'auto-key
-          // morph écrit bien à CET instant (et non à 0 s).
+          isolateShape: true,
+          // Le preview de l'éditeur isole toujours cette forme.
           initialTimeMs: controller?.timeMs,
         ),
       ),
@@ -602,6 +604,7 @@ class _StudioScreenState extends State<StudioScreen>
         project.shapes.add(edited);
       }
       _selectedId = edited.id;
+      if (editBoneShape) _selectedBoneId = null;
     });
     await _flushSave();
   }
@@ -680,6 +683,13 @@ class _StudioScreenState extends State<StudioScreen>
     _pushUndo();
     setState(() => project.moveShape(index, index + delta));
     await _flushSave();
+  }
+
+  void _setShapeZIndex(VectorShape shape, int value) {
+    if (shape.zIndex == value) return;
+    _pushUndo(tag: 'shapeZ:${shape.id}');
+    setState(() => shape.zIndex = value);
+    _scheduleSave();
   }
 
   // ------------------------------------------------------------ animations
@@ -836,6 +846,12 @@ class _StudioScreenState extends State<StudioScreen>
         onKeyframeEasing: _setKeyframeEasing,
         onEditLayers: () => _editShape(shape),
         onOpenSource: () => _openSourceProject(shape),
+        onRename: () => _renameShape(shape),
+        onDuplicate: () => _cloneShape(shape),
+        onMove: (delta) => _moveShape(shape, delta),
+        onToggleVisibility: () => _toggleVisibility(shape),
+        onDelete: () => _deleteShape(shape),
+        onZIndexChanged: (value) => _setShapeZIndex(shape, value),
         onPivotChanged: _setPivot,
         onLayerColorChanged: _setLayerColor,
         onToggleLayerColor: _toggleLayerColor,
@@ -1001,28 +1017,46 @@ class _StudioScreenState extends State<StudioScreen>
     _snack('« ${shape.name} » liée à l’os « ${bone?.name ?? '?'} »');
   }
 
-  /// Ouvre l'éditeur d'os depuis la feuille des PROPRIÉTÉS D'OS (v0.20.2) :
-  /// retrouve la forme portée par cet os (racine ou descendance) puis ouvre
-  /// le même écran que « Ajouter un os… » de la feuille de la forme.
+  /// Ouvre l'éditeur d'os depuis les propriétés de l'os sélectionné.
   Future<void> _editBoneInEditor() async {
-    final project = _project;
-    final rig = _rig;
-    final bone = _selectedBone;
-    if (project == null || rig == null || bone == null) return;
-    VectorShape? shape;
-    for (final candidate in project.shapes) {
-      final carrierId = rig.carrierBoneId(candidate.id);
-      if (carrierId == null) continue;
-      if (rig.chainFrom(carrierId).any((b) => b.id == bone.id)) {
-        shape = candidate;
-        break;
-      }
-    }
+    final shape = _shapeCarriedBySelectedBone();
     if (shape == null) {
-      _snack('« ${bone.name} » n’est lié à aucune forme');
+      final bone = _selectedBone;
+      if (bone != null) _snack('« ${bone.name} » n’est lié à aucune forme');
       return;
     }
     await _editShapeBone(shape);
+  }
+
+  /// Forme (ou groupe) portée par l'os sélectionné ou un de ses ancêtres.
+  VectorShape? _shapeCarriedBySelectedBone() {
+    final project = _project;
+    final rig = _rig;
+    final bone = _selectedBone;
+    if (project == null || rig == null || bone == null) return null;
+    for (final candidate in project.shapes) {
+      final carrierId = rig.carrierBoneId(candidate.id);
+      if (carrierId != null &&
+          rig.chainFrom(carrierId).any((item) => item.id == bone.id)) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
+  /// Édite la forme portée depuis la feuille d'os, sans modifier le rig.
+  Future<void> _editSelectedBoneShape() async {
+    final shape = _shapeCarriedBySelectedBone();
+    if (shape == null) {
+      final bone = _selectedBone;
+      if (bone != null) _snack('« ${bone.name} » n’est lié à aucune forme');
+      return;
+    }
+    if (shape.isInstance) {
+      _snack('Un groupe importé ne possède pas de forme éditable ici');
+      return;
+    }
+    await _editShape(shape, editBoneShape: true);
   }
 
   /// « Supprimer l'os » (sheet ⚙, v0.20) : confirmation, puis l'os porteur,
@@ -1399,6 +1433,7 @@ class _StudioScreenState extends State<StudioScreen>
         onToggleIk: _toggleIk,
         onFlipBend: _flipBend,
         onOpenEditor: _editBoneInEditor,
+        onEditShape: _editSelectedBoneShape,
         onKeyframeAllowed: (timeMs) => _boneKeyframeAllowed(bone, timeMs),
         onMirror: (horizontal) => _mirrorBoneChain(bone, horizontal),
       ),
@@ -2025,19 +2060,19 @@ class _StudioScreenState extends State<StudioScreen>
       // v0.19.1 : une pièce PORTÉE par un os n'est plus sélectionnable au
       // doigt (aucune manipulation possible) — elle reste choisissable via
       // le menu Formes pour l'ouvrir dans la sheet ⚙ ou la délier.
-      if (rig != null && rig.isAttached(hit.id) && !hit.isInstance) {
-        final bone = rig.boneById(rig.carrierBoneId(hit.id));
-        _snack(
-          '« ${hit.name} » est liée à l’os « ${bone?.name ?? '?'} » : '
-          'non sélectionnable — bougez l’os, ou choisissez-la dans le menu '
-          'Formes (Squelettes ▸ Délier pour libérer).',
-        );
-        return;
-      }
+      final bound = rig != null && rig.isAttached(hit.id) && !hit.isInstance;
       setState(() {
         _selectedId = hit.id;
         _selectedBoneId = null;
       });
+      if (bound) {
+        final bone = rig.boneById(rig.carrierBoneId(hit.id));
+        _snack(
+          '« ${hit.name} » est liée à l’os « ${bone?.name ?? '?'} » : '
+          'transformations verrouillées — déplace l’os pour la modifier.',
+        );
+      }
+      return;
     }
   }
 
@@ -2723,6 +2758,7 @@ class _StudioScreenState extends State<StudioScreen>
         children: <Widget>[
           Row(
             children: <Widget>[
+              _buildTimelineKeyframeButton(controller),
               const Spacer(),
               if (zoom != null) ...<Widget>[
                 IconButton(
@@ -2821,14 +2857,11 @@ class _StudioScreenState extends State<StudioScreen>
     );
   }
 
-  Widget _buildPlaybar(TimelineController controller) {
+  Widget _buildTimelineKeyframeButton(TimelineController controller) {
     final rig = _rig;
     final shape = _selected;
     final bone = _selectedBone;
     final keyframe = shape == null ? null : controller.nearestKeyframe(shape);
-    // Projet squelette : le ◆ cible l'OS sélectionné s'il y en a un, sinon la
-    // PIÈCE sélectionnée (bugfix v0.16.1 — avant, le ◆ no-opait dès qu'une
-    // pièce remplaçait un os : aucune pose de pièce n'était créable).
     final boneSelected = bone != null;
     final boneKeyframeAllowed = boneSelected
         ? _boneKeyframeAllowed(bone, controller.timeMs)
@@ -2840,6 +2873,29 @@ class _StudioScreenState extends State<StudioScreen>
         ? (rig != null && rig.hasKeyframes(bone.id))
         : (shape?.hasKeyframes ?? false);
     final diamondKeyframe = boneSelected ? boneKeyframe : keyframe;
+    return IconButton(
+      tooltip: boneSelected && !boneKeyframeAllowed
+          ? 'Keyframe d’os indisponible hors du segment'
+          : diamondKeyframe != null
+          ? 'Retirer la keyframe au curseur'
+          : boneSelected
+          ? 'Ajouter une keyframe d’angle à l’os au curseur'
+          : 'Ajouter une keyframe au curseur',
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 38, minHeight: 34),
+      onPressed: boneSelected
+          ? (boneKeyframeAllowed ? _toggleBoneKeyframe : null)
+          : _toggleKeyframe,
+      icon: Icon(
+        diamondKeyframe == null ? Icons.diamond_outlined : Icons.diamond,
+        color: hasKeyframes ? const Color(0xFFF2C94C) : null,
+        size: 19,
+      ),
+    );
+  }
+
+  Widget _buildPlaybar(TimelineController controller) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 2, 12, 2),
       child: Row(
@@ -2862,24 +2918,6 @@ class _StudioScreenState extends State<StudioScreen>
                 _syncTicker();
               },
               icon: Icon(controller.playing ? Icons.pause : Icons.play_arrow),
-            ),
-            IconButton(
-              tooltip: boneSelected && !boneKeyframeAllowed
-                  ? 'Keyframe d’os indisponible hors du segment'
-                  : diamondKeyframe != null
-                  ? 'Retirer la keyframe au curseur'
-                  : boneSelected
-                  ? 'Ajouter une keyframe d’angle à l’os au curseur'
-                  : 'Ajouter une keyframe au curseur',
-              onPressed: boneSelected
-                  ? (boneKeyframeAllowed ? _toggleBoneKeyframe : null)
-                  : _toggleKeyframe,
-              icon: Icon(
-                diamondKeyframe == null
-                    ? Icons.diamond_outlined
-                    : Icons.diamond,
-                color: hasKeyframes ? const Color(0xFFF2C94C) : null,
-              ),
             ),
             IconButton(
               tooltip: 'Boucle',
@@ -2920,11 +2958,6 @@ class _StudioScreenState extends State<StudioScreen>
               icon: Icons.animation,
               label: 'Animation',
               onPressed: _showAnimationSheet,
-            ),
-            _toolbarButton(
-              icon: Icons.accessibility_new,
-              label: 'Os',
-              onPressed: () => _showRigSheet(project),
             ),
           ],
         ),
@@ -3061,113 +3094,12 @@ class _StudioScreenState extends State<StudioScreen>
           onTap: _importVasfAsGroup,
         ),
       ),
-      _toolSection('Dans le projet · ${project.shapes.length} éléments'),
-      if (project.shapes.isEmpty)
-        const ListTile(
-          leading: Icon(Icons.layers_clear_outlined),
-          title: Text('Aucun élément pour le moment'),
-        ),
-      for (final shape in project.shapes.reversed)
-        Builder(
-          builder: (sheetContext) => ListTile(
-            leading: Icon(
-              shape.id == _selectedId
-                  ? Icons.radio_button_checked
-                  : Icons.radio_button_unchecked,
-              color: shape.visible ? null : Colors.white38,
-            ),
-            title: Text(
-              shape.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            subtitle: Text(
-              '${shape.visible ? 'Visible' : 'Masqué'} · '
-              '${(shape.durationMs / 1000).toStringAsFixed(1)} s · '
-              '${shape.layers.length} couche(s)',
-            ),
-            trailing: IconButton(
-              tooltip: shape.visible ? 'Masquer' : 'Afficher',
-              icon: Icon(
-                shape.visible ? Icons.visibility : Icons.visibility_off,
-              ),
-              onPressed: () => _toggleVisibility(shape),
-            ),
-            onTap: () {
-              Navigator.of(sheetContext).pop();
-              setState(() {
-                _selectedId = shape.id;
-                _selectedBoneId = null;
-              });
-            },
-          ),
-        ),
-      if (_selected != null) ...<Widget>[
-        _toolSection('Élément sélectionné · ${_selected!.name}'),
-        Builder(
-          builder: (sheetContext) => _toolAction(
-            sheetContext,
-            icon: Icons.tune,
-            title: 'Propriétés',
-            onTap: () {
-              Navigator.of(sheetContext).pop();
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (mounted) _showPropertiesSheet();
-              });
-            },
-          ),
-        ),
-        if (!_selected!.isInstance)
-          Builder(
-            builder: (sheetContext) => _toolAction(
-              sheetContext,
-              icon: Icons.edit_outlined,
-              title: 'Modifier les couches',
-              onTap: () => _editShape(_selected!),
-            ),
-          ),
-        Builder(
-          builder: (sheetContext) => _toolAction(
-            sheetContext,
-            icon: Icons.drive_file_rename_outline,
-            title: 'Renommer',
-            onTap: () => _renameShape(_selected!),
-          ),
-        ),
-        Builder(
-          builder: (sheetContext) => _toolAction(
-            sheetContext,
-            icon: Icons.content_copy,
-            title: 'Dupliquer avec les keyframes',
-            onTap: () => _cloneShape(_selected!),
-          ),
-        ),
-        Builder(
-          builder: (sheetContext) => _toolAction(
-            sheetContext,
-            icon: Icons.vertical_align_top,
-            title: 'Monter dans l’ordre d’affichage',
-            onTap: () => _moveShape(_selected!, 1),
-          ),
-        ),
-        Builder(
-          builder: (sheetContext) => _toolAction(
-            sheetContext,
-            icon: Icons.vertical_align_bottom,
-            title: 'Descendre dans l’ordre d’affichage',
-            onTap: () => _moveShape(_selected!, -1),
-          ),
-        ),
-        Builder(
-          builder: (sheetContext) => _toolAction(
-            sheetContext,
-            icon: Icons.delete_outline,
-            title: 'Supprimer',
-            destructive: true,
-            onTap: () => _deleteShape(_selected!),
-          ),
-        ),
-      ],
+      _toolSection('Projet · ${project.shapes.length} éléments'),
+      const ListTile(
+        leading: Icon(Icons.touch_app_outlined),
+        title: Text('Sélectionne un élément dans l’aperçu ou la timeline.'),
+        subtitle: Text('Ses actions sont dans les propriétés de l’élément.'),
+      ),
     ],
   );
 
@@ -3216,6 +3148,7 @@ class _StudioScreenState extends State<StudioScreen>
     );
   }
 
+  // ignore: unused_element
   Future<void> _showRigSheet(AnimationProject project) {
     final rig = project.skeleton;
     final shape = _selected;

@@ -22,6 +22,12 @@ class ShapePropertiesSheet extends StatefulWidget {
     required this.onKeyframeEasing,
     required this.onEditLayers,
     this.onOpenSource,
+    this.onRename,
+    this.onDuplicate,
+    this.onMove,
+    this.onToggleVisibility,
+    this.onDelete,
+    this.onZIndexChanged,
     this.onPivotChanged,
     this.onLayerColorChanged,
     this.onToggleLayerColor,
@@ -47,6 +53,12 @@ class ShapePropertiesSheet extends StatefulWidget {
 
   /// Ouvre le projet source (instances d'animation uniquement).
   final VoidCallback? onOpenSource;
+  final VoidCallback? onRename;
+  final VoidCallback? onDuplicate;
+  final ValueChanged<int>? onMove;
+  final VoidCallback? onToggleVisibility;
+  final VoidCallback? onDelete;
+  final ValueChanged<int>? onZIndexChanged;
 
   /// Tous les projets prennent en charge les rigs ; une pièce peut donc être
   /// attachée à un os et pilotée par lui.
@@ -161,6 +173,14 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                       ),
                   ],
                 ),
+                if (!shape.isInstance) ...<Widget>[
+                  const SizedBox(height: 4),
+                  _buildElementActions(context, shape),
+                  if (widget.onZIndexChanged != null) ...<Widget>[
+                    _buildZIndexSlider(shape),
+                    const SizedBox(height: 4),
+                  ],
+                ],
                 Text(
                   widget.skeletonPiece
                       ? '${widget.skeletonNote ?? 'Pièce du rig'}'
@@ -594,4 +614,75 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
       ],
     );
   }
+
+  Widget _buildElementActions(BuildContext context, VectorShape shape) {
+    Widget action(String label, IconData icon, VoidCallback? callback) =>
+        TextButton.icon(
+          onPressed: callback == null
+              ? null
+              : () {
+                  Navigator.of(context).pop();
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    callback();
+                  });
+                },
+          icon: Icon(icon, size: 16),
+          label: Text(label, style: const TextStyle(fontSize: 11)),
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+        );
+    return Wrap(
+      alignment: WrapAlignment.start,
+      spacing: 2,
+      runSpacing: 0,
+      children: <Widget>[
+        action('Renommer', Icons.drive_file_rename_outline, widget.onRename),
+        action('Dupliquer', Icons.content_copy, widget.onDuplicate),
+        action(
+          shape.visible ? 'Masquer' : 'Afficher',
+          shape.visible ? Icons.visibility_off : Icons.visibility,
+          widget.onToggleVisibility,
+        ),
+        action(
+          'Monter',
+          Icons.vertical_align_top,
+          () => widget.onMove?.call(1),
+        ),
+        action(
+          'Descendre',
+          Icons.vertical_align_bottom,
+          () => widget.onMove?.call(-1),
+        ),
+        action('Supprimer', Icons.delete_outline, widget.onDelete),
+      ],
+    );
+  }
+
+  Widget _buildZIndexSlider(VectorShape shape) => Row(
+    children: <Widget>[
+      const SizedBox(
+        width: 92,
+        child: Text('Ordre Z', style: TextStyle(fontSize: 12)),
+      ),
+      Expanded(
+        child: Slider(
+          min: -100,
+          max: 100,
+          divisions: 200,
+          value: shape.zIndex.clamp(-100, 100).toDouble(),
+          label: '${shape.zIndex}',
+          onChanged: (value) {
+            widget.onZIndexChanged?.call(value.round());
+            _refresh();
+          },
+        ),
+      ),
+      SizedBox(
+        width: 32,
+        child: Text('${shape.zIndex}', textAlign: TextAlign.end),
+      ),
+    ],
+  );
 }
