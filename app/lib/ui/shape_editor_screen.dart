@@ -164,6 +164,9 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
       height: kind == ShapeKind.line ? 0 : 110,
       colorValue: kColorPalette[index % 3],
       filled: kind != ShapeKind.line,
+      // Nouvelles couches rectangle : coins carrés. La valeur -1 du modèle
+      // reste intacte pour préserver l'arrondi historique des formes existantes.
+      cornerRadius: kind == ShapeKind.rect ? 0 : -1,
       points: kind == ShapeKind.path
           ? const <Offset>[
               Offset(110, 0),

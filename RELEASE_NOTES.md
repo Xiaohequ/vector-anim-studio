@@ -1,19 +1,12 @@
-# Keyform Studio 0.33.0
+# Keyform Studio 0.34.0
 
-## Studio simplifié et propriétés des éléments
+## Création et format du projet
 
-- Barre Studio simplifiée : **Éléments** et **Animation** ; les actions d’un élément sont regroupées dans sa feuille de propriétés. L’accès Os dédié disparaît de la barre.
-- La keyframe au curseur est placée dans l’en-tête de la timeline ; l’aperçu de l’éditeur de forme isole la forme en cours d’édition.
-- Depuis les propriétés d’un os, accès direct à l’édition de la forme qu’il porte.
-- Sélecteur de couleur personnalisée ajouté aux propriétés des couches.
-
-## Ordre Z et coins arrondis
-
-- Ordre Z numérique réglable par forme ; il est persisté (migration SQLite v9) et départage l’ordre d’affichage.
-- Rayon commun réglable et sélection indépendante des quatre coins des rectangles. Les rectangles existants conservent leur arrondi automatique historique ; un rayon nul explicite donne un rectangle carré.
-- VASF-5 prend en charge ces réglages dans les formes à plat et `layers[]`.
+- **Nouveau projet** crée un canvas vierge avec les réglages par défaut, lui attribue un nom daté à la microseconde et ouvre directement le Studio, sans boîte de dialogue.
+- Nouveau menu Studio **Canvas** avec huit formats radio : 9:16, 4:5, 3:4, 1:1, 4:3, 3:2, 16:9 et 21:9. Le changement de ratio ajuste les dimensions du projet, est sauvegardé et peut être annulé.
+- Le compteur et le texte d’aide du menu **Éléments** sont retirés ; les nouveaux rectangles ont des coins carrés, sans modifier l’arrondi des formes existantes ni des VASF historiques.
 
 ### Vérifications
 
 - `flutter analyze` sans problème.
-- Suite complète des tests Flutter : 290 tests passés.
+- Suite complète des tests Flutter : 293 tests passés.

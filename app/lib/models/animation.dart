@@ -49,8 +49,17 @@ enum AnimatableProperty {
 /// dans [defaultBezier] quand `bezier` est null).
 enum EasingKind { linear, easeIn, easeOut, easeInOut, step, customBezier }
 
-/// Formats de projet proposés à la création.
-enum ProjectFormat { portrait, landscape, square }
+/// Ratios de canvas proposés dans le Studio.
+enum ProjectFormat {
+  portrait,
+  portrait4x5,
+  portrait3x4,
+  square,
+  landscape4x3,
+  landscape3x2,
+  landscape,
+  ultrawide21x9,
+}
 
 /// Type de projet : vectoriel (formes + keyframes de pose, comportement
 /// historique) ou squelette (un rig d'os anime les pièces — rig maître).
@@ -64,23 +73,52 @@ extension ProjectTypeInfo on ProjectType {
 }
 
 extension ProjectFormatInfo on ProjectFormat {
-  String get label => switch (this) {
-    ProjectFormat.portrait => 'Portrait 360 × 640',
-    ProjectFormat.landscape => 'Paysage 640 × 360',
-    ProjectFormat.square => 'Carré 480 × 480',
+  String get ratioLabel => switch (this) {
+    ProjectFormat.portrait => '9:16 · Portrait',
+    ProjectFormat.portrait4x5 => '4:5 · Portrait',
+    ProjectFormat.portrait3x4 => '3:4 · Portrait',
+    ProjectFormat.square => '1:1 · Carré',
+    ProjectFormat.landscape4x3 => '4:3 · Paysage',
+    ProjectFormat.landscape3x2 => '3:2 · Paysage',
+    ProjectFormat.landscape => '16:9 · Paysage',
+    ProjectFormat.ultrawide21x9 => '21:9 · Cinéma',
   };
+
+  String get label => '$ratioLabel (${width.round()} × ${height.round()})';
 
   double get width => switch (this) {
     ProjectFormat.portrait => 360,
-    ProjectFormat.landscape => 640,
+    ProjectFormat.portrait4x5 => 512,
+    ProjectFormat.portrait3x4 => 480,
     ProjectFormat.square => 480,
+    ProjectFormat.landscape4x3 => 640,
+    ProjectFormat.landscape3x2 => 720,
+    ProjectFormat.landscape => 640,
+    ProjectFormat.ultrawide21x9 => 840,
   };
 
   double get height => switch (this) {
     ProjectFormat.portrait => 640,
-    ProjectFormat.landscape => 360,
+    ProjectFormat.portrait4x5 => 640,
+    ProjectFormat.portrait3x4 => 640,
     ProjectFormat.square => 480,
+    ProjectFormat.landscape4x3 => 480,
+    ProjectFormat.landscape3x2 => 480,
+    ProjectFormat.landscape => 360,
+    ProjectFormat.ultrawide21x9 => 360,
   };
+
+  /// Le format radio le plus proche d'un canvas existant, y compris importé.
+  static ProjectFormat closestTo(double width, double height) {
+    if (width <= 0 || height <= 0) return ProjectFormat.portrait;
+    final aspect = width / height;
+    return ProjectFormat.values.reduce((closest, candidate) {
+      final currentError = (closest.width / closest.height - aspect).abs();
+      final candidateError = (candidate.width / candidate.height - aspect)
+          .abs();
+      return candidateError < currentError ? candidate : closest;
+    });
+  }
 }
 
 /// Applique une courbe d'accélération sur une progression normalisée [0,1].

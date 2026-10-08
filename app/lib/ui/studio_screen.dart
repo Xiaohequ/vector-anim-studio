@@ -2369,7 +2369,7 @@ class _StudioScreenState extends State<StudioScreen>
                     ),
                     _buildPlaybar(controller),
                     Expanded(child: _buildTimeline(project, controller)),
-                    _buildToolbar(project),
+                    _buildToolbar(),
                   ],
                 );
               },
@@ -2938,7 +2938,7 @@ class _StudioScreenState extends State<StudioScreen>
   }
 
   /// Actions fréquentes regroupées en bas ; l'export occasionnel reste en haut.
-  Widget _buildToolbar(AnimationProject project) {
+  Widget _buildToolbar() {
     return SafeArea(
       top: false,
       child: Container(
@@ -2952,12 +2952,17 @@ class _StudioScreenState extends State<StudioScreen>
             _toolbarButton(
               icon: Icons.category_outlined,
               label: 'Éléments',
-              onPressed: () => _showElementsSheet(project),
+              onPressed: _showElementsSheet,
             ),
             _toolbarButton(
               icon: Icons.animation,
               label: 'Animation',
               onPressed: _showAnimationSheet,
+            ),
+            _toolbarButton(
+              icon: Icons.crop_free,
+              label: 'Canvas',
+              onPressed: _showCanvasSheet,
             ),
           ],
         ),
@@ -3065,7 +3070,7 @@ class _StudioScreenState extends State<StudioScreen>
           },
   );
 
-  Future<void> _showElementsSheet(AnimationProject project) => _showToolSheet(
+  Future<void> _showElementsSheet() => _showToolSheet(
     title: 'Éléments',
     icon: Icons.category_outlined,
     children: <Widget>[
@@ -3094,14 +3099,60 @@ class _StudioScreenState extends State<StudioScreen>
           onTap: _importVasfAsGroup,
         ),
       ),
-      _toolSection('Projet · ${project.shapes.length} éléments'),
-      const ListTile(
-        leading: Icon(Icons.touch_app_outlined),
-        title: Text('Sélectionne un élément dans l’aperçu ou la timeline.'),
-        subtitle: Text('Ses actions sont dans les propriétés de l’élément.'),
-      ),
     ],
   );
+
+  Future<void> _setCanvasFormat(ProjectFormat format) async {
+    final project = _project;
+    if (project == null) return;
+    final currentAspect = project.width / project.height;
+    final targetAspect = format.width / format.height;
+    // Un même ratio ne modifie pas les dimensions personnalisées/importées.
+    if ((currentAspect - targetAspect).abs() < 0.001) return;
+    _pushUndo();
+    setState(() {
+      project
+        ..width = format.width
+        ..height = format.height;
+    });
+    await _flushSave();
+  }
+
+  Future<void> _showCanvasSheet() {
+    final project = _project;
+    if (project == null) return Future<void>.value();
+    final selected = ProjectFormatInfo.closestTo(project.width, project.height);
+    return _showToolSheet(
+      title: 'Canvas',
+      icon: Icons.crop_free,
+      children: <Widget>[
+        _toolSection('Format du projet'),
+        RadioGroup<ProjectFormat>(
+          groupValue: selected,
+          onChanged: (value) {
+            if (value == null) return;
+            Navigator.of(context).pop();
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _setCanvasFormat(value);
+            });
+          },
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              for (final format in ProjectFormat.values)
+                RadioListTile<ProjectFormat>(
+                  value: format,
+                  title: Text(format.ratioLabel),
+                  subtitle: Text(
+                    '${format.width.round()} × ${format.height.round()}',
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 
   Future<void> _showAnimationSheet() {
     final shape = _selected;
