@@ -48,8 +48,8 @@ class ProjectRepository {
   /// (vector/skeleton) + rig squelette sérialisé en JSON sur la ligne projet.
   /// v5 : facteurs d'axe + pivot + bezier. v6 (v0.15) : couleur animée et
   /// morph de points par keyframe (maps JSON layer_colors / layer_points).
-  /// v8 : type d'instance imbriquée et miroir de groupe.
-  static const int schemaVersion = 8;
+  /// v8 : groupes imbriqués et miroir. v9 : zIndex de forme et coins arrondis.
+  static const int schemaVersion = 9;
 
   final DatabaseFactory _factory;
   final String? databasePath;
@@ -107,6 +107,7 @@ class ProjectRepository {
               embedded_is_skeleton INTEGER NOT NULL DEFAULT 0,
               flip_h INTEGER NOT NULL DEFAULT 0,
               flip_v INTEGER NOT NULL DEFAULT 0,
+              z_index INTEGER NOT NULL DEFAULT 0,
               z INTEGER NOT NULL,
               FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
             )
@@ -131,6 +132,11 @@ class ProjectRepository {
               visible INTEGER NOT NULL,
               flip_h INTEGER NOT NULL DEFAULT 0,
               flip_v INTEGER NOT NULL DEFAULT 0,
+              corner_radius REAL NOT NULL DEFAULT -1,
+              round_top_left INTEGER NOT NULL DEFAULT 1,
+              round_top_right INTEGER NOT NULL DEFAULT 1,
+              round_bottom_right INTEGER NOT NULL DEFAULT 1,
+              round_bottom_left INTEGER NOT NULL DEFAULT 1,
               z INTEGER NOT NULL,
               FOREIGN KEY (shape_id) REFERENCES shapes (id) ON DELETE CASCADE
             )
@@ -166,6 +172,7 @@ class ProjectRepository {
           if (oldVersion < 6) await _addLayerKeyframeColumns(db);
           if (oldVersion < 7) await _addLayerFlipColumns(db);
           if (oldVersion < 8) await _addInstanceGroupColumns(db);
+          if (oldVersion < 9) await _addShapeZAndRoundedRectColumns(db);
         },
       ),
     );
@@ -519,6 +526,7 @@ class ProjectRepository {
             (shapeRow['embedded_is_skeleton'] as num?)?.toInt() == 1,
         flipH: (shapeRow['flip_h'] as num?)?.toInt() == 1,
         flipV: (shapeRow['flip_v'] as num?)?.toInt() == 1,
+        zIndex: (shapeRow['z_index'] as num?)?.toInt() ?? 0,
       );
 
       final layerRows = await db.query(
@@ -550,6 +558,13 @@ class ProjectRepository {
             visible: (layerRow['visible'] as num).toInt() == 1,
             flipH: (layerRow['flip_h'] as num?)?.toInt() == 1,
             flipV: (layerRow['flip_v'] as num?)?.toInt() == 1,
+            cornerRadius: (layerRow['corner_radius'] as num?)?.toDouble() ?? -1,
+            roundTopLeft: (layerRow['round_top_left'] as num?)?.toInt() != 0,
+            roundTopRight: (layerRow['round_top_right'] as num?)?.toInt() != 0,
+            roundBottomRight:
+                (layerRow['round_bottom_right'] as num?)?.toInt() != 0,
+            roundBottomLeft:
+                (layerRow['round_bottom_left'] as num?)?.toInt() != 0,
           ),
         );
       }
@@ -654,6 +669,7 @@ class ProjectRepository {
           'embedded_is_skeleton': shape.embeddedIsSkeleton ? 1 : 0,
           'flip_h': shape.flipH ? 1 : 0,
           'flip_v': shape.flipV ? 1 : 0,
+          'z_index': shape.zIndex,
           'z': i,
         });
         for (var j = 0; j < shape.layers.length; j++) {
@@ -677,6 +693,11 @@ class ProjectRepository {
             'visible': layer.visible ? 1 : 0,
             'flip_h': layer.flipH ? 1 : 0,
             'flip_v': layer.flipV ? 1 : 0,
+            'corner_radius': layer.cornerRadius,
+            'round_top_left': layer.roundTopLeft ? 1 : 0,
+            'round_top_right': layer.roundTopRight ? 1 : 0,
+            'round_bottom_right': layer.roundBottomRight ? 1 : 0,
+            'round_bottom_left': layer.roundBottomLeft ? 1 : 0,
             'z': j,
           });
         }
@@ -786,4 +807,27 @@ class ProjectRepository {
         ),
     ];
   }
+}
+
+/// Schéma v8 → v9 : ordre explicite des formes et coins arrondis des
+/// rectangles. Le rayon -1 conserve l'arrondi automatique historique.
+Future<void> _addShapeZAndRoundedRectColumns(Database db) async {
+  await db.execute(
+    'ALTER TABLE shapes ADD COLUMN z_index INTEGER NOT NULL DEFAULT 0',
+  );
+  await db.execute(
+    'ALTER TABLE layers ADD COLUMN corner_radius REAL NOT NULL DEFAULT -1',
+  );
+  await db.execute(
+    'ALTER TABLE layers ADD COLUMN round_top_left INTEGER NOT NULL DEFAULT 1',
+  );
+  await db.execute(
+    'ALTER TABLE layers ADD COLUMN round_top_right INTEGER NOT NULL DEFAULT 1',
+  );
+  await db.execute(
+    'ALTER TABLE layers ADD COLUMN round_bottom_right INTEGER NOT NULL DEFAULT 1',
+  );
+  await db.execute(
+    'ALTER TABLE layers ADD COLUMN round_bottom_left INTEGER NOT NULL DEFAULT 1',
+  );
 }

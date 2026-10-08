@@ -53,8 +53,20 @@ void main() {
           colorValue: 0xFFF2C94C,
         ),
         ShapeLayer(name: 'Cercle', kind: ShapeKind.circle, filled: false),
+        ShapeLayer(
+          name: 'Rectangle arrondi',
+          kind: ShapeKind.rect,
+          width: 90,
+          height: 70,
+          cornerRadius: 12,
+          roundTopLeft: false,
+          roundTopRight: true,
+          roundBottomRight: false,
+          roundBottomLeft: true,
+        ),
       ],
     );
+    shape.zIndex = 7;
     // v0.13.2 : facteurs d'axe + pivot de rotation doivent survivre à la DB.
     shape.scaleX = 0.8;
     shape.scaleY = 1.2;
@@ -108,11 +120,18 @@ void main() {
     expect(loadedShape.name, 'Étoile');
     expect(loadedShape.startMs, 200);
     expect(loadedShape.endMs, 2400);
-    expect(loadedShape.layers.length, 2);
+    expect(loadedShape.layers.length, 3);
     expect(loadedShape.layers.first.kind, ShapeKind.path);
     expect(loadedShape.layers.first.points.length, 3);
     expect(loadedShape.layers.first.points.first, const Offset(0, 0));
     expect(loadedShape.layers[1].filled, isFalse);
+    expect(loadedShape.zIndex, 7);
+    expect(loadedShape.layers[2].cornerRadius, 12);
+    expect(loadedShape.layers[2].roundTopLeft, isFalse);
+    expect(loadedShape.layers[2].roundTopRight, isTrue);
+    expect(loadedShape.layers[2].roundBottomRight, isFalse);
+    expect(loadedShape.layers[2].roundBottomLeft, isTrue);
+    expect(loadedShape.layers.first.cornerRadius, -1);
 
     // v0.13.2 : le pivot + les facteurs d'axe ne sont plus perdus en DB
     // (v0.13.0 : la porte tournait autour du centre après rechargement).
@@ -247,6 +266,7 @@ void main() {
     expect(instance.embeddedIsSkeleton, isTrue);
     expect(instance.flipH, isTrue);
     expect(instance.flipV, isTrue);
+    expect(instance.zIndex, 0);
   });
 
   test('un projet squelette persiste son rig (os, pistes, liaisons)', () async {

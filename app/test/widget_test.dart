@@ -74,8 +74,12 @@ class _MemoryRepository extends ProjectRepository {
 
 void main() {
   late _MemoryRepository repository;
+  late AnimationProject activeProject;
 
-  setUp(() => repository = _MemoryRepository());
+  setUp(() {
+    repository = _MemoryRepository();
+    activeProject = AnimationProject.blank(name: 'Test');
+  });
 
   testWidgets(
     'l’écran principal affiche l’état vide et le bouton nouveau projet',
@@ -118,6 +122,7 @@ void main() {
     _MemoryRepository repository,
     AnimationProject project,
   ) async {
+    activeProject = project;
     await repository.save(project);
     await tester.pumpWidget(
       MaterialApp(
@@ -137,37 +142,31 @@ void main() {
     return project;
   }
 
-  testWidgets('la barre du bas regroupe éléments, animation et os', (
-    tester,
-  ) async {
-    final project = seededProject();
-    await pumpStudio(tester, repository, project);
+  testWidgets(
+    'barre Studio et menu Éléments sans liste de formes ni bouton Os',
+    (tester) async {
+      final project = seededProject();
+      await pumpStudio(tester, repository, project);
 
-    expect(find.text('Éléments'), findsOneWidget);
-    expect(find.text('Animation'), findsOneWidget);
-    expect(find.text('Os'), findsOneWidget);
-    expect(find.byTooltip('Export'), findsOneWidget);
-    expect(find.text('Formes'), findsNothing);
+      expect(find.text('Éléments'), findsOneWidget);
+      expect(find.text('Animation'), findsOneWidget);
+      expect(find.text('Os'), findsNothing);
+      expect(find.byTooltip('Export'), findsOneWidget);
+      expect(find.text('Formes'), findsNothing);
 
-    await tester.tap(find.text('Éléments'));
-    await tester.pumpAndSettle();
-    expect(find.text('Ajouter une forme…'), findsOneWidget);
-    expect(find.text('DANS LE PROJET · 1 ÉLÉMENTS'), findsOneWidget);
-    expect(find.text('Bloc'), findsWidgets);
-    await tester.tap(find.text('Bloc').last);
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('Éléments'));
+      await tester.pumpAndSettle();
+      expect(find.text('Ajouter une forme…'), findsOneWidget);
+      expect(find.textContaining('DANS LE PROJET'), findsNothing);
+      expect(find.text('Créer et lier un os'), findsNothing);
 
-    await tester.tap(find.text('Animation'));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('ANIMATIONS RAPIDES'), findsOneWidget);
-    await tester.tapAt(const Offset(10, 10));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('Os'));
-    await tester.pumpAndSettle();
-    expect(find.text('Créer et lier un os'), findsOneWidget);
-    expect(find.text('Aucun os créé'), findsOneWidget);
-  });
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Animation'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('ANIMATIONS RAPIDES'), findsOneWidget);
+    },
+  );
 
   /// Point GLOBAL du canvas + géométrie scène↔canvas réelle de l'app.
   /// Déclaré en tête : les tests d'os (tap sur l'os) l'utilisent avant les
@@ -217,10 +216,9 @@ void main() {
             ),
           )
           .size;
-      await tester.tap(find.text('Éléments').first);
+      await tester.tap(find.text('Visible'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Masquée').last);
-      await tester.pumpAndSettle();
+      expect(find.byTooltip('Propriétés de la forme'), findsOneWidget);
 
       final after = tester
           .renderObject<RenderBox>(
@@ -246,10 +244,9 @@ void main() {
     // Aucune annulation disponible au départ.
     expect(undoButton().onPressed, isNull);
 
-    // Supprimer la forme via le panneau Éléments.
-    await tester.tap(find.text('Éléments'));
+    // Supprimer la forme depuis sa sheet Propriétés.
+    await tester.tap(find.byTooltip('Propriétés de la forme'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Supprimer').last);
     await tester.tap(find.text('Supprimer').last);
     await tester.pumpAndSettle();
     expect(project.shapes, isEmpty);
@@ -375,10 +372,12 @@ void main() {
       piece.layers.add(ShapeLayer(name: 'L', kind: ShapeKind.rect));
       project.shapes.add(piece);
       final rig = SkeletonRig(name: 'Rig');
+      // Os écarté du centre de la pièce pour que le tap cible la forme, pas
+      // l'articulation (la sélection d'os est prioritaire sur le canvas).
       final bone = RigBone(
         name: 'Queue',
-        offsetX: 180,
-        offsetY: 320,
+        offsetX: 340,
+        offsetY: 120,
         length: 50,
       );
       rig.addBone(bone);
@@ -387,11 +386,12 @@ void main() {
 
       await pumpStudio(tester, repository, project);
 
-      // Sélectionner la pièce via le panneau Éléments (sélection exclusive).
-      await tester.tap(find.text('Éléments'));
+      // Le segment lié sélectionne l’os ; pour tester une pose de pièce,
+      // sélectionner celle-ci dans le preview, à distance de l’os.
+      final (topLeft, geo) = canvasHarness(tester, project);
+      await tester.tapAt(topLeft + geo.sceneToCanvas(const Offset(180, 320)));
       await tester.pumpAndSettle();
-      await tester.tap(find.textContaining('Bloc').last);
-      await tester.pumpAndSettle();
+      expect(find.byTooltip('Propriétés de la forme'), findsOneWidget);
 
       // Le ◆ cible la pièce : tooltip de pose, pas celui d'os.
       expect(find.byTooltip('Ajouter une keyframe au curseur'), findsOneWidget);
@@ -426,10 +426,12 @@ void main() {
       piece.layers.add(ShapeLayer(name: 'L', kind: ShapeKind.rect));
       project.shapes.add(piece);
       final rig = SkeletonRig(name: 'Rig');
+      // Os écarté du centre de la pièce pour que le tap cible la forme, pas
+      // l'articulation (la sélection d'os est prioritaire sur le canvas).
       final bone = RigBone(
         name: 'Queue',
-        offsetX: 180,
-        offsetY: 320,
+        offsetX: 340,
+        offsetY: 120,
         length: 50,
       );
       rig.addBone(bone);
@@ -438,9 +440,8 @@ void main() {
 
       await pumpStudio(tester, repository, project);
 
-      await tester.tap(find.text('Éléments'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.textContaining('Bloc').last);
+      final (topLeft, geo) = canvasHarness(tester, project);
+      await tester.tapAt(topLeft + geo.sceneToCanvas(const Offset(180, 350)));
       await tester.pumpAndSettle();
 
       // Sheet ⚙ de la pièce : le ◆ de pose (masqué avant le bugfix) est
@@ -504,10 +505,12 @@ void main() {
       );
       project.shapes.add(piece);
       final rig = SkeletonRig(name: 'Rig');
+      // Os écarté du centre de la pièce pour que le tap cible la forme, pas
+      // l'articulation (la sélection d'os est prioritaire sur le canvas).
       final bone = RigBone(
         name: 'Queue',
-        offsetX: 180,
-        offsetY: 320,
+        offsetX: 340,
+        offsetY: 120,
         length: 50,
       );
       rig.addBone(bone);
@@ -516,10 +519,11 @@ void main() {
 
       await pumpStudio(tester, repository, project);
 
-      // Sélectionner la pièce, ◆ pose à 0 s.
-      await tester.tap(find.text('Éléments'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.textContaining('Chemin').last);
+      // Sélectionner la pièce au preview, à distance de l’os, puis ◆ pose à 0 s.
+      final (topLeft, canvasGeo) = canvasHarness(tester, project);
+      await tester.tapAt(
+        topLeft + canvasGeo.sceneToCanvas(const Offset(180, 350)),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Ajouter une keyframe au curseur'));
       await tester.pumpAndSettle();
@@ -560,10 +564,6 @@ void main() {
         geo,
       );
       expect(handles, hasLength(4));
-      debugPrint(
-        'DBG canvasRect=${tester.getRect(canvasFinder)} '
-        'topLeft=${tester.getTopLeft(canvasFinder)} handles=$handles',
-      );
       final gesture = await tester.startGesture(
         tester.getTopLeft(canvasFinder) + handles[1],
       );
@@ -579,10 +579,6 @@ void main() {
       await tester.tap(find.byIcon(Icons.check));
       await tester.pumpAndSettle();
       final savedPiece = project.shapes.first;
-      debugPrint(
-        'DBG saved: kf=${savedPiece.keyframes.map((k) => k.timeMs).toList()} '
-        'layerXY=(${savedPiece.layers.first.x}, ${savedPiece.layers.first.y})',
-      );
       expect(savedPiece.keyframes.map((k) => k.timeMs), <int>[0, 2000]);
       final entry = savedPiece.keyframes
           .firstWhere((k) => k.timeMs == 2000)
@@ -935,15 +931,14 @@ void main() {
       await repository.save(host);
 
       await pumpStudio(tester, repository, host);
-      await tester.tap(find.text('Éléments'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.textContaining('Autre élément').last);
+      final (topLeft, geo) = canvasHarness(tester, host);
+      await tester.tapAt(topLeft + geo.sceneToCanvas(const Offset(450, 500)));
       await tester.pumpAndSettle();
       expect(find.byTooltip('Propriétés de l’os'), findsNothing);
 
-      await tester.tap(find.text('Éléments'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.textContaining('Groupe squelette').last);
+      // Re-sélection du groupe dans une zone libre de ses bounds, à distance
+      // de l’os : ses os redeviennent visibles dans l'overlay.
+      await tester.tapAt(topLeft + geo.sceneToCanvas(const Offset(40, 320)));
       await tester.pumpAndSettle();
 
       final overlay = tester.widget<CustomPaint>(
@@ -956,8 +951,7 @@ void main() {
       expect(painter.visibleBoneIds, containsAll(<String>{root.id, child.id}));
       expect(find.byTooltip('Propriétés de la forme'), findsOneWidget);
 
-      final (topLeft, geo) = canvasHarness(tester, host);
-      await tester.tapAt(topLeft + geo.sceneToCanvas(const Offset(220, 260)));
+      await tester.tapAt(topLeft + geo.sceneToCanvas(const Offset(180, 220)));
       await tester.pumpAndSettle();
       expect(find.byTooltip('Propriétés de l’os'), findsOneWidget);
     },
@@ -1141,12 +1135,14 @@ void main() {
     return project;
   }
 
-  /// Sélectionne la pièce via le panneau Éléments (le TAP au canvas est ignoré
-  /// pour une pièce liée — v0.19.1) et vérifie que le bouton ⚙ apparaît.
-  Future<void> selectPieceViaMenu(WidgetTester tester) async {
-    await tester.tap(find.text('Éléments'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.textContaining('Bloc').last);
+  /// Sélectionne une pièce dans le preview (une pièce liée sur la timeline
+  /// sélectionne son os, conformément au comportement actuel).
+  Future<void> selectPieceViaMenu(
+    WidgetTester tester,
+    AnimationProject project,
+  ) async {
+    final (topLeft, geo) = canvasHarness(tester, project);
+    await tester.tapAt(topLeft + geo.sceneToCanvas(const Offset(360, 640)));
     await tester.pumpAndSettle();
     // Sélection confirmée : le bouton ⚙ n'existe que pour une forme
     // sélectionnée (sinon, la suite ne prouve rien).
@@ -1164,7 +1160,7 @@ void main() {
     Offset from,
     double dx,
   ) async {
-    await selectPieceViaMenu(tester);
+    await selectPieceViaMenu(tester, activeProject);
 
     final gesture = await tester.startGesture(from);
     await tester.pump();
@@ -1204,7 +1200,7 @@ void main() {
     },
   );
 
-  testWidgets('pièce liée : le tap au canvas ne la sélectionne pas', (
+  testWidgets('pièce liée : le tap au canvas la sélectionne mais la verrouille', (
     tester,
   ) async {
     final repository = _MemoryRepository();
@@ -1228,19 +1224,20 @@ void main() {
       reason: 'le tap sur l’os doit désélectionner la pièce',
     );
 
-    // Tap sur la pièce : toujours pas sélectionnée + message explicatif.
+    // Tap sur la pièce : elle est sélectionnée, mais ses transformations
+    // restent verrouillées tant qu’elle est portée par l’os.
     await tester.tapAt(center);
     await tester.pumpAndSettle();
-    expect(find.byTooltip('Propriétés de la forme'), findsNothing);
-    expect(find.textContaining('non sélectionnable'), findsOneWidget);
+    expect(find.byTooltip('Propriétés de la forme'), findsOneWidget);
+    expect(find.textContaining('transformations verrouillées'), findsOneWidget);
 
     // Le SnackBar pèse en bas et recouvre la barre d'outils : le laisser se
     // fermer (4 s) avant d'utiliser le menu, sinon le tap tombe dessus.
     await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
 
-    // Passerelle : le panneau Éléments la choisit quand même (sheet + Délier).
-    await selectPieceViaMenu(tester);
+    // La sélection au preview ouvre les propriétés, sans déverrouiller la pièce.
+    await selectPieceViaMenu(tester, project);
   });
 
   testWidgets('pièce liée sélectionnée : pincement et rotation bloqués', (
@@ -1254,7 +1251,7 @@ void main() {
     await pumpStudio(tester, repository, project);
     final (topLeft, geo) = canvasHarness(tester, project);
     final center = topLeft + geo.sceneToCanvas(const Offset(360, 640));
-    await selectPieceViaMenu(tester);
+    await selectPieceViaMenu(tester, project);
 
     // Pincement 2 pointeurs : sans verrou, le bras scale s'applique sans
     // aucun hit test → l'échelle bougerait. Ici : rien.
@@ -1656,7 +1653,12 @@ void main() {
       expect(
         tester
             .widget<IconButton>(
-              find.widgetWithIcon(IconButton, Icons.diamond_outlined),
+              find.ancestor(
+                of: find.byTooltip(
+                  'Keyframe d’os indisponible hors du segment',
+                ),
+                matching: find.byType(IconButton),
+              ),
             )
             .onPressed,
         isNull,
@@ -1747,7 +1749,10 @@ void main() {
 
       final message = find.byKey(const ValueKey<String>('keyform-top-message'));
       expect(message, findsOneWidget);
-      expect(find.textContaining('non sélectionnable'), findsOneWidget);
+      expect(
+        find.textContaining('transformations verrouillées'),
+        findsOneWidget,
+      );
       final banner = tester.getTopLeft(message);
       final scaffoldTop = tester.getTopLeft(find.byType(Scaffold).first);
       expect(banner.dy, greaterThanOrEqualTo(scaffoldTop.dy));
@@ -1865,6 +1870,51 @@ void main() {
     await tester.tap(find.byTooltip('Quitter le plein écran'));
     await tester.pumpAndSettle();
     expect(find.text('Film'), findsOneWidget);
+  });
+
+  testWidgets(
+    'les actions de l’élément et le slider Ordre Z sont dans sa sheet',
+    (tester) async {
+      final repository = _MemoryRepository();
+      final project = seededProject();
+      await pumpStudio(tester, repository, project);
+      await tester.tap(find.text('Éléments'));
+      await tester.pumpAndSettle();
+      expect(find.text('Bloc'), findsWidgets);
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+      // Le bouton de propriétés reste accessible pour la forme sélectionnée.
+      expect(find.byTooltip('Propriétés de la forme'), findsOneWidget);
+      await tester.tap(find.byTooltip('Propriétés de la forme'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Renommer'), findsOneWidget);
+      expect(find.text('Dupliquer'), findsOneWidget);
+      expect(find.text('Monter'), findsOneWidget);
+      expect(find.text('Descendre'), findsOneWidget);
+      expect(find.text('Supprimer'), findsOneWidget);
+      expect(find.text('Ordre Z'), findsOneWidget);
+      expect(find.byTooltip('Ajouter une keyframe au curseur'), findsWidgets);
+    },
+  );
+
+  testWidgets('la feuille d’os propose Modifier la forme', (tester) async {
+    final repository = _MemoryRepository();
+    final project = seededProject();
+    final shape = project.shapes.single;
+    final rig = SkeletonRig();
+    final bone = RigBone(name: 'Os', offsetX: 180, offsetY: 320, length: 60);
+    rig.addBone(bone);
+    rig.bindShape(shape.id, bone.id);
+    project.skeleton = rig;
+    await pumpStudio(tester, repository, project);
+
+    final (topLeft, geo) = canvasHarness(tester, project);
+    await tester.tapAt(topLeft + geo.sceneToCanvas(const Offset(180, 320)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Propriétés de l’os'));
+    await tester.pumpAndSettle();
+    expect(find.text('Modifier la forme…'), findsOneWidget);
   });
 }
 

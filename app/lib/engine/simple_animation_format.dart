@@ -33,6 +33,9 @@ class SimpleAnimationFormat {
   /// v4 (v0.19) : miroir du contenu par couche (`flipH` / `flipV`).
   static const int version4 = 4;
 
+  /// v5 (v0.33) : coins arrondis sélectifs sur les rectangles.
+  static const int version5 = 5;
+
   // Défauts (canvas validé utilisateur : 720×1280, 25 fps).
   static const double defaultWidth = 720;
   static const double defaultHeight = 1280;
@@ -54,6 +57,7 @@ class SimpleAnimationFormat {
     var usesV2 = false;
     var usesV3 = false;
     var usesV4 = false;
+    var usesV5 = false;
     // Une forme avec une liaison de COUCHE est exportée en layers[] (avec
     // une seule couche si besoin) : le nom de couche doit survivre au
     // round-trip pour que « Forme/Couche » reste importable.
@@ -71,8 +75,13 @@ class SimpleAnimationFormat {
       }
       if (_shapeUsesV3(shape)) usesV3 = true;
       if (_shapeUsesV4(shape)) usesV4 = true;
+      if (_shapeUsesV5(shape)) {
+        usesV5 = true;
+        usesV2 = true;
+      }
       shapes.add(_shapeToJson(shape, forceLayers: forceLayers));
     }
+    if (usesV4) usesV2 = true;
     final rig = project.skeleton;
     if (rig != null) {
       for (final track in rig.tracks.values) {
@@ -84,7 +93,9 @@ class SimpleAnimationFormat {
       if (rig.bindings.any((b) => b.layerId != null)) usesV2 = true;
     }
     final json = <String, Object?>{
-      'version': usesV4
+      'version': usesV5
+          ? version5
+          : usesV4
           ? version4
           : usesV3
           ? version3
@@ -116,6 +127,14 @@ class SimpleAnimationFormat {
     final layer = shape.layers.isEmpty
         ? ShapeLayer(name: 'Couche', kind: ShapeKind.rect)
         : shape.layers.first;
+    if (layer.kind == ShapeKind.rect &&
+        (layer.cornerRadius >= 0 ||
+            !layer.roundTopLeft ||
+            !layer.roundTopRight ||
+            !layer.roundBottomRight ||
+            !layer.roundBottomLeft)) {
+      return _multiLayerShapeToJson(shape);
+    }
     final json = <String, Object?>{
       'name': shape.name,
       'type': layer.kind.name,
@@ -134,6 +153,7 @@ class SimpleAnimationFormat {
     };
     if (layer.flipH) json['flipH'] = true;
     if (layer.flipV) json['flipV'] = true;
+    _addRoundedRectJson(json, layer);
     if (layer.kind == ShapeKind.path && layer.points.isNotEmpty) {
       json['points'] = _pointsToJson(layer);
     }
@@ -159,6 +179,26 @@ class SimpleAnimationFormat {
       if (key.layerPoints.isNotEmpty) return true;
     }
     return false;
+  }
+
+  /// Les rectangles ont-ils un rayon ou une sélection de coins non standard ?
+  static bool _shapeUsesV5(VectorShape shape) => shape.layers.any(
+    (layer) =>
+        layer.kind == ShapeKind.rect &&
+        (layer.cornerRadius >= 0 ||
+            !layer.roundTopLeft ||
+            !layer.roundTopRight ||
+            !layer.roundBottomRight ||
+            !layer.roundBottomLeft),
+  );
+
+  static void _addRoundedRectJson(Map<String, Object?> json, ShapeLayer layer) {
+    if (layer.kind != ShapeKind.rect) return;
+    if (layer.cornerRadius >= 0) json['cornerRadius'] = layer.cornerRadius;
+    if (!layer.roundTopLeft) json['roundTopLeft'] = false;
+    if (!layer.roundTopRight) json['roundTopRight'] = false;
+    if (!layer.roundBottomRight) json['roundBottomRight'] = false;
+    if (!layer.roundBottomLeft) json['roundBottomLeft'] = false;
   }
 
   /// La forme utilise-t-elle un flip de couche (miroir, v0.19) ?
@@ -210,6 +250,7 @@ class SimpleAnimationFormat {
       'width': layer.width,
       'height': layer.height,
     };
+    _addRoundedRectJson(json, layer);
     if (layer.x != 0) json['x'] = layer.x;
     if (layer.y != 0) json['y'] = layer.y;
     if (layer.rotation != 0) json['rotation'] = _radToDeg(layer.rotation);
@@ -707,6 +748,11 @@ class _Parse {
     'bone',
     'flipH',
     'flipV',
+    'cornerRadius',
+    'roundTopLeft',
+    'roundTopRight',
+    'roundBottomRight',
+    'roundBottomLeft',
   };
   static const _boneKnownKeys = {
     'name',
@@ -765,6 +811,11 @@ class _Parse {
     'points',
     'flipH',
     'flipV',
+    'cornerRadius',
+    'roundTopLeft',
+    'roundTopRight',
+    'roundBottomRight',
+    'roundBottomLeft',
   ];
 
   void _parseTheme(Object? raw) {
@@ -808,8 +859,9 @@ class _Parse {
     if (version != SimpleAnimationFormat.version &&
         version != SimpleAnimationFormat.version2 &&
         version != SimpleAnimationFormat.version3 &&
-        version != SimpleAnimationFormat.version4) {
-      problem('version : 1, 2, 3 ou 4 attendu (trouvé $version)');
+        version != SimpleAnimationFormat.version4 &&
+        version != SimpleAnimationFormat.version5) {
+      problem('version : 1, 2, 3, 4 ou 5 attendu (trouvé $version)');
     }
     _checkUnknownFields('racine', json, _topKnownKeys);
     _parseTheme(json['theme']);
@@ -1036,6 +1088,31 @@ class _Parse {
       ),
       filled: boolAt('$path.filled', json['filled'], fallback: true),
       strokeWidth: numAt('$path.strokeWidth', json['strokeWidth'], fallback: 4),
+      cornerRadius: numAt(
+        '$path.cornerRadius',
+        json['cornerRadius'],
+        fallback: -1,
+      ),
+      roundTopLeft: boolAt(
+        '$path.roundTopLeft',
+        json['roundTopLeft'],
+        fallback: true,
+      ),
+      roundTopRight: boolAt(
+        '$path.roundTopRight',
+        json['roundTopRight'],
+        fallback: true,
+      ),
+      roundBottomRight: boolAt(
+        '$path.roundBottomRight',
+        json['roundBottomRight'],
+        fallback: true,
+      ),
+      roundBottomLeft: boolAt(
+        '$path.roundBottomLeft',
+        json['roundBottomLeft'],
+        fallback: true,
+      ),
     );
     // Miroir (v0.19) : le contenu de la couche est reflété autour de son
     // origine — accepté à plat (forme à une couche) comme dans layers[].

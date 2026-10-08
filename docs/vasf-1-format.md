@@ -1,4 +1,4 @@
-# VASF — Keyform Studio simple JSON format (v1 + extensions v2, v3, v4)
+# VASF — Keyform Studio simple JSON format (v1 + extensions v2, v3, v4, v5)
 
 VASF is a compact, LLM-friendly JSON format for describing a complete 2D vector
 animation (shapes, keyframes, optional skeleton rig) that the **Keyform Studio**
@@ -21,8 +21,8 @@ Rules of thumb for generating a valid file:
   keyframe fields.
 - The importer collects ALL problems and reports them in French — fix them and retry.
 - Nested project instances are not representable in VASF-1 (ignored on export).
-- The VASF-2 and VASF-3 extensions (below) are optional: a `version: 1` file
-  stays valid. The importer accepts versions 1 to 4.
+- The VASF-2 through VASF-5 extensions (below) are optional: a `version: 1`
+  file stays valid. The importer accepts versions 1 to 5.
 
 # Top level
 
@@ -38,7 +38,7 @@ Rules of thumb for generating a valid file:
 
 | field | type | default | notes |
 |---|---|---|---|
-| version | int | required | `1`, or `2` when using the VASF-2 extensions below |
+| version | int | required | `1`–`5`; choose the highest extension version used |
 | name | string | "Animation importée" | project name |
 | canvas.width / height | number | 720 / 1280 | 16…4096 |
 | canvas.fps | int | 25 | 5…60 (export fps) |
@@ -87,6 +87,8 @@ convention). Positive degrees = clockwise on screen.
 | pivot | `[0, 0]` | VASF-2: `[dx, dy]` offset from the shape center, in shape units — rotation & scale turn around it (STATIC, see below) |
 | opacity | 1 | 0–1 |
 | layers | optional | VASF-2: array of primitive objects (see below) — overrides `type/color/filled/strokeWidth/width/height/points` |
+| cornerRadius | absent = historical auto | VASF-5: explicit common radius for rectangle corners; `0` makes square corners |
+| roundTopLeft / roundTopRight / roundBottomRight / roundBottomLeft | true | VASF-5: independently enable/disable each rectangle corner |
 | ref | optional | VASF-2: name of a `defs` entry used as geometry defaults (see below) |
 | bone | optional | v0.17: binding shortcut — whole-shape binding to the named bone (same as one `skeleton.bind` entry; conflict with `bind` = error; requires a `skeleton` section) |
 | cycle | optional | VASF-2: `{"repeat": N}` repeats the keyframe pattern (see below) |
@@ -231,8 +233,9 @@ follows. An unknown alias is a collected error. Theme values must be literal
 Each layer accepts: `name` ("Couche"), `type`, `color` (alias OK), `filled`,
 `strokeWidth`, `width` / `height`, `points` (path), plus a LOCAL pose
 `x` / `y` (offset from the shape center), `rotation`, `scale`, `opacity`,
-and (VASF-4) the content mirror flags `flipH` / `flipV` (see the
-"Mirror — flipH / flipV" section).
+and (VASF-4) the content mirror flags `flipH` / `flipV`, and (VASF-5) the
+rectangle corner fields `cornerRadius` and `roundTopLeft` / `roundTopRight` /
+`roundBottomRight` / `roundBottomLeft` (see the relevant sections).
 Draw order = array order (last = front). When `layers` is present, the
 shape-level `type/color/filled/strokeWidth/width/height/points` are ignored;
 `x/y/rotation/scale/opacity/keyframes` remain the GROUP pose (the whole face
@@ -350,8 +353,8 @@ of a shape to a bone; a plain key keeps binding the whole shape.
 
 Heavy engine features, delivered in v0.15. All fields are optional; a file
 that uses none of them exports as v1/v2. Mixing v2 and v3 fields in one file
-is fine — the importer accepts versions 1, 2 and 3, and the app's own export
-writes `version: 3` when ANY v3 feature is used.
+is fine. The importer accepts versions 1 to 5; the exporter uses the highest
+extension version present, so later v4/v5 features take precedence.
 
 ## Animated color — `color` / `colors` in a shape keyframe
 
@@ -483,6 +486,34 @@ over those bones only). A bone cycle with fewer than 2 keyframes (or a zero
 period) is ignored; `repeat` must be an integer ≥ 1. End the pattern with
 the pose it started with for a clean loop.
 
+# VASF-5 extensions — rectangle corners
+
+VASF-5 adds a shared corner radius and independent corner switches for
+rectangles, on a flat shape or on a primitive inside `layers[]`:
+
+```json
+{
+  "version": 5,
+  "name": "Rounded cards",
+  "shapes": [
+    {"name": "Card", "type": "rect", "width": 300, "height": 180,
+     "cornerRadius": 28, "roundTopLeft": false, "roundBottomRight": false},
+    {"name": "Square", "type": "rect", "width": 160, "height": 100,
+     "cornerRadius": 0}
+  ]
+}
+```
+
+- `cornerRadius` must be a number ≥ 0. It is clamped at render time to half the
+  smaller rectangle dimension. Explicit `0` produces square corners.
+- If `cornerRadius` is absent, the historical automatic radius remains in use:
+  `min(24, 0.15 × min(width, height))`. This preserves existing projects.
+- The four `round…` fields are booleans, each defaulting to `true`; `false`
+  squares only that corner. They are ignored by non-rectangle primitives.
+- The exporter writes `version: 5` when any rectangle has an explicit radius or
+  a non-default corner selection. `zIndex` is app-internal and does not alter
+  the existing VASF array draw order.
+
 # Limitations
 
 - VASF-2 layer pose is static: a layer's x/y/rotation/scale/opacity cannot be
@@ -500,8 +531,9 @@ the pose it started with for a clean loop.
 - VASF-3 chains of ≥ 3 bones solve with CCD: the end effector lands on the
   target but the elbow side is not guaranteed (`bend` only controls the
   2-bone analytic solver).
-- The export writes `version: 3` when a shape keyframe carries colors or
-  morph points or a bone keyframe carries `move`; `version: 2` for the other
-  v2 extensions (several layers, axis factor ≠ 1, pivot ≠ 0, `cubic-bezier`,
-  layer binding); single-layer shapes without those export flat (v1), and the
+- The export writes `version: 5` when VASF-5 rectangle-corner settings are
+  used; otherwise `version: 4` for content mirroring, `version: 3` for shape
+  keyframe colors/morph or bone `move`, and `version: 2` for the other v2
+  extensions (several layers, axis factor ≠ 1, pivot ≠ 0, `cubic-bezier`,
+  layer binding). Single-layer shapes without extensions export flat (v1);
   palette/defs are never exported (colors are expanded).

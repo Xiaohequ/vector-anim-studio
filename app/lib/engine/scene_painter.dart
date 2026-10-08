@@ -199,20 +199,20 @@ class ScenePainter extends CustomPainter {
 
     // Ordre de dessin par os (v0.10) : en projet squelette, les pièces sont
     // triées par le z de leur os porteur — z égal → ordre de la timeline.
-    if (rigPose != null) {
-      final indexes = List<int>.generate(project.shapes.length, (i) => i);
-      indexes.sort((a, b) {
-        final za = rig!.zForShape(project.shapes[a].id);
-        final zb = rig.zForShape(project.shapes[b].id);
-        return za != zb ? za.compareTo(zb) : a.compareTo(b);
-      });
-      for (final index in indexes) {
-        paintShape(project.shapes[index]);
-      }
-    } else {
-      for (final shape in project.shapes) {
-        paintShape(shape);
-      }
+    final indexes = List<int>.generate(project.shapes.length, (i) => i);
+    indexes.sort((a, b) {
+      final shapeA = project.shapes[a];
+      final shapeB = project.shapes[b];
+      final boneOrder = rigPose == null
+          ? 0
+          : rig!.zForShape(shapeA.id).compareTo(rig.zForShape(shapeB.id));
+      final zOrder = shapeA.zIndex.compareTo(shapeB.zIndex);
+      if (zOrder != 0) return zOrder;
+      if (boneOrder != 0) return boneOrder;
+      return a.compareTo(b);
+    });
+    for (final index in indexes) {
+      paintShape(project.shapes[index]);
     }
   }
 
@@ -409,19 +409,30 @@ class ScenePainter extends CustomPainter {
 
     switch (layer.kind) {
       case ShapeKind.rect:
-        canvas.drawRRect(
-          RRect.fromRectAndRadius(
-            Rect.fromCenter(
-              center: Offset.zero,
-              width: layer.width,
-              height: layer.height,
-            ),
-            Radius.circular(
-              math.min(24, math.min(layer.width, layer.height) * 0.15),
-            ),
-          ),
-          paint,
+        final rect = Rect.fromCenter(
+          center: Offset.zero,
+          width: layer.width,
+          height: layer.height,
         );
+        final automaticRadius = math.min(
+          24.0,
+          math.min(layer.width.abs(), layer.height.abs()) * 0.15,
+        );
+        final radius =
+            (layer.cornerRadius < 0 ? automaticRadius : layer.cornerRadius)
+                .clamp(0.0, math.min(layer.width.abs(), layer.height.abs()) / 2)
+                .toDouble();
+        final corners = BorderRadius.only(
+          topLeft: layer.roundTopLeft ? Radius.circular(radius) : Radius.zero,
+          topRight: layer.roundTopRight ? Radius.circular(radius) : Radius.zero,
+          bottomRight: layer.roundBottomRight
+              ? Radius.circular(radius)
+              : Radius.zero,
+          bottomLeft: layer.roundBottomLeft
+              ? Radius.circular(radius)
+              : Radius.zero,
+        );
+        canvas.drawRRect(corners.toRRect(rect), paint);
       case ShapeKind.circle:
         canvas.drawOval(
           Rect.fromCenter(

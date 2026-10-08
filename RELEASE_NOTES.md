@@ -1,13 +1,19 @@
-# Keyform Studio 0.32.1
+# Keyform Studio 0.33.0
 
-## Correction des icônes de réordonnancement des formes
+## Studio simplifié et propriétés des éléments
 
-- Dans l’éditeur de forme, les icônes des actions **Monter** et **Descendre**
-  sont interverties, conformément à la direction réelle du déplacement.
-- Les commandes d’ordre elles-mêmes et les autres fonctions de l’éditeur restent
-  inchangées.
+- Barre Studio simplifiée : **Éléments** et **Animation** ; les actions d’un élément sont regroupées dans sa feuille de propriétés. L’accès Os dédié disparaît de la barre.
+- La keyframe au curseur est placée dans l’en-tête de la timeline ; l’aperçu de l’éditeur de forme isole la forme en cours d’édition.
+- Depuis les propriétés d’un os, accès direct à l’édition de la forme qu’il porte.
+- Sélecteur de couleur personnalisée ajouté aux propriétés des couches.
+
+## Ordre Z et coins arrondis
+
+- Ordre Z numérique réglable par forme ; il est persisté (migration SQLite v9) et départage l’ordre d’affichage.
+- Rayon commun réglable et sélection indépendante des quatre coins des rectangles. Les rectangles existants conservent leur arrondi automatique historique ; un rayon nul explicite donne un rectangle carré.
+- VASF-5 prend en charge ces réglages dans les formes à plat et `layers[]`.
 
 ### Vérifications
 
-- Test widget vérifiant les deux icônes à côté de leurs actions respectives.
-- Suite complète des tests et `flutter analyze` requis avant publication.
+- `flutter analyze` sans problème.
+- Suite complète des tests Flutter : 290 tests passés.

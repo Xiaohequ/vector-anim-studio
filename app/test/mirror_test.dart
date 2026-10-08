@@ -126,29 +126,31 @@ Future<Uint8List> _render(
 
 void main() {
   // ------------------------------------------------------------- modèle
-  test('miroir H : x et rotation négées, flipH posé — double appel = identité',
-      () {
-    final shape = VectorShape(name: 'Groupe');
-    final layer = ShapeLayer(
-      name: 'Flèche',
-      kind: ShapeKind.arrow,
-      x: 20,
-      y: 8,
-      rotation: 0.4,
-    );
-    shape.layers.add(layer);
-    shape.mirror(horizontal: true);
-    expect(layer.x, -20);
-    expect(layer.y, 8);
-    expect(layer.rotation, closeTo(-0.4, 1e-9));
-    expect(layer.flipH, isTrue);
-    expect(layer.flipV, isFalse);
-    // Le flip est auto-inverse : deux pressions reviennent à l'original.
-    shape.mirror(horizontal: true);
-    expect(layer.x, 20);
-    expect(layer.rotation, closeTo(0.4, 1e-9));
-    expect(layer.flipH, isFalse);
-  });
+  test(
+    'miroir H : x et rotation négées, flipH posé — double appel = identité',
+    () {
+      final shape = VectorShape(name: 'Groupe');
+      final layer = ShapeLayer(
+        name: 'Flèche',
+        kind: ShapeKind.arrow,
+        x: 20,
+        y: 8,
+        rotation: 0.4,
+      );
+      shape.layers.add(layer);
+      shape.mirror(horizontal: true);
+      expect(layer.x, -20);
+      expect(layer.y, 8);
+      expect(layer.rotation, closeTo(-0.4, 1e-9));
+      expect(layer.flipH, isTrue);
+      expect(layer.flipV, isFalse);
+      // Le flip est auto-inverse : deux pressions reviennent à l'original.
+      shape.mirror(horizontal: true);
+      expect(layer.x, 20);
+      expect(layer.rotation, closeTo(0.4, 1e-9));
+      expect(layer.flipH, isFalse);
+    },
+  );
 
   test('miroir V : y et rotation négées, flipV posé', () {
     final shape = VectorShape(name: 'Groupe');
@@ -179,10 +181,7 @@ void main() {
         values: Map<AnimatableProperty, double>.from(pose),
         layerColors: {shape.layers.first.id: 0xFFFF5C5C},
         layerPoints: {
-          shape.layers.first.id: const <Offset>[
-            Offset(0, 0),
-            Offset(30, 10),
-          ],
+          shape.layers.first.id: const <Offset>[Offset(0, 0), Offset(30, 10)],
         },
       ),
       ShapeKeyframe(
@@ -255,7 +254,9 @@ void main() {
       );
       shape.layers.add(layer);
       shape.mirror(horizontal: true);
-      shape.mirror(horizontal: false); // miroir V — rotation : deux négations → 0.5
+      shape.mirror(
+        horizontal: false,
+      ); // miroir V — rotation : deux négations → 0.5
       project.shapes.add(shape);
       await repository.save(project);
       final loaded = await repository.load(project.id);
@@ -278,8 +279,8 @@ void main() {
     project.shapes.add(shape);
     final json = SimpleAnimationFormat.toJson(project);
     expect(json['version'], SimpleAnimationFormat.version4);
-    final flat = (json['shapes'] as List<Object?>).first
-        as Map<String, Object?>;
+    final flat =
+        (json['shapes'] as List<Object?>).first as Map<String, Object?>;
     expect(flat['flipH'], isTrue);
     final imported = SimpleAnimationFormat.fromJson(json);
     expect(imported.shapes.first.layers.first.flipH, isTrue);
@@ -289,7 +290,9 @@ void main() {
   test('vasf : flip porté par couche en layers[]', () {
     final project = AnimationProject.blank(name: 'Groupe vasf');
     final shape = VectorShape(name: 'Groupe');
-    shape.layers.add(ShapeLayer(name: 'A', kind: ShapeKind.arrow)..flipH = true);
+    shape.layers.add(
+      ShapeLayer(name: 'A', kind: ShapeKind.arrow)..flipH = true,
+    );
     shape.layers.add(ShapeLayer(name: 'B', kind: ShapeKind.rect));
     project.shapes.add(shape);
     final json = SimpleAnimationFormat.toJson(project);
@@ -299,21 +302,24 @@ void main() {
     expect(imported[1].flipH, isFalse);
   });
 
-  test('vasf : version 5 refusée (message à jour)', () {
+  test('vasf : version 6 refusée (message à jour)', () {
     try {
       SimpleAnimationFormat.fromJson(<String, Object?>{
-        'version': 5,
-        'shapes': <Object?>[],
+        'version': 6,
+        'shapes': <Object?>[
+          <String, Object?>{'name': 'Bloc', 'type': 'rect'},
+        ],
       });
       fail('SimpleFormatException attendu');
     } on SimpleFormatException catch (error) {
-      expect(error.toString(), contains('1, 2, 3 ou 4'));
+      expect(error.toString(), contains('1, 2, 3, 4 ou 5'));
     }
   });
 
   // ------------------------------------------------------- rendu (pixels)
-  testWidgets('sonde : miroir H reflète le blob autour du centre de la forme',
-      (tester) async {
+  testWidgets('sonde : miroir H reflète le blob autour du centre de la forme', (
+    tester,
+  ) async {
     final project = _blobProject();
     final before = _centroid(await _render(tester, project, 0), 360, 640);
     expect(before.x, greaterThan(210), reason: 'blob à droite du centre');
