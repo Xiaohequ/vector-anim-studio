@@ -2959,6 +2959,11 @@ class _StudioScreenState extends State<StudioScreen>
               label: 'Animation',
               onPressed: _showAnimationSheet,
             ),
+            _toolbarButton(
+              icon: Icons.crop_free,
+              label: 'Canvas',
+              onPressed: _showCanvasSheet,
+            ),
           ],
         ),
       ),
@@ -3096,6 +3101,58 @@ class _StudioScreenState extends State<StudioScreen>
       ),
     ],
   );
+
+  Future<void> _setCanvasFormat(ProjectFormat format) async {
+    final project = _project;
+    if (project == null) return;
+    final currentAspect = project.width / project.height;
+    final targetAspect = format.width / format.height;
+    // Un même ratio ne modifie pas les dimensions personnalisées/importées.
+    if ((currentAspect - targetAspect).abs() < 0.001) return;
+    _pushUndo();
+    setState(() {
+      project
+        ..width = format.width
+        ..height = format.height;
+    });
+    await _flushSave();
+  }
+
+  Future<void> _showCanvasSheet() {
+    final project = _project;
+    if (project == null) return Future<void>.value();
+    final selected = ProjectFormatInfo.closestTo(project.width, project.height);
+    return _showToolSheet(
+      title: 'Canvas',
+      icon: Icons.crop_free,
+      children: <Widget>[
+        _toolSection('Format du projet'),
+        RadioGroup<ProjectFormat>(
+          groupValue: selected,
+          onChanged: (value) {
+            if (value == null) return;
+            Navigator.of(context).pop();
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _setCanvasFormat(value);
+            });
+          },
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              for (final format in ProjectFormat.values)
+                RadioListTile<ProjectFormat>(
+                  value: format,
+                  title: Text(format.ratioLabel),
+                  subtitle: Text(
+                    '${format.width.round()} × ${format.height.round()}',
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 
   Future<void> _showAnimationSheet() {
     final shape = _selected;

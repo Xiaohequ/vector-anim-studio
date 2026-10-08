@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import '../data/project_repository.dart';
 import '../data/project_store.dart';
 import '../engine/json_project_import.dart';
-import '../models/animation.dart';
 import 'studio_screen.dart';
 
 /// Écran principal : liste des projets d'animation.
@@ -107,21 +106,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _newProject() async {
-    final result = await showDialog<_NewProjectResult>(
-      context: context,
-      builder: (_) => const _NewProjectDialog(),
-    );
-    if (result == null) return;
-    if (result.sample) {
-      final project = await _store.createSample();
-      if (!mounted) return;
-      await _open(project.id);
-      return;
-    }
-    final project = await _store.createProject(
-      name: result.name,
-      format: result.format,
-    );
+    final project = await _store.createProject();
     if (!mounted) return;
     await _open(project.id);
   }
@@ -384,103 +369,6 @@ class _Message extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _NewProjectResult {
-  const _NewProjectResult({
-    required this.name,
-    required this.format,
-    this.sample = false,
-  });
-
-  final String name;
-  final ProjectFormat format;
-  final bool sample;
-}
-
-class _NewProjectDialog extends StatefulWidget {
-  const _NewProjectDialog();
-
-  @override
-  State<_NewProjectDialog> createState() => _NewProjectDialogState();
-}
-
-class _NewProjectDialogState extends State<_NewProjectDialog> {
-  final TextEditingController _name = TextEditingController();
-  ProjectFormat _format = ProjectFormat.portrait;
-
-  @override
-  void dispose() {
-    _name.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Nouveau projet'),
-      content: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            TextField(
-              controller: _name,
-              autofocus: true,
-              decoration: const InputDecoration(
-                labelText: 'Nom du projet',
-                hintText: 'Mon animation',
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text('Format', style: TextStyle(fontSize: 12)),
-            const SizedBox(height: 6),
-            SegmentedButton<ProjectFormat>(
-              showSelectedIcon: false,
-              segments: <ButtonSegment<ProjectFormat>>[
-                for (final format in ProjectFormat.values)
-                  ButtonSegment<ProjectFormat>(
-                    value: format,
-                    label: Text(switch (format) {
-                      ProjectFormat.portrait => 'Portrait',
-                      ProjectFormat.landscape => 'Paysage',
-                      ProjectFormat.square => 'Carré',
-                    }, style: const TextStyle(fontSize: 12)),
-                  ),
-              ],
-              selected: <ProjectFormat>{_format},
-              onSelectionChanged: (selection) =>
-                  setState(() => _format = selection.first),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Durée du projet = celle des éléments posés sur la timeline ; '
-              'les fps se règlent à l’export.',
-              style: const TextStyle(fontSize: 11, color: Colors.white38),
-            ),
-          ],
-        ),
-      ),
-      actions: <Widget>[
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Annuler'),
-        ),
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(
-            _NewProjectResult(name: _name.text, format: _format, sample: true),
-          ),
-          child: const Text('Créer avec la démo'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(
-            context,
-          ).pop(_NewProjectResult(name: _name.text, format: _format)),
-          child: const Text('Créer'),
-        ),
-      ],
     );
   }
 }

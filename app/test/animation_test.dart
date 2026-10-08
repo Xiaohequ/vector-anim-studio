@@ -181,6 +181,29 @@ void main() {
       expect(project.shapes.last.id, first.id);
     });
 
+    test('les huit formats Canvas respectent leur ratio et dimensions', () {
+      const expectedRatios = <ProjectFormat, double>{
+        ProjectFormat.portrait: 9 / 16,
+        ProjectFormat.portrait4x5: 4 / 5,
+        ProjectFormat.portrait3x4: 3 / 4,
+        ProjectFormat.square: 1,
+        ProjectFormat.landscape4x3: 4 / 3,
+        ProjectFormat.landscape3x2: 3 / 2,
+        ProjectFormat.landscape: 16 / 9,
+        ProjectFormat.ultrawide21x9: 21 / 9,
+      };
+      expect(ProjectFormat.values, hasLength(8));
+      for (final format in ProjectFormat.values) {
+        expect(
+          format.width / format.height,
+          closeTo(expectedRatios[format]!, 0.001),
+          reason: format.ratioLabel,
+        );
+      }
+      expect(ProjectFormatInfo.closestTo(512, 640), ProjectFormat.portrait4x5);
+      expect(ProjectFormatInfo.closestTo(100, 0), ProjectFormat.portrait);
+    });
+
     test('blank applique le format choisi, durée et fps non fixés', () {
       final project = AnimationProject.blank(
         name: 'Test',

@@ -34,13 +34,21 @@ class ProjectStore extends ChangeNotifier {
   }
 
   Future<AnimationProject> createProject({
-    required String name,
-    required ProjectFormat format,
+    String? name,
+    ProjectFormat format = ProjectFormat.portrait,
+    DateTime? now,
   }) async {
-    final project = AnimationProject.blank(
-      name: name.trim().isEmpty ? 'Nouvelle animation' : name.trim(),
-      format: format,
-    );
+    final createdAt = now ?? DateTime.now();
+    final trimmedName = name?.trim();
+    final project =
+        AnimationProject.blank(
+            name: trimmedName == null || trimmedName.isEmpty
+                ? _generatedProjectName(createdAt)
+                : trimmedName,
+            format: format,
+          )
+          ..createdAt = createdAt
+          ..updatedAt = createdAt;
     await repository.save(project);
     await refresh();
     return project;
@@ -70,4 +78,16 @@ class ProjectStore extends ChangeNotifier {
     await refresh();
     return project;
   }
+}
+
+String _generatedProjectName(DateTime dateTime) {
+  String twoDigits(int value) => value.toString().padLeft(2, '0');
+  return 'Animation ${dateTime.year}-'
+      '${twoDigits(dateTime.month)}-'
+      '${twoDigits(dateTime.day)} '
+      '${twoDigits(dateTime.hour)}:'
+      '${twoDigits(dateTime.minute)}:'
+      '${twoDigits(dateTime.second)}.'
+      '${dateTime.millisecond.toString().padLeft(3, '0')}'
+      '${dateTime.microsecond.toString().padLeft(3, '0')}';
 }

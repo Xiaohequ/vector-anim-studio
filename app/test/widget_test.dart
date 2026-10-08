@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:vector_anim_studio/data/project_repository.dart';
+import 'package:vector_anim_studio/data/project_store.dart';
 import 'package:vector_anim_studio/engine/rig_overlay_painter.dart';
 import 'package:vector_anim_studio/engine/scene_painter.dart';
 import 'package:vector_anim_studio/engine/selection_geometry.dart';
@@ -81,6 +82,19 @@ void main() {
     activeProject = AnimationProject.blank(name: 'Test');
   });
 
+  test('ProjectStore nomme le projet avec sa date et son heure', () async {
+    final store = ProjectStore(repository);
+    final createdAt = DateTime(2026, 10, 8, 16, 40, 5, 9, 42);
+    final project = await store.createProject(now: createdAt);
+
+    expect(project.name, 'Animation 2026-10-08 16:40:05.009042');
+    expect(project.width, 360);
+    expect(project.height, 640);
+    expect(project.createdAt, createdAt);
+    expect(project.updatedAt, createdAt);
+    store.dispose();
+  });
+
   testWidgets(
     'l’écran principal affiche l’état vide et le bouton nouveau projet',
     (tester) async {
@@ -94,25 +108,37 @@ void main() {
     },
   );
 
-  testWidgets('la création d’un projet l’ajoute à la liste', (tester) async {
+  testWidgets('Nouveau projet ouvre directement le Studio avec les défauts', (
+    tester,
+  ) async {
     await tester.pumpWidget(VectorAnimStudioApp(repository: repository));
     await tester.pumpAndSettle();
 
     await tester.tap(find.widgetWithText(FilledButton, 'Nouveau projet'));
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.byType(TextField).first, 'Mon film');
-    await tester.tap(find.widgetWithText(FilledButton, 'Créer'));
-    await tester.pumpAndSettle();
-
-    // L'écran studio prend le relais : le nom du projet est dans l'AppBar.
-    expect(find.text('Mon film'), findsWidgets);
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.byType(TextField), findsNothing);
     expect(await repository.countProjects(), 1);
+    final project = await repository.load(repository._projects.keys.single);
+    expect(
+      project.name,
+      matches(
+        RegExp(r'^Animation \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{6}$'),
+      ),
+    );
+    expect(find.text(project.name), findsWidgets);
+    expect(project.width, 360);
+    expect(project.height, 640);
+    expect(project.fps, 30);
+    expect(project.type, ProjectType.vector);
+    expect(project.shapes, isEmpty);
+    expect(project.createdAt, isNotNull);
+    expect(project.updatedAt, project.createdAt);
 
-    // Retour à l'écran principal : le projet apparaît dans la liste.
     await tester.pageBack();
     await tester.pumpAndSettle();
-    expect(find.text('Mon film'), findsOneWidget);
+    expect(find.text(project.name), findsOneWidget);
     expect(find.text('Aucun projet pour l’instant'), findsNothing);
   });
 
@@ -150,6 +176,7 @@ void main() {
 
       expect(find.text('Éléments'), findsOneWidget);
       expect(find.text('Animation'), findsOneWidget);
+      expect(find.text('Canvas'), findsOneWidget);
       expect(find.text('Os'), findsNothing);
       expect(find.byTooltip('Export'), findsOneWidget);
       expect(find.text('Formes'), findsNothing);
@@ -292,25 +319,41 @@ void main() {
     expect(find.text('Forme 1'), findsNothing);
   });
 
-  testWidgets('création unifiée : pas de choix de type', (tester) async {
-    await tester.pumpWidget(VectorAnimStudioApp(repository: repository));
+  testWidgets('Canvas propose huit ratios et modifie le format du projet', (
+    tester,
+  ) async {
+    final project = seededProject(withShape: false);
+    await pumpStudio(tester, repository, project);
+
+    expect(find.text('Canvas'), findsOneWidget);
+    await tester.tap(find.text('Canvas'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Nouveau projet'));
-    await tester.pumpAndSettle();
-    expect(find.text('Vectorielle'), findsNothing);
-    expect(find.text('Squelette'), findsNothing);
-    expect(find.text('Type d’animation'), findsNothing);
-    await tester.enterText(find.byType(TextField).first, 'Projet mixte');
-    await tester.tap(find.widgetWithText(FilledButton, 'Créer'));
+    expect(find.text('9:16 · Portrait'), findsOneWidget);
+    expect(find.text('4:5 · Portrait'), findsOneWidget);
+    expect(find.text('3:4 · Portrait'), findsOneWidget);
+    expect(find.text('1:1 · Carré'), findsOneWidget);
+    expect(find.text('4:3 · Paysage'), findsOneWidget);
+    expect(find.text('3:2 · Paysage'), findsOneWidget);
+    expect(find.text('16:9 · Paysage'), findsOneWidget);
+    expect(find.text('21:9 · Cinéma'), findsOneWidget);
+    expect(find.byType(RadioListTile<ProjectFormat>), findsNWidgets(8));
+
+    await tester.tap(find.text('4:5 · Portrait'));
     await tester.pumpAndSettle();
 
-    final project = await repository.load(repository._projects.keys.single);
-    expect(project.type, ProjectType.vector, reason: 'ancien champ conservé');
-    expect(project.usesRigWorkflow, isFalse, reason: 'le rig reste optionnel');
-    expect(find.text('Projet mixte'), findsWidgets);
-    expect(find.textContaining(' fps'), findsNothing);
-    expect(find.textContaining(' / '), findsNothing);
+    expect(project.width, 512);
+    expect(project.height, 640);
+    expect(find.text('Canvas'), findsOneWidget);
+    final persisted = await repository.load(project.id);
+    expect(persisted.width, 512);
+    expect(persisted.height, 640);
+
+    await tester.tap(find.widgetWithIcon(IconButton, Icons.undo).last);
+    await tester.pumpAndSettle();
+    final undone = await repository.load(project.id);
+    expect(undone.width, 360);
+    expect(undone.height, 640);
   });
 
   testWidgets('un ancien projet vectoriel expose les outils de rig', (
