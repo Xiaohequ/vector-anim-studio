@@ -540,5 +540,27 @@ void main() {
     expect(saved, isNotNull);
     expect(saved!.layers, hasLength(2));
     expect(saved!.layers.last.kind, ShapeKind.rect);
+    expect(saved!.layers.last.cornerRadius, 0);
+  });
+
+  testWidgets('une nouvelle forme commence avec un rectangle carré', (
+    tester,
+  ) async {
+    final project = _project();
+    VectorShape? saved;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: _Host(project: project, onSaved: (value) => saved = value),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Enregistrer'));
+    await tester.pumpAndSettle();
+
+    expect(saved, isNotNull);
+    expect(saved!.layers, hasLength(1));
+    expect(saved!.layers.single.kind, ShapeKind.rect);
+    expect(saved!.layers.single.cornerRadius, 0);
   });
 }

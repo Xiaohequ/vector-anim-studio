@@ -157,7 +157,15 @@ void main() {
       await tester.tap(find.text('Éléments'));
       await tester.pumpAndSettle();
       expect(find.text('Ajouter une forme…'), findsOneWidget);
-      expect(find.textContaining('DANS LE PROJET'), findsNothing);
+      expect(find.textContaining('Projet ·'), findsNothing);
+      expect(
+        find.text('Sélectionne un élément dans l’aperçu ou la timeline.'),
+        findsNothing,
+      );
+      expect(
+        find.text('Ses actions sont dans les propriétés de l’élément.'),
+        findsNothing,
+      );
       expect(find.text('Créer et lier un os'), findsNothing);
 
       await tester.tapAt(const Offset(10, 10));

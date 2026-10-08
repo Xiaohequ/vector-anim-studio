@@ -2369,7 +2369,7 @@ class _StudioScreenState extends State<StudioScreen>
                     ),
                     _buildPlaybar(controller),
                     Expanded(child: _buildTimeline(project, controller)),
-                    _buildToolbar(project),
+                    _buildToolbar(),
                   ],
                 );
               },
@@ -2938,7 +2938,7 @@ class _StudioScreenState extends State<StudioScreen>
   }
 
   /// Actions fréquentes regroupées en bas ; l'export occasionnel reste en haut.
-  Widget _buildToolbar(AnimationProject project) {
+  Widget _buildToolbar() {
     return SafeArea(
       top: false,
       child: Container(
@@ -2952,7 +2952,7 @@ class _StudioScreenState extends State<StudioScreen>
             _toolbarButton(
               icon: Icons.category_outlined,
               label: 'Éléments',
-              onPressed: () => _showElementsSheet(project),
+              onPressed: _showElementsSheet,
             ),
             _toolbarButton(
               icon: Icons.animation,
@@ -3065,7 +3065,7 @@ class _StudioScreenState extends State<StudioScreen>
           },
   );
 
-  Future<void> _showElementsSheet(AnimationProject project) => _showToolSheet(
+  Future<void> _showElementsSheet() => _showToolSheet(
     title: 'Éléments',
     icon: Icons.category_outlined,
     children: <Widget>[
@@ -3093,12 +3093,6 @@ class _StudioScreenState extends State<StudioScreen>
           title: 'Importer un VASF comme groupe…',
           onTap: _importVasfAsGroup,
         ),
-      ),
-      _toolSection('Projet · ${project.shapes.length} éléments'),
-      const ListTile(
-        leading: Icon(Icons.touch_app_outlined),
-        title: Text('Sélectionne un élément dans l’aperçu ou la timeline.'),
-        subtitle: Text('Ses actions sont dans les propriétés de l’élément.'),
       ),
     ],
   );
