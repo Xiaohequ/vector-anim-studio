@@ -13,6 +13,8 @@ class _Rec {
   String? ended;
   String? selectedShape;
   String? selectedBone;
+  String? selectedGroup;
+  final List<(String, int)> groupMoves = <(String, int)>[];
 }
 
 AnimationProject _project() {
@@ -55,6 +57,17 @@ Widget _host(AnimationProject project, TimelineZoomState zoom, _Rec rec) {
         onDeleteKeyframe: (_, _) {},
         onZoomChanged: () {},
         onGestureStart: (shape) {},
+        onSelectGroup: (group) => rec.selectedGroup = group.id,
+        onToggleGroupCollapsed: (group) => group.collapsed = !group.collapsed,
+        onToggleGroupVisibility: (group) => group.visible = !group.visible,
+        onGroupGestureStart: (group) {},
+        onGroupMoveChanged: (group, delta) {
+          rec.groupMoves.add((group.id, delta));
+          for (final shape in project.shapes) {
+            if (shape.groupId == group.id) shape.shiftBy(delta);
+          }
+        },
+        onGroupMoveEnd: (group) => rec.ended = group.id,
       ),
     ),
   );
@@ -74,6 +87,96 @@ List<double> _barWidths(WidgetTester tester) {
 }
 
 void main() {
+  testWidgets('groupe replié affiche sa ligne et la déplie avec ses fils', (
+    tester,
+  ) async {
+    final project = AnimationProject.blank(name: 'G');
+    final group = ShapeGroup(name: 'Groupe tête', collapsed: true);
+    project.groups.add(group);
+    project.shapes.addAll(<VectorShape>[
+      VectorShape(name: 'Œil', startMs: 0, endMs: 1000, groupId: group.id),
+      VectorShape(name: 'Bouche', startMs: 500, endMs: 1500, groupId: group.id),
+      VectorShape(name: 'Fond', startMs: 0, endMs: 4000),
+    ]);
+    final rec = _Rec();
+    final zoom = TimelineZoomState(durationOf: () => 4000);
+    await tester.pumpWidget(_host(project, zoom, rec));
+
+    expect(find.text('Groupe tête'), findsOneWidget);
+    expect(find.text('Œil'), findsNothing);
+    expect(find.text('Bouche'), findsNothing);
+    await tester.tap(find.byTooltip('Déplier le groupe'));
+    await tester.pumpWidget(_host(project, zoom, rec));
+
+    expect(find.text('Œil'), findsOneWidget);
+    expect(find.text('Bouche'), findsOneWidget);
+    expect(find.text('Fond'), findsOneWidget);
+    expect(find.byTooltip('Replier le groupe'), findsOneWidget);
+  });
+
+  testWidgets('visibilité groupe et sélection sont interactives', (
+    tester,
+  ) async {
+    final project = AnimationProject.blank(name: 'G');
+    final group = ShapeGroup(name: 'Groupe tête', collapsed: true);
+    project.groups.add(group);
+    project.shapes.add(
+      VectorShape(name: 'Œil', startMs: 0, endMs: 1000, groupId: group.id),
+    );
+    project.shapes.add(VectorShape(name: 'Fond', startMs: 0, endMs: 4000));
+    final rec = _Rec();
+    final zoom = TimelineZoomState(durationOf: () => 4000);
+    await tester.pumpWidget(_host(project, zoom, rec));
+
+    await tester.tap(find.text('Groupe tête'));
+    expect(rec.selectedGroup, group.id);
+    await tester.tap(find.byTooltip('Masquer le groupe'));
+    expect(group.visible, isFalse);
+    await tester.pumpWidget(_host(project, zoom, rec));
+    expect(find.byTooltip('Afficher le groupe'), findsOneWidget);
+  });
+
+  testWidgets('glisser la ligne groupe décale tous ses fils', (tester) async {
+    final project = AnimationProject.blank(name: 'G');
+    final group = ShapeGroup(name: 'Groupe tête', collapsed: true);
+    project.groups.add(group);
+    final a = VectorShape(
+      name: 'A',
+      startMs: 500,
+      endMs: 1500,
+      groupId: group.id,
+    );
+    final b = VectorShape(
+      name: 'B',
+      startMs: 1000,
+      endMs: 2000,
+      groupId: group.id,
+    );
+    project.shapes.addAll(<VectorShape>[a, b]);
+    final carrier = VectorShape(name: 'Fond', startMs: 0, endMs: 4000);
+    project.shapes.add(carrier);
+    final rec = _Rec();
+    await tester.pumpWidget(
+      _host(project, TimelineZoomState(durationOf: () => 4000), rec),
+    );
+
+    final gesture = await tester.startGesture(const Offset(150, 27));
+    await tester.pump(const Duration(milliseconds: 600));
+    await gesture.moveBy(const Offset(200, 0));
+    await tester.pump();
+
+    expect(a.startMs, 1500);
+    expect(a.endMs, 2500);
+    expect(b.startMs, 2000);
+    expect(b.endMs, 3000);
+    expect(rec.groupMoves, isNotEmpty);
+    expect(rec.groupMoves.fold<int>(0, (sum, move) => sum + move.$2), 1000);
+
+    await gesture.up();
+    await tester.pump();
+    expect(rec.ended, group.id);
+  });
+
   testWidgets('la largeur des barres = durée × pixels/ms (pas le contraire)', (
     tester,
   ) async {

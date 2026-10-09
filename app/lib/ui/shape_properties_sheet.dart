@@ -38,6 +38,7 @@ class ShapePropertiesSheet extends StatefulWidget {
     this.onDeleteBone,
     this.onMirror,
     this.allowBoneEditorForInstance = false,
+    this.onGroupChanged,
   });
 
   final AnimationProject project;
@@ -85,6 +86,9 @@ class ShapePropertiesSheet extends StatefulWidget {
 
   /// Un groupe squelette imbriqué peut être lié au rig du projet hôte.
   final bool allowBoneEditorForInstance;
+
+  /// Affecte ou retire la forme d'un groupe existant.
+  final ValueChanged<String?>? onGroupChanged;
 
   /// Écrit le pivot de rotation (offset dx/dy depuis le centre, unités
   /// scène) — v0.13. Statique (non animable) : pas d'auto-key.
@@ -176,6 +180,7 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                 if (!shape.isInstance) ...<Widget>[
                   const SizedBox(height: 4),
                   _buildElementActions(context, shape),
+                  if (widget.onGroupChanged != null) _buildGroupSelector(shape),
                   if (widget.onZIndexChanged != null) ...<Widget>[
                     _buildZIndexSlider(shape),
                     const SizedBox(height: 4),
@@ -614,6 +619,29 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
       ],
     );
   }
+
+  Widget _buildGroupSelector(VectorShape shape) => Padding(
+    padding: const EdgeInsets.only(top: 4),
+    child: DropdownButtonFormField<String?>(
+      initialValue: widget.project.groupById(shape.groupId) == null
+          ? null
+          : shape.groupId,
+      decoration: const InputDecoration(
+        labelText: 'Groupe',
+        isDense: true,
+        border: OutlineInputBorder(),
+      ),
+      items: <DropdownMenuItem<String?>>[
+        const DropdownMenuItem<String?>(value: null, child: Text('Aucun')),
+        for (final group in widget.project.groups)
+          DropdownMenuItem<String?>(value: group.id, child: Text(group.name)),
+      ],
+      onChanged: (value) {
+        widget.onGroupChanged?.call(value);
+        _refresh();
+      },
+    ),
+  );
 
   Widget _buildElementActions(BuildContext context, VectorShape shape) {
     Widget action(String label, IconData icon, VoidCallback? callback) =>

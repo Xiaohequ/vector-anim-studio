@@ -49,7 +49,8 @@ class ProjectRepository {
   /// v5 : facteurs d'axe + pivot + bezier. v6 (v0.15) : couleur animée et
   /// morph de points par keyframe (maps JSON layer_colors / layer_points).
   /// v8 : groupes imbriqués et miroir. v9 : zIndex de forme et coins arrondis.
-  static const int schemaVersion = 9;
+  /// v10 (v0.35) : groupes d'éléments (table `groups`) et `group_id` sur shapes.
+  static const int schemaVersion = 10;
 
   final DatabaseFactory _factory;
   final String? databasePath;
@@ -108,10 +109,12 @@ class ProjectRepository {
               flip_h INTEGER NOT NULL DEFAULT 0,
               flip_v INTEGER NOT NULL DEFAULT 0,
               z_index INTEGER NOT NULL DEFAULT 0,
+              group_id TEXT,
               z INTEGER NOT NULL,
               FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
             )
           ''');
+          await _createGroupsTable(db);
           await db.execute('''
             CREATE TABLE layers (
               id TEXT PRIMARY KEY,
@@ -173,6 +176,7 @@ class ProjectRepository {
           if (oldVersion < 7) await _addLayerFlipColumns(db);
           if (oldVersion < 8) await _addInstanceGroupColumns(db);
           if (oldVersion < 9) await _addShapeZAndRoundedRectColumns(db);
+          if (oldVersion < 10) await _addGroupsTableAndColumn(db);
         },
       ),
     );
@@ -501,6 +505,28 @@ class ProjectRepository {
       whereArgs: <Object?>[id],
       orderBy: 'z ASC',
     );
+    final groupRows = await db.query(
+      'groups',
+      where: 'project_id = ?',
+      whereArgs: <Object?>[id],
+      orderBy: 'z ASC',
+    );
+    for (final groupRow in groupRows) {
+      project.groups.add(
+        ShapeGroup(
+          id: groupRow['id'] as String,
+          name: groupRow['name'] as String,
+          colorValue: (groupRow['color_value'] as num).toInt(),
+          visible: (groupRow['visible'] as num).toInt() == 1,
+          collapsed: (groupRow['collapsed'] as num).toInt() == 1,
+          offsetX: (groupRow['offset_x'] as num).toDouble(),
+          offsetY: (groupRow['offset_y'] as num).toDouble(),
+          rotation: (groupRow['rotation'] as num).toDouble(),
+          scaleX: (groupRow['scale_x'] as num).toDouble(),
+          scaleY: (groupRow['scale_y'] as num).toDouble(),
+        ),
+      );
+    }
     for (final shapeRow in shapeRows) {
       final shapeId = shapeRow['id'] as String;
       final shape = VectorShape(
@@ -527,6 +553,7 @@ class ProjectRepository {
         flipH: (shapeRow['flip_h'] as num?)?.toInt() == 1,
         flipV: (shapeRow['flip_v'] as num?)?.toInt() == 1,
         zIndex: (shapeRow['z_index'] as num?)?.toInt() ?? 0,
+        groupId: shapeRow['group_id'] as String?,
       );
 
       final layerRows = await db.query(
@@ -643,6 +670,28 @@ class ProjectRepository {
         where: 'project_id = ?',
         whereArgs: <Object?>[project.id],
       );
+      await txn.delete(
+        'groups',
+        where: 'project_id = ?',
+        whereArgs: <Object?>[project.id],
+      );
+      for (var g = 0; g < project.groups.length; g++) {
+        final group = project.groups[g];
+        await txn.insert('groups', <String, Object?>{
+          'id': group.id,
+          'project_id': project.id,
+          'name': group.name,
+          'color_value': group.colorValue,
+          'visible': group.visible ? 1 : 0,
+          'collapsed': group.collapsed ? 1 : 0,
+          'offset_x': group.offsetX,
+          'offset_y': group.offsetY,
+          'rotation': group.rotation,
+          'scale_x': group.scaleX,
+          'scale_y': group.scaleY,
+          'z': g,
+        });
+      }
 
       for (var i = 0; i < project.shapes.length; i++) {
         final shape = project.shapes[i];
@@ -670,6 +719,7 @@ class ProjectRepository {
           'flip_h': shape.flipH ? 1 : 0,
           'flip_v': shape.flipV ? 1 : 0,
           'z_index': shape.zIndex,
+          'group_id': shape.groupId,
           'z': i,
         });
         for (var j = 0; j < shape.layers.length; j++) {
@@ -774,10 +824,20 @@ class ProjectRepository {
       backgroundValue: source.backgroundValue,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
+      groups: <ShapeGroup>[
+        for (final group in source.groups) group.copy(id: generateId('group')),
+      ],
       shapes: source.shapes
           .map((shape) => shape.copy(id: generateId('shape')))
           .toList(),
     );
+    final groupIds = <String, String>{
+      for (var i = 0; i < source.groups.length; i++)
+        source.groups[i].id: copy.groups[i].id,
+    };
+    for (final shape in copy.shapes) {
+      shape.groupId = groupIds[shape.groupId];
+    }
     for (final shape in copy.shapes) {
       for (var i = 0; i < shape.layers.length; i++) {
         shape.layers[i] = shape.layers[i].copy(id: generateId('layer'));
@@ -807,6 +867,34 @@ class ProjectRepository {
         ),
     ];
   }
+}
+
+/// Schéma v9 → v10 (v0.35) : groupes d'éléments. Une table dédiée porte le
+/// nom, la couleur, la visibilité et l'état replié ; `group_id` sur shapes
+/// reste nullable (forme non groupée).
+Future<void> _addGroupsTableAndColumn(Database db) async {
+  await db.execute('ALTER TABLE shapes ADD COLUMN group_id TEXT');
+  await _createGroupsTable(db);
+}
+
+Future<void> _createGroupsTable(Database db) async {
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS groups (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      color_value INTEGER NOT NULL,
+      visible INTEGER NOT NULL,
+      collapsed INTEGER NOT NULL,
+      offset_x REAL NOT NULL,
+      offset_y REAL NOT NULL,
+      rotation REAL NOT NULL,
+      scale_x REAL NOT NULL,
+      scale_y REAL NOT NULL,
+      z INTEGER NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+    )
+  ''');
 }
 
 /// Schéma v8 → v9 : ordre explicite des formes et coins arrondis des

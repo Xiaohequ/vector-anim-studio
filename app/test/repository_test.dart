@@ -215,9 +215,12 @@ void main() {
 
   test('suppression et duplication', () async {
     final project = AnimationProject.blank(name: 'Source');
+    final group = ShapeGroup(name: 'Groupe source', collapsed: true);
+    project.groups.add(group);
     project.shapes.add(
       VectorShape(
         name: 'Forme',
+        groupId: group.id,
         layers: <ShapeLayer>[ShapeLayer(name: 'Rect', kind: ShapeKind.rect)],
       ),
     );
@@ -225,6 +228,10 @@ void main() {
 
     final copy = await repository.duplicate(project.id);
     expect(copy.name, 'Source (copie)');
+    expect(copy.groups, hasLength(1));
+    expect(copy.groups.single.id, isNot(group.id));
+    expect(copy.groups.single.name, 'Groupe source');
+    expect(copy.shapes.first.groupId, copy.groups.single.id);
     expect(copy.shapes.first.id, isNot(project.shapes.first.id));
     expect(
       copy.shapes.first.layers.first.id,
@@ -361,6 +368,69 @@ void main() {
       const Offset(100, 100),
     );
   });
+
+  test(
+    'les groupes et l\'appartenance des formes survivent à la DB (v0.35)',
+    () async {
+      final project = AnimationProject.blank(name: 'Groupes');
+      final group = ShapeGroup(
+        name: 'Tête',
+        colorValue: 0xFFFF9F43,
+        visible: false,
+        collapsed: true,
+        offsetX: 12,
+        offsetY: -4,
+        rotation: 0.5,
+        scaleX: 1.2,
+        scaleY: 0.8,
+      );
+      project.groups.add(group);
+      final member = VectorShape(
+        name: 'Œil',
+        startMs: 300,
+        endMs: 1800,
+        groupId: group.id,
+        layers: <ShapeLayer>[ShapeLayer(name: 'L', kind: ShapeKind.circle)],
+      );
+      final free = VectorShape(
+        name: 'Fond',
+        startMs: 0,
+        endMs: 2500,
+        layers: <ShapeLayer>[ShapeLayer(name: 'L', kind: ShapeKind.rect)],
+      );
+      project.shapes.addAll(<VectorShape>[member, free]);
+      await repository.save(project);
+
+      final loaded = await repository.load(project.id);
+      final loadedGroup = loaded.groups.single;
+      expect(loadedGroup.id, group.id);
+      expect(loadedGroup.name, 'Tête');
+      expect(loadedGroup.colorValue, 0xFFFF9F43);
+      expect(loadedGroup.visible, isFalse);
+      expect(loadedGroup.collapsed, isTrue);
+      expect(loadedGroup.offsetX, 12);
+      expect(loadedGroup.offsetY, -4);
+      expect(loadedGroup.rotation, 0.5);
+      expect(loadedGroup.scaleX, 1.2);
+      expect(loadedGroup.scaleY, 0.8);
+      expect(
+        loaded.shapes.firstWhere((s) => s.id == member.id).groupId,
+        group.id,
+      );
+      expect(loaded.shapes.firstWhere((s) => s.id == free.id).groupId, isNull);
+      expect(loaded.groupSpanMs(group.id), (300, 1800));
+
+      // Suppression d'un groupe : la sauvegarde ne le recrée pas (replacement complet).
+      loaded.groups.clear();
+      loaded.shapes
+          .where((s) => s.groupId != null)
+          .forEach((s) => s.groupId = null);
+      await repository.save(loaded);
+      final cleared = await repository.load(project.id);
+      expect(cleared.groups, isEmpty);
+      expect(cleared.shapes.every((s) => s.groupId == null), isTrue);
+    },
+  );
 
   test('les projets vectoriels créés avant la v4 restent vectoriels', () async {
     final project = AnimationProject.blank(name: 'Ancien');

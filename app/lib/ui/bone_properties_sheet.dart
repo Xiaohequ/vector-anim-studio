@@ -36,6 +36,9 @@ class BonePropertiesSheet extends StatefulWidget {
     this.onEditShape,
     this.onKeyframeAllowed,
     this.onMirror,
+    this.project,
+    this.shapeGroupId,
+    this.onGroupChanged,
   });
 
   final SkeletonRig rig;
@@ -74,6 +77,9 @@ class BonePropertiesSheet extends StatefulWidget {
 
   /// Réfléchit l'os sélectionné, sa descendance, leurs poses et leurs pièces.
   final ValueChanged<bool>? onMirror;
+  final AnimationProject? project;
+  final String? shapeGroupId;
+  final ValueChanged<String?>? onGroupChanged;
 
   @override
   State<BonePropertiesSheet> createState() => _BonePropertiesSheetState();
@@ -108,6 +114,34 @@ class _BonePropertiesSheetState extends State<BonePropertiesSheet> {
   String _indent(RigBone bone) {
     final depth = widget.rig.depthOf(bone.id);
     return depth == 0 ? '' : '${'\u2500' * depth} ';
+  }
+
+  Widget _buildGroupSelector(AnimationProject project) {
+    final selected = project.groupById(widget.shapeGroupId) == null
+        ? null
+        : widget.shapeGroupId;
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 4),
+      child: DropdownButtonFormField<String?>(
+        initialValue: selected,
+        decoration: const InputDecoration(
+          labelText: 'Groupe de l’élément porté',
+          isDense: true,
+          border: OutlineInputBorder(),
+        ),
+        items: <DropdownMenuItem<String?>>[
+          const DropdownMenuItem<String?>(value: null, child: Text('Aucun')),
+          for (final group in project.groups)
+            DropdownMenuItem<String?>(value: group.id, child: Text(group.name)),
+        ],
+        onChanged: widget.onGroupChanged == null
+            ? null
+            : (value) {
+                widget.onGroupChanged?.call(value);
+                _refresh();
+              },
+      ),
+    );
   }
 
   @override
@@ -210,6 +244,8 @@ class _BonePropertiesSheetState extends State<BonePropertiesSheet> {
                       ),
                     ],
                   ),
+                if (widget.project != null && widget.onGroupChanged != null)
+                  _buildGroupSelector(widget.project!),
                 if (widget.onEditShape != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 2, bottom: 2),

@@ -6,6 +6,60 @@ void main() {
   VectorShape shape(String name, int start, int end) =>
       VectorShape(name: name, startMs: start, endMs: end);
 
+  group('TimelineLayout.packRows (groupes v0.35)', () {
+    test('un groupe replié ne produit qu’une ligne, ses fils sont masqués', () {
+      final project = AnimationProject.blank(name: 'G');
+      final group = ShapeGroup(name: 'Tête', collapsed: true);
+      project.groups.add(group);
+      project.shapes.addAll(<VectorShape>[
+        VectorShape(name: 'A', startMs: 0, endMs: 1000, groupId: group.id),
+        VectorShape(name: 'B', startMs: 500, endMs: 1500, groupId: group.id),
+      ]);
+      final rows = TimelineLayout.packRows(project).expand((l) => l).toList();
+      expect(rows.where((r) => r.isGroup), hasLength(1));
+      expect(rows.where((r) => !r.isGroup), isEmpty);
+    });
+
+    test('un groupe déplié affiche sa ligne puis chaque fil', () {
+      final project = AnimationProject.blank(name: 'G');
+      final group = ShapeGroup(name: 'Tête');
+      project.groups.add(group);
+      final a = VectorShape(
+        name: 'A',
+        startMs: 0,
+        endMs: 1000,
+        groupId: group.id,
+      );
+      final b = VectorShape(
+        name: 'B',
+        startMs: 0,
+        endMs: 1000,
+        groupId: group.id,
+      );
+      project.shapes.addAll(<VectorShape>[a, b]);
+      final lanes = TimelineLayout.packRows(project);
+      final rows = lanes.expand((l) => l).toList();
+      expect(rows.where((r) => r.isGroup), hasLength(1));
+      expect(rows.where((r) => r.shape == a || r.shape == b), hasLength(2));
+    });
+
+    test('une forme libre ne rejoint pas une ligne de groupe', () {
+      final project = AnimationProject.blank(name: 'G');
+      final group = ShapeGroup(name: 'Tête');
+      project.groups.add(group);
+      final fils = VectorShape(
+        name: 'F',
+        startMs: 0,
+        endMs: 1000,
+        groupId: group.id,
+      );
+      final libre = VectorShape(name: 'L', startMs: 0, endMs: 1000);
+      project.shapes.addAll(<VectorShape>[fils, libre]);
+      final rows = TimelineLayout.packRows(project).expand((l) => l).toList();
+      expect(rows.where((r) => r.shape == libre), hasLength(1));
+    });
+  });
+
   group('TimelineLayout.packLanes', () {
     test('place deux formes qui ne se chevauchent pas sur la même ligne', () {
       final lanes = TimelineLayout.packLanes(<VectorShape>[
@@ -52,6 +106,5 @@ void main() {
       expect(TimelineLayout.laneIndexOf(lanes, a), 0);
       expect(TimelineLayout.laneIndexOf(lanes, b), 1);
     });
-
   });
 }

@@ -107,7 +107,8 @@ class ScenePainter extends CustomPainter {
     VectorShape? selected;
     if (selectedShapeId != null) {
       for (final shape in project.shapes) {
-        if (shape.id == selectedShapeId && shape.isVisibleAt(timeMs)) {
+        if (shape.id == selectedShapeId &&
+            project.isShapeVisibleAt(shape, timeMs)) {
           selected = shape;
           break;
         }
@@ -181,7 +182,7 @@ class ScenePainter extends CustomPainter {
       // quel que soit le type de projet. Un rig peut avoir des keyframes
       // après cette fenêtre, mais il ne doit pas prolonger la visibilité de
       // la forme : elle disparaît dès que le playhead sort de start → end.
-      if (!shape.isVisibleAt(timeMs)) return;
+      if (!project.isShapeVisibleAt(shape, timeMs)) return;
       BoneFrame? frame;
       if (rigPose != null) {
         frame = rigPose.frameOf(_boneIdForShapeFrame(rig!, shape));

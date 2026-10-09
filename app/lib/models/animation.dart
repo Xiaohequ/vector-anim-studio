@@ -575,6 +575,76 @@ String layerPropertyLabel(LayerProperty property) => switch (property) {
   LayerProperty.strokeWidth => 'Épaisseur',
 };
 
+/// Groupe d'éléments (v0.35) : regroupe des formes, avec ou sans os, sous un
+/// même nom, une couleur de tête de timeline et une visibilité commune. Le
+/// groupe ne porte ni keyframes ni os ; son étendue temporelle est DÉRIVÉE de
+/// ses fils ([AnimationProject.groupSpanMs]). La transformation statique
+/// (décalage, rotation, échelle) sert au sélecteur du preview (v0.35.1).
+class ShapeGroup {
+  ShapeGroup({
+    String? id,
+    required this.name,
+    this.colorValue = 0xFF2DD4BF,
+    this.visible = true,
+    this.collapsed = false,
+    this.offsetX = 0,
+    this.offsetY = 0,
+    this.rotation = 0,
+    this.scaleX = 1,
+    this.scaleY = 1,
+  }) : id = id ?? generateId('group');
+
+  final String id;
+  String name;
+  int colorValue;
+  bool visible;
+  bool collapsed;
+  double offsetX;
+  double offsetY;
+  double rotation;
+  double scaleX;
+  double scaleY;
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'name': name,
+    'colorValue': colorValue,
+    'visible': visible,
+    'collapsed': collapsed,
+    'offsetX': offsetX,
+    'offsetY': offsetY,
+    'rotation': rotation,
+    'scaleX': scaleX,
+    'scaleY': scaleY,
+  };
+
+  ShapeGroup copy({String? id, String? name}) => ShapeGroup(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    colorValue: colorValue,
+    visible: visible,
+    collapsed: collapsed,
+    offsetX: offsetX,
+    offsetY: offsetY,
+    rotation: rotation,
+    scaleX: scaleX,
+    scaleY: scaleY,
+  );
+
+  factory ShapeGroup.fromJson(Map<String, Object?> json) => ShapeGroup(
+    id: json['id'] as String?,
+    name: json['name'] as String? ?? 'Groupe',
+    colorValue: (json['colorValue'] as num?)?.toInt() ?? 0xFF2DD4BF,
+    visible: json['visible'] as bool? ?? true,
+    collapsed: json['collapsed'] as bool? ?? false,
+    offsetX: (json['offsetX'] as num?)?.toDouble() ?? 0,
+    offsetY: (json['offsetY'] as num?)?.toDouble() ?? 0,
+    rotation: (json['rotation'] as num?)?.toDouble() ?? 0,
+    scaleX: (json['scaleX'] as num?)?.toDouble() ?? 1,
+    scaleY: (json['scaleY'] as num?)?.toDouble() ?? 1,
+  );
+}
+
 /// Une forme du projet : un groupe de couches, animable et affiché sur [startMs, endMs].
 class VectorShape {
   VectorShape({
@@ -601,6 +671,7 @@ class VectorShape {
     this.flipH = false,
     this.flipV = false,
     this.zIndex = 0,
+    this.groupId,
   }) : id = id ?? generateId('shape'),
        layers = layers ?? <ShapeLayer>[];
 
@@ -626,6 +697,10 @@ class VectorShape {
   /// Ordre global explicite de dessin ; à égalité, l'ordre du projet puis
   /// celui du rig départagent les formes.
   int zIndex;
+
+  /// Groupe d'appartenance (v0.35) : null = élément non groupé. Une forme
+  /// appartient à un seul groupe, sans groupe imbriqué.
+  String? groupId;
 
   bool get isInstance => embeddedProjectId != null;
 
@@ -1121,6 +1196,7 @@ class VectorShape {
       flipH: flipH,
       flipV: flipV,
       zIndex: zIndex,
+      groupId: groupId,
     );
     for (final key in keyframes) {
       clone.keyframes.add(key.copy());
@@ -1180,6 +1256,7 @@ class VectorShape {
     'flipH': flipH,
     'flipV': flipV,
     'zIndex': zIndex,
+    'groupId': groupId,
     'layers': layers.map((l) => l.toJson()).toList(),
     'keyframes': keyframes.map((k) => k.toJson()).toList(),
   };
@@ -1208,6 +1285,7 @@ class VectorShape {
       flipH: json['flipH'] as bool? ?? false,
       flipV: json['flipV'] as bool? ?? false,
       zIndex: (json['zIndex'] as num?)?.toInt() ?? 0,
+      groupId: json['groupId'] as String?,
       layers: (json['layers'] as List<Object?>? ?? const [])
           .map((l) => ShapeLayer.fromJson((l as Map).cast<String, Object?>()))
           .toList(),
@@ -1237,8 +1315,10 @@ class AnimationProject {
     this.createdAt,
     this.updatedAt,
     List<VectorShape>? shapes,
+    List<ShapeGroup>? groups,
   }) : id = id ?? generateId('project'),
-       shapes = shapes ?? <VectorShape>[];
+       shapes = shapes ?? <VectorShape>[],
+       groups = groups ?? <ShapeGroup>[];
 
   final String id;
   String name;
@@ -1271,6 +1351,9 @@ class AnimationProject {
   DateTime? updatedAt;
   final List<VectorShape> shapes;
 
+  /// Groupes d'éléments (v0.35). Leur étendue temporelle se déduit des fils.
+  final List<ShapeGroup> groups;
+
   /// Durée du projet : le maximum des fins de segments des formes ; les
   /// keyframes du rig s'ajoutent quel que soit le type historique du projet,
   /// avec un plancher de 4 s tant qu'un rig ou une forme existe. Projet vide → 0.
@@ -1284,6 +1367,32 @@ class AnimationProject {
       max = math.max(math.max(max, rig.maxKeyframeTimeMs), 4000);
     }
     return max;
+  }
+
+  ShapeGroup? groupById(String? id) {
+    if (id == null) return null;
+    for (final group in groups) {
+      if (group.id == id) return group;
+    }
+    return null;
+  }
+
+  /// Visibilité effective d'une forme : sa fenêtre et visibilité propres,
+  /// combinées à la visibilité de son groupe éventuel.
+  bool isShapeVisibleAt(VectorShape shape, int timeMs) =>
+      shape.isVisibleAt(timeMs) && (groupById(shape.groupId)?.visible ?? true);
+
+  /// Étendue temporelle d'un groupe, dérivée de ses fils (début minimal, fin
+  /// maximale). Null si le groupe n'a aucun fil.
+  (int, int)? groupSpanMs(String groupId) {
+    int? start;
+    int? end;
+    for (final shape in shapes) {
+      if (shape.groupId != groupId) continue;
+      start = start == null ? shape.startMs : math.min(start, shape.startMs);
+      end = end == null ? shape.endMs : math.max(end, shape.endMs);
+    }
+    return start == null || end == null ? null : (start, end);
   }
 
   VectorShape? shapeById(String? id) {
@@ -1319,6 +1428,7 @@ class AnimationProject {
     'createdAt': createdAt?.millisecondsSinceEpoch,
     'updatedAt': updatedAt?.millisecondsSinceEpoch,
     'shapes': shapes.map((s) => s.toJson()).toList(),
+    'groups': groups.map((g) => g.toJson()).toList(),
   };
 
   factory AnimationProject.fromJson(
@@ -1352,6 +1462,9 @@ class AnimationProject {
           ),
     shapes: (json['shapes'] as List<Object?>? ?? const [])
         .map((s) => VectorShape.fromJson((s as Map).cast<String, Object?>()))
+        .toList(),
+    groups: (json['groups'] as List<Object?>? ?? const [])
+        .map((g) => ShapeGroup.fromJson((g as Map).cast<String, Object?>()))
         .toList(),
   );
 

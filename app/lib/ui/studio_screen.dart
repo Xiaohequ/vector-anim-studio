@@ -52,6 +52,7 @@ class _StudioScreenState extends State<StudioScreen>
   Ticker? _ticker;
   Duration _lastTick = Duration.zero;
   String? _selectedId;
+  String? _selectedGroupId;
   String? _error;
   Timer? _saveTimer;
   Timer? _bannerTimer;
@@ -94,7 +95,7 @@ class _StudioScreenState extends State<StudioScreen>
         continue;
       }
       attached = true;
-      if (shape.isVisibleAt(timeMs)) return true;
+      if (project.isShapeVisibleAt(shape, timeMs)) return true;
     }
     return !attached;
   }
@@ -115,7 +116,7 @@ class _StudioScreenState extends State<StudioScreen>
         shape == null ||
         !shape.isInstance ||
         !shape.embeddedIsSkeleton ||
-        !shape.isVisibleAt(timeMs)) {
+        !project.isShapeVisibleAt(shape, timeMs)) {
       return null;
     }
     final carrierId = rig.carrierBoneId(shape.id);
@@ -675,6 +676,158 @@ class _StudioScreenState extends State<StudioScreen>
     await _flushSave();
   }
 
+  Future<void> _setShapeGroup(VectorShape shape, String? groupId) async {
+    if (shape.groupId == groupId) return;
+    _pushUndo();
+    setState(() => shape.groupId = groupId);
+    await _flushSave();
+  }
+
+  Future<void> _createGroup() async {
+    final project = _project;
+    if (project == null) return;
+    var draftName = '';
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Ajouter un groupe'),
+          content: TextField(
+            autofocus: true,
+            decoration: const InputDecoration(labelText: 'Nom du groupe'),
+            onChanged: (value) => setDialogState(() => draftName = value),
+            onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Annuler'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(draftName),
+              child: const Text('Créer'),
+            ),
+          ],
+        ),
+      ),
+    );
+    final trimmed = name?.trim();
+    if (trimmed == null || trimmed.isEmpty || !mounted) return;
+    _pushUndo();
+    final group = ShapeGroup(name: trimmed);
+    setState(() {
+      project.groups.add(group);
+      _selectedGroupId = group.id;
+      _selectedId = null;
+      _selectedBoneId = null;
+    });
+    await _flushSave();
+  }
+
+  Future<void> _renameGroup(ShapeGroup group) async {
+    var draftName = group.name;
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Renommer le groupe'),
+          content: TextField(
+            autofocus: true,
+            decoration: const InputDecoration(labelText: 'Nom du groupe'),
+            onChanged: (value) => setDialogState(() => draftName = value),
+            onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Annuler'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(draftName),
+              child: const Text('Valider'),
+            ),
+          ],
+        ),
+      ),
+    );
+    final trimmed = name?.trim();
+    if (trimmed == null || trimmed.isEmpty || !mounted) return;
+    _pushUndo();
+    setState(() => group.name = trimmed);
+    await _flushSave();
+  }
+
+  Future<void> _dissolveGroup(ShapeGroup group) async {
+    final project = _project;
+    if (project == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Dissoudre le groupe ?'),
+        content: Text(
+          '« ${group.name} » sera supprimé. Ses formes seront conservées dans le projet.',
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Dissoudre'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    _pushUndo();
+    setState(() {
+      for (final shape in project.shapes) {
+        if (shape.groupId == group.id) shape.groupId = null;
+      }
+      project.groups.removeWhere((item) => item.id == group.id);
+      _selectedGroupId = null;
+    });
+    await _flushSave();
+  }
+
+  Future<void> _setBoneGroup(RigBone bone, String? groupId) async {
+    final project = _project;
+    final rig = _rig;
+    if (project == null || rig == null) return;
+    VectorShape? shape;
+    for (final item in project.shapes) {
+      if (rig.carrierBoneId(item.id) == bone.id) {
+        shape = item;
+        break;
+      }
+    }
+    if (shape == null) return;
+    await _setShapeGroup(shape, groupId);
+  }
+
+  Future<void> _toggleGroupCollapsed(ShapeGroup group) async {
+    _pushUndo();
+    setState(() => group.collapsed = !group.collapsed);
+    await _flushSave();
+  }
+
+  Future<void> _toggleGroupVisibility(ShapeGroup group) async {
+    _pushUndo();
+    setState(() => group.visible = !group.visible);
+    await _flushSave();
+  }
+
+  void _moveGroup(ShapeGroup group, int deltaMs) {
+    final project = _project;
+    if (project == null || deltaMs == 0) return;
+    setState(() {
+      for (final shape in project.shapes) {
+        if (shape.groupId == group.id) shape.shiftBy(deltaMs);
+      }
+    });
+  }
+
   Future<void> _moveShape(VectorShape shape, int delta) async {
     final project = _project;
     if (project == null) return;
@@ -846,6 +999,7 @@ class _StudioScreenState extends State<StudioScreen>
         onKeyframeEasing: _setKeyframeEasing,
         onEditLayers: () => _editShape(shape),
         onOpenSource: () => _openSourceProject(shape),
+        onGroupChanged: (groupId) => _setShapeGroup(shape, groupId),
         onRename: () => _renameShape(shape),
         onDuplicate: () => _cloneShape(shape),
         onMove: (delta) => _moveShape(shape, delta),
@@ -1157,7 +1311,7 @@ class _StudioScreenState extends State<StudioScreen>
         continue;
       }
       attached = true;
-      if (shape.isVisibleAt(timeMs)) return true;
+      if (project.isShapeVisibleAt(shape, timeMs)) return true;
     }
     // Os importé sans forme : conserver l'ancien comportement.
     return !attached;
@@ -1406,6 +1560,15 @@ class _StudioScreenState extends State<StudioScreen>
     _scheduleSave();
   }
 
+  String? _groupIdForBone(SkeletonRig rig, RigBone bone) {
+    final project = _project;
+    if (project == null) return null;
+    for (final shape in project.shapes) {
+      if (rig.carrierBoneId(shape.id) == bone.id) return shape.groupId;
+    }
+    return null;
+  }
+
   /// Bottom sheet « Propriétés de l'os » pour l'os sélectionné.
   Future<void> _showBoneSheet() async {
     final rig = _rig;
@@ -1422,6 +1585,9 @@ class _StudioScreenState extends State<StudioScreen>
         rig: rig,
         bone: bone,
         controller: controller,
+        project: _project,
+        shapeGroupId: _groupIdForBone(rig, bone),
+        onGroupChanged: (groupId) => _setBoneGroup(bone, groupId),
         onLengthChanged: _setBoneLength,
         onParentChanged: _setBoneParent,
         onRenameBone: _renameBone,
@@ -1494,8 +1660,8 @@ class _StudioScreenState extends State<StudioScreen>
     for (final shape in project.shapes.reversed) {
       // La fenêtre start → end du segment contrôle aussi les pièces d'un
       // projet squelette. Les keyframes d'os au-delà du segment ne prolongent
-      // pas la visibilité dans le preview.
-      if (!shape.isVisibleAt(controller.timeMs)) continue;
+      // pas la visibilité dans le preview ; un groupe masqué cache aussi ses fils.
+      if (!project.isShapeVisibleAt(shape, controller.timeMs)) continue;
       final bounds = ScenePainter.shapeBounds(shape, controller.timeMs);
       if (bounds == null) continue;
       if (SelectionGeometry.hit(
@@ -2489,7 +2655,7 @@ class _StudioScreenState extends State<StudioScreen>
                 ),
               if (!_previewFullscreen &&
                   shape != null &&
-                  shape.isVisibleAt(controller.timeMs))
+                  project.isShapeVisibleAt(shape, controller.timeMs))
                 _buildPropertiesButton(shape, controller, canvasSize),
               // Os sélectionné : ⚙ propriétés + ✥ déplacement (comme pour
               // les formes, ancrés au segment).
@@ -2807,8 +2973,20 @@ class _StudioScreenState extends State<StudioScreen>
                       timeMs: controller.timeMs,
                       zoom: zoom,
                       selectedShapeId: _selectedId,
+                      selectedGroupId: _selectedGroupId,
+                      onSelectGroup: (group) => setState(() {
+                        _selectedGroupId = group.id;
+                        _selectedId = null;
+                        _selectedBoneId = null;
+                      }),
+                      onToggleGroupCollapsed: _toggleGroupCollapsed,
+                      onToggleGroupVisibility: _toggleGroupVisibility,
+                      onGroupGestureStart: (_) => _pushUndo(),
+                      onGroupMoveChanged: _moveGroup,
+                      onGroupMoveEnd: (_) => _scheduleSave(),
                       onSelect: (shape) => setState(() {
                         _selectedId = shape.id;
+                        _selectedGroupId = null;
                         _selectedBoneId = null;
                       }),
                       onSeek: controller.setTime,
@@ -3070,37 +3248,68 @@ class _StudioScreenState extends State<StudioScreen>
           },
   );
 
-  Future<void> _showElementsSheet() => _showToolSheet(
-    title: 'Éléments',
-    icon: Icons.category_outlined,
-    children: <Widget>[
-      _toolSection('Ajouter'),
-      Builder(
-        builder: (sheetContext) => _toolAction(
-          sheetContext,
-          icon: Icons.add,
-          title: 'Ajouter une forme…',
-          onTap: _addShape,
+  Future<void> _showElementsSheet() {
+    final selectedGroup = _project?.groupById(_selectedGroupId);
+    return _showToolSheet(
+      title: 'Éléments',
+      icon: Icons.category_outlined,
+      children: <Widget>[
+        if (selectedGroup != null) ...<Widget>[
+          _toolSection('Groupe · ${selectedGroup.name}'),
+          Builder(
+            builder: (sheetContext) => _toolAction(
+              sheetContext,
+              icon: Icons.drive_file_rename_outline,
+              title: 'Renommer le groupe…',
+              onTap: () => _renameGroup(selectedGroup),
+            ),
+          ),
+          Builder(
+            builder: (sheetContext) => _toolAction(
+              sheetContext,
+              icon: Icons.folder_delete_outlined,
+              title: 'Dissoudre le groupe…',
+              onTap: () => _dissolveGroup(selectedGroup),
+              destructive: true,
+            ),
+          ),
+        ],
+        _toolSection('Ajouter'),
+        Builder(
+          builder: (sheetContext) => _toolAction(
+            sheetContext,
+            icon: Icons.folder_outlined,
+            title: 'Ajouter un groupe…',
+            onTap: _createGroup,
+          ),
         ),
-      ),
-      Builder(
-        builder: (sheetContext) => _toolAction(
-          sheetContext,
-          icon: Icons.movie_outlined,
-          title: 'Insérer une animation…',
-          onTap: _insertAnimation,
+        Builder(
+          builder: (sheetContext) => _toolAction(
+            sheetContext,
+            icon: Icons.add,
+            title: 'Ajouter une forme…',
+            onTap: _addShape,
+          ),
         ),
-      ),
-      Builder(
-        builder: (sheetContext) => _toolAction(
-          sheetContext,
-          icon: Icons.file_open_outlined,
-          title: 'Importer un VASF comme groupe…',
-          onTap: _importVasfAsGroup,
+        Builder(
+          builder: (sheetContext) => _toolAction(
+            sheetContext,
+            icon: Icons.movie_outlined,
+            title: 'Insérer une animation…',
+            onTap: _insertAnimation,
+          ),
         ),
-      ),
-    ],
-  );
+        Builder(
+          builder: (sheetContext) => _toolAction(
+            sheetContext,
+            icon: Icons.file_open_outlined,
+            title: 'Importer un VASF comme instance…',
+            onTap: _importVasfAsGroup,
+          ),
+        ),
+      ],
+    );
+  }
 
   Future<void> _setCanvasFormat(ProjectFormat format) async {
     final project = _project;

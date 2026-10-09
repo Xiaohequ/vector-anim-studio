@@ -10,6 +10,45 @@ import 'package:vector_anim_studio/models/animation.dart';
 import 'package:vector_anim_studio/models/skeleton.dart';
 
 void main() {
+  group('groupes d’éléments (v0.35)', () {
+    test('appartenance, étendue dérivée et JSON du groupe', () {
+      final project = AnimationProject.blank(name: 'G');
+      final group = ShapeGroup(name: 'Tête', visible: false, collapsed: true);
+      project.groups.add(group);
+      final a = VectorShape(
+        name: 'A',
+        startMs: 500,
+        endMs: 1500,
+        groupId: group.id,
+      );
+      final b = VectorShape(
+        name: 'B',
+        startMs: 1000,
+        endMs: 3000,
+        groupId: group.id,
+      );
+      final free = VectorShape(name: 'C', startMs: 0, endMs: 9000);
+      project.shapes.addAll(<VectorShape>[a, b, free]);
+
+      // L'étendue vient des seuls fils : la forme non groupée n'y entre pas.
+      expect(project.groupSpanMs(group.id), (500, 3000));
+      expect(project.groupSpanMs('absent'), isNull);
+      expect(project.isShapeVisibleAt(a, 800), isFalse);
+      group.visible = true;
+      expect(project.isShapeVisibleAt(a, 800), isTrue);
+      expect(project.isShapeVisibleAt(a, 1600), isFalse);
+      group.visible = false;
+
+      final copy = AnimationProject.fromJson(project.toJson());
+      expect(copy.groups.single.name, 'Tête');
+      expect(copy.groups.single.visible, isFalse);
+      expect(copy.groups.single.collapsed, isTrue);
+      expect(copy.shapes[0].groupId, group.id);
+      expect(copy.shapes[2].groupId, isNull);
+      expect(copy.groupSpanMs(group.id), (500, 3000));
+    });
+  });
+
   group('poses de keyframe', () {
     test('interpole toutes les propriétés entre deux poses', () {
       final shape = VectorShape(name: 'A', x: 0, y: 10, opacity: 1);
