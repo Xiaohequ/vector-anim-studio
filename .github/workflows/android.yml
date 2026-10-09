@@ -64,27 +64,55 @@ jobs:
       - name: Tests
         run: flutter test
 
-      - name: Build APK release
-        run: flutter build apk --release
+      - name: Préparer la clé d'envoi Play
+        if: github.event_name != 'pull_request'
+        env:
+          PLAY_UPLOAD_KEYSTORE_BASE64: ${{ secrets.PLAY_UPLOAD_KEYSTORE_BASE64 }}
+          PLAY_UPLOAD_KEY_ALIAS: ${{ secrets.PLAY_UPLOAD_KEY_ALIAS }}
+          PLAY_UPLOAD_STORE_PASSWORD: ${{ secrets.PLAY_UPLOAD_STORE_PASSWORD }}
+          PLAY_UPLOAD_KEY_PASSWORD: ${{ secrets.PLAY_UPLOAD_KEY_PASSWORD }}
+        run: |
+          test -n "$PLAY_UPLOAD_KEYSTORE_BASE64"
+          mkdir -p "$RUNNER_TEMP/play-signing"
+          printf '%s' "$PLAY_UPLOAD_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/play-signing/upload-keystore.jks"
+          chmod 600 "$RUNNER_TEMP/play-signing/upload-keystore.jks"
+          cat > android/key.properties <<EOF
+          storeFile=$RUNNER_TEMP/play-signing/upload-keystore.jks
+          storePassword=$PLAY_UPLOAD_STORE_PASSWORD
+          keyAlias=$PLAY_UPLOAD_KEY_ALIAS
+          keyPassword=$PLAY_UPLOAD_KEY_PASSWORD
+          EOF
+          chmod 600 android/key.properties
 
-      - name: Renommer l'APK
+      - name: Build APK + AAB release
+        run: |
+          flutter build apk --release
+          flutter build appbundle --release
+
+      - name: Préparer les artefacts
         working-directory: .
         run: |
           mkdir -p dist
           cp app/build/app/outputs/flutter-apk/app-release.apk \
              "dist/vector-anim-studio-${{ steps.version.outputs.value }}.apk"
+          cp app/build/app/outputs/bundle/release/app-release.aab \
+             "dist/vector-anim-studio-${{ steps.version.outputs.value }}.aab"
 
-      - name: Upload APK
+      - name: Upload APK + AAB
         uses: actions/upload-artifact@v4
         with:
-          name: app-release-apk
-          path: dist/*.apk
+          name: app-release-bundles
+          path: dist/*
           if-no-files-found: error
+
+      - name: Nettoyer la clé d'envoi
+        if: always()
+        run: rm -f android/key.properties "$RUNNER_TEMP/play-signing/upload-keystore.jks"
 
   release:
     name: Publier la release
     needs: build
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -97,7 +125,7 @@ jobs:
       - name: Récupérer l'APK
         uses: actions/download-artifact@v4
         with:
-          name: app-release-apk
+          name: app-release-bundles
           path: dist
 
       - name: Préparer les notes de release
@@ -121,6 +149,7 @@ jobs:
           body_path: dist/release_notes.md
           files: |
             dist/*.apk
+            dist/*.aab
           generate_release_notes: false
           draft: false
           prerelease: false
