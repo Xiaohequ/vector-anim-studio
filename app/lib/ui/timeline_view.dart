@@ -34,6 +34,13 @@ class TimelineView extends StatefulWidget {
     this.selectedBoneId,
     this.onSelectBone,
     this.onDeleteBoneKeyframe,
+    this.selectedGroupId,
+    this.onSelectGroup,
+    this.onToggleGroupCollapsed,
+    this.onToggleGroupVisibility,
+    this.onGroupGestureStart,
+    this.onGroupMoveChanged,
+    this.onGroupMoveEnd,
   });
 
   final AnimationProject project;
@@ -71,6 +78,13 @@ class TimelineView extends StatefulWidget {
   final String? selectedBoneId;
   final ValueChanged<RigBone>? onSelectBone;
   final void Function(RigBone bone, int timeMs)? onDeleteBoneKeyframe;
+  final String? selectedGroupId;
+  final ValueChanged<ShapeGroup>? onSelectGroup;
+  final ValueChanged<ShapeGroup>? onToggleGroupCollapsed;
+  final ValueChanged<ShapeGroup>? onToggleGroupVisibility;
+  final ValueChanged<ShapeGroup>? onGroupGestureStart;
+  final void Function(ShapeGroup group, int deltaMs)? onGroupMoveChanged;
+  final ValueChanged<ShapeGroup>? onGroupMoveEnd;
 
   static const double rulerHeight = 20;
   static const double laneHeight = 30;
@@ -93,6 +107,9 @@ class _TimelineViewState extends State<TimelineView> {
   /// l'annuler immédiatement dès qu'un pincement à deux doigts démarre.
   VectorShape? _movingShape;
   int _movingOriginMs = 0;
+  ShapeGroup? _movingGroup;
+  int _movingGroupOriginMs = 0;
+  int _movingGroupCurrentStartMs = 0;
 
   bool get _pinching => _pointers.length >= 2;
 
@@ -195,6 +212,57 @@ class _TimelineViewState extends State<TimelineView> {
     setState(() {});
   }
 
+  void _handleGroupMoveStart(ShapeGroup group) {
+    if (_pinching) return;
+    widget.onGroupGestureStart?.call(group);
+    HapticFeedback.mediumImpact();
+    setState(() {
+      _movingGroup = group;
+      _movingGroupOriginMs = widget.project.groupSpanMs(group.id)?.$1 ?? 0;
+      _movingGroupCurrentStartMs = _movingGroupOriginMs;
+    });
+  }
+
+  void _handleGroupMoveUpdate(ShapeGroup group, int targetStartMs) {
+    if (_movingGroup?.id != group.id || _pinching) return;
+    final target = math.max(0, targetStartMs);
+    final delta = target - _movingGroupCurrentStartMs;
+    if (delta == 0) return;
+    _movingGroupCurrentStartMs = target;
+    widget.onGroupMoveChanged?.call(group, delta);
+    final span = widget.project.groupSpanMs(group.id);
+    if (span != null) _followEdge(span.$2);
+  }
+
+  void _handleGroupMoveEnd(ShapeGroup group) {
+    if (_movingGroup?.id != group.id) return;
+    setState(() => _movingGroup = null);
+    widget.onGroupMoveEnd?.call(group);
+  }
+
+  Widget _groupBar(ShapeGroup group, int lane, double width) {
+    final span = widget.project.groupSpanMs(group.id);
+    if (span == null) return const SizedBox.shrink();
+    return _GroupBar(
+      group: group,
+      startMs: span.$1,
+      endMs: span.$2,
+      zoom: widget.zoom,
+      width: width,
+      laneTop: TimelineView.rulerHeight + lane * TimelineView.laneHeight,
+      pinching: _pinching,
+      moving: _movingGroup?.id == group.id,
+      movingOriginMs: _movingGroupOriginMs,
+      selected: widget.selectedGroupId == group.id,
+      onSelect: () => widget.onSelectGroup?.call(group),
+      onToggleCollapsed: () => widget.onToggleGroupCollapsed?.call(group),
+      onToggleVisibility: () => widget.onToggleGroupVisibility?.call(group),
+      onMoveStart: () => _handleGroupMoveStart(group),
+      onMoveChanged: (target) => _handleGroupMoveUpdate(group, target),
+      onMoveEnd: () => _handleGroupMoveEnd(group),
+    );
+  }
+
   /// Os porteur d'une forme (null = pièce libre) — v0.21.0 : le segment
   /// d'une pièce liée affiche les keyframes de SON os et sélectionne l'os.
   RigBone? _carrierOf(VectorShape shape) {
@@ -206,7 +274,17 @@ class _TimelineViewState extends State<TimelineView> {
   /// Barre d'une pièce : pour une pièce LIÉE, le segment est coloré, affiche
   /// les keyframes de l'OS (pas les siennes), sélectionne l'os au clic et
   /// supprime ses keyframes près de la tête de lecture.
-  Widget _shapeBar(VectorShape shape, int lane, double width) {
+  Color? _groupColorFor(VectorShape shape) {
+    final group = widget.project.groupById(shape.groupId);
+    return group == null ? null : Color(group.colorValue);
+  }
+
+  Widget _shapeBar(
+    VectorShape shape,
+    int lane,
+    double width, {
+    Color? groupColor,
+  }) {
     final carrier = _carrierOf(shape);
     return _ShapeBar(
       shape: shape,
@@ -244,6 +322,8 @@ class _TimelineViewState extends State<TimelineView> {
       },
       onGestureStart: () => widget.onGestureStart(shape),
       onFollowEdge: _followEdge,
+      groupColor: groupColor,
+      groupVisible: widget.project.groupById(shape.groupId)?.visible,
     );
   }
 
@@ -252,7 +332,7 @@ class _TimelineViewState extends State<TimelineView> {
     final zoom = widget.zoom;
     // Une ligne par pièce : les pistes d'os SÉPARÉES ont disparu (v0.21.0),
     // les keyframes d'un os vivent sur le segment de la forme qu'il porte.
-    final lanes = TimelineLayout.packLanes(widget.project.shapes);
+    final lanes = TimelineLayout.packRows(widget.project);
     final laneCount = math.max(1, lanes.length);
     final laneArea = laneCount * TimelineView.laneHeight;
 
@@ -316,8 +396,16 @@ class _TimelineViewState extends State<TimelineView> {
                     ),
                   ),
                 for (var lane = 0; lane < lanes.length; lane++)
-                  for (final shape in lanes[lane])
-                    _shapeBar(shape, lane, width),
+                  for (final row in lanes[lane])
+                    if (row.group case final group?)
+                      _groupBar(group, lane, width)
+                    else if (row.shape case final shape?)
+                      _shapeBar(
+                        shape,
+                        lane,
+                        width,
+                        groupColor: _groupColorFor(shape),
+                      ),
                 Positioned(
                   left: zoom.xFor(widget.timeMs, width) - 1,
                   top: 0,
@@ -452,6 +540,8 @@ class _ShapeBar extends StatelessWidget {
     required this.onDeleteKeyframe,
     required this.onGestureStart,
     required this.onFollowEdge,
+    this.groupColor,
+    this.groupVisible,
   });
 
   final VectorShape shape;
@@ -488,6 +578,8 @@ class _ShapeBar extends StatelessWidget {
 
   /// Défilement automatique pendant l'étirement : garde la fin dans la vue.
   final ValueChanged<int> onFollowEdge;
+  final Color? groupColor;
+  final bool? groupVisible;
 
   @override
   Widget build(BuildContext context) {
@@ -502,6 +594,7 @@ class _ShapeBar extends StatelessWidget {
     // Épinglée au bord droit : une barre plus large que son minimum doit
     // rester visible quand sa fin touche le bord droit de la vue.
     final pinnedLeft = math.min(left, math.max(0.0, width - 24));
+    final effectiveVisible = shape.visible && (groupVisible ?? true);
     // Tout élément lié représente son os sur la timeline (y compris un groupe
     // squelette importé) ; seul un groupe non lié garde sa couleur orange.
     final bound = carrier != null;
@@ -561,7 +654,7 @@ class _ShapeBar extends StatelessWidget {
           children: <Widget>[
             Container(
               decoration: BoxDecoration(
-                color: color.withValues(alpha: shape.visible ? 0.30 : 0.12),
+                color: color.withValues(alpha: effectiveVisible ? 0.30 : 0.12),
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(
                   color: moving
@@ -587,12 +680,20 @@ class _ShapeBar extends StatelessWidget {
                 shape.name,
                 style: TextStyle(
                   fontSize: 11,
-                  color: shape.visible ? Colors.white : Colors.white38,
+                  color: effectiveVisible ? Colors.white : Colors.white38,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
             ),
+            if (groupColor != null)
+              Positioned(
+                left: 0,
+                top: 0,
+                bottom: 0,
+                width: 3,
+                child: IgnorePointer(child: ColoredBox(color: groupColor!)),
+              ),
             for (final keyTime in keyTimes)
               Align(
                 alignment: Alignment(
@@ -666,6 +767,147 @@ class _ShapeBar extends StatelessWidget {
               },
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GroupBar extends StatelessWidget {
+  const _GroupBar({
+    required this.group,
+    required this.startMs,
+    required this.endMs,
+    required this.zoom,
+    required this.width,
+    required this.laneTop,
+    required this.pinching,
+    required this.moving,
+    required this.movingOriginMs,
+    required this.selected,
+    required this.onSelect,
+    required this.onToggleCollapsed,
+    required this.onToggleVisibility,
+    required this.onMoveStart,
+    required this.onMoveChanged,
+    required this.onMoveEnd,
+  });
+
+  final ShapeGroup group;
+  final int startMs;
+  final int endMs;
+  final TimelineZoomState zoom;
+  final double width;
+  final double laneTop;
+  final bool pinching;
+  final bool moving;
+  final int movingOriginMs;
+  final bool selected;
+  final VoidCallback onSelect;
+  final VoidCallback onToggleCollapsed;
+  final VoidCallback onToggleVisibility;
+  final VoidCallback onMoveStart;
+  final ValueChanged<int> onMoveChanged;
+  final VoidCallback onMoveEnd;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Color(group.colorValue);
+    final left = zoom.xFor(startMs, width);
+    final msPerPx = zoom.msPerPixel(width);
+    final barWidth = math.max(110.0, (endMs - startMs) / msPerPx);
+    final pinnedLeft = math.min(left, math.max(0.0, width - 24));
+    return Positioned(
+      left: pinnedLeft,
+      top: laneTop + 3,
+      width: barWidth,
+      height: TimelineView.laneHeight - 8,
+      child: GestureDetector(
+        onTap: onSelect,
+        onLongPressStart: (_) => onMoveStart(),
+        onLongPressMoveUpdate: (details) {
+          if (!moving || pinching) return;
+          final deltaMs = (details.localOffsetFromOrigin.dx * msPerPx).round();
+          onMoveChanged(math.max(0, movingOriginMs + deltaMs));
+        },
+        onLongPressEnd: (_) {
+          if (moving) onMoveEnd();
+        },
+        onLongPressCancel: () {
+          if (moving) onMoveEnd();
+        },
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: group.visible ? 0.28 : 0.10),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: moving
+                  ? Colors.white
+                  : selected
+                  ? color
+                  : color.withValues(alpha: 0.7),
+              width: moving || selected ? 2 : 1,
+            ),
+            boxShadow: moving
+                ? <BoxShadow>[
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.45),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            children: <Widget>[
+              IconButton(
+                tooltip: group.collapsed
+                    ? 'Déplier le groupe'
+                    : 'Replier le groupe',
+                onPressed: onToggleCollapsed,
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints.tightFor(
+                  width: 24,
+                  height: 22,
+                ),
+                icon: Icon(
+                  group.collapsed ? Icons.chevron_right : Icons.expand_more,
+                  size: 18,
+                  color: color,
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  group.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: group.visible ? Colors.white : Colors.white38,
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: group.visible
+                    ? 'Masquer le groupe'
+                    : 'Afficher le groupe',
+                onPressed: onToggleVisibility,
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints.tightFor(
+                  width: 24,
+                  height: 22,
+                ),
+                icon: Icon(
+                  group.visible ? Icons.visibility : Icons.visibility_off,
+                  size: 14,
+                  color: group.visible ? color : Colors.white38,
+                ),
+              ),
+              const SizedBox(width: 4),
+            ],
+          ),
         ),
       ),
     );

@@ -1,12 +1,15 @@
-# Keyform Studio 0.34.0
+# Keyform Studio 0.35.0
 
-## Création et format du projet
+## Groupes d’éléments
 
-- **Nouveau projet** crée un canvas vierge avec les réglages par défaut, lui attribue un nom daté à la microseconde et ouvre directement le Studio, sans boîte de dialogue.
-- Nouveau menu Studio **Canvas** avec huit formats radio : 9:16, 4:5, 3:4, 1:1, 4:3, 3:2, 16:9 et 21:9. Le changement de ratio ajuste les dimensions du projet, est sauvegardé et peut être annulé.
-- Le compteur et le texte d’aide du menu **Éléments** sont retirés ; les nouveaux rectangles ont des coins carrés, sans modifier l’arrondi des formes existantes ni des VASF historiques.
+- Création de groupes nommés depuis **Éléments**, avec sélection de couleur de timeline, renommage et dissolution en conservant les formes.
+- Appartenance de formes aux groupes depuis les propriétés de la forme ou de l’os porteur ; forme libre possible avec « Aucun ».
+- Timeline : ligne de groupe colorée, repliage/dépliage, visibilité, fils indentés avec liseré de 3 px et déplacement temporel commun. La durée du groupe est dérivée de ses fils.
+- Les groupes et appartenances sont sauvegardés (migration SQLite v10), sérialisés en JSON et préservés lors de la duplication de projet.
+- Les actions de groupe sont annulables ; sa visibilité s’applique à ses formes et à leurs os dans le preview.
+- Les réglages de position, rotation et échelle du groupe sont enregistrés ; leur manipulation par le sélecteur preview est prévue en v0.35.1.
 
 ### Vérifications
 
 - `flutter analyze` sans problème.
-- Suite complète des tests Flutter : 293 tests passés.
+- Suite complète des tests Flutter : 303 tests passés.

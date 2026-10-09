@@ -319,6 +319,66 @@ void main() {
     expect(find.text('Forme 1'), findsNothing);
   });
 
+  testWidgets('créer un groupe depuis Éléments et le sauvegarder', (
+    tester,
+  ) async {
+    final project = seededProject();
+    await pumpStudio(tester, repository, project);
+
+    await tester.tap(find.text('Éléments'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ajouter un groupe…'));
+    await tester.pumpAndSettle();
+    expect(find.text('Ajouter un groupe'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).last, 'Visage');
+    await tester.tap(find.widgetWithText(FilledButton, 'Créer'));
+    await tester.pumpAndSettle();
+
+    expect(project.groups, hasLength(1));
+    expect(project.groups.single.name, 'Visage');
+    final loaded = await repository.load(project.id);
+    expect(loaded.groups.single.name, 'Visage');
+
+    await tester.tap(find.text('Éléments'));
+    await tester.pumpAndSettle();
+    expect(find.text('Renommer le groupe…'), findsOneWidget);
+    await tester.tap(find.text('Dissoudre le groupe…'));
+    await tester.pumpAndSettle();
+    expect(find.text('Dissoudre le groupe ?'), findsOneWidget);
+    await tester.tap(find.text('Dissoudre').last);
+    await tester.pumpAndSettle();
+    expect(project.groups, isEmpty);
+    expect(project.shapes.single.groupId, isNull);
+    expect((await repository.load(project.id)).groups, isEmpty);
+  });
+
+  testWidgets('une forme peut être affectée ou retirée de son groupe', (
+    tester,
+  ) async {
+    final project = seededProject();
+    final group = ShapeGroup(name: 'Visage');
+    project.groups.add(group);
+    await pumpStudio(tester, repository, project);
+
+    await tester.tap(find.byTooltip('Propriétés de la forme'));
+    await tester.pumpAndSettle();
+    expect(find.text('Groupe'), findsOneWidget);
+    await tester.tap(find.text('Aucun'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Visage').last);
+    await tester.pumpAndSettle();
+
+    expect(project.shapes.single.groupId, group.id);
+    final loaded = await repository.load(project.id);
+    expect(loaded.shapes.single.groupId, group.id);
+
+    await tester.tap(find.text('Visage').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Aucun').last);
+    await tester.pumpAndSettle();
+    expect(project.shapes.single.groupId, isNull);
+  });
+
   testWidgets('Canvas propose huit ratios et modifie le format du projet', (
     tester,
   ) async {
@@ -1035,7 +1095,7 @@ void main() {
 
     await tester.tap(find.text('Éléments'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Importer un VASF comme groupe…'));
+    await tester.tap(find.text('Importer un VASF comme instance…'));
     await tester.pumpAndSettle();
 
     expect(host.shapes, hasLength(1));
