@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../models/animation.dart';
+import '../settings/language_settings.dart';
 import 'palette.dart';
 
 /// Bottom sheet « Réglages de la couche » : couleur, remplissage, sliders et
@@ -34,6 +35,13 @@ class _LayerPropertiesSheetState extends State<LayerPropertiesSheet> {
 
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder<String>(
+      valueListenable: AppStrings.language,
+      builder: (context, _, _) => _buildLocalized(context),
+    );
+  }
+
+  Widget _buildLocalized(BuildContext context) {
     final layer = widget.layer;
     return SafeArea(
       child: SingleChildScrollView(
@@ -46,14 +54,14 @@ class _LayerPropertiesSheetState extends State<LayerPropertiesSheet> {
               children: <Widget>[
                 Expanded(
                   child: Text(
-                    'Réglages · ${layer.name}',
+                    '${AppStrings.text('Réglages · ')}${layer.name}',
                     style: const TextStyle(fontWeight: FontWeight.bold),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 IconButton(
-                  tooltip: 'Supprimer la couche',
+                  tooltip: AppStrings.text('Supprimer la couche'),
                   onPressed: widget.canDelete
                       ? () {
                           Navigator.of(context).pop();
@@ -71,7 +79,10 @@ class _LayerPropertiesSheetState extends State<LayerPropertiesSheet> {
             ],
             Row(
               children: <Widget>[
-                const Text('Remplissage', style: TextStyle(fontSize: 12)),
+                Text(
+                  AppStrings.text('Remplissage'),
+                  style: const TextStyle(fontSize: 12),
+                ),
                 Switch(
                   value: layer.filled,
                   onChanged: (value) {
@@ -109,7 +120,7 @@ class _ColorRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: <Widget>[
-        const Text('Couleur', style: TextStyle(fontSize: 12)),
+        Text(AppStrings.text('Couleur'), style: const TextStyle(fontSize: 12)),
         const SizedBox(width: 8),
         Expanded(
           child: Wrap(
@@ -148,7 +159,7 @@ class _ColorRow extends StatelessWidget {
                     context: context,
                     builder: (dialogContext) => StatefulBuilder(
                       builder: (context, setDialogState) => AlertDialog(
-                        title: const Text('Couleur personnalisée'),
+                        title: Text(AppStrings.text('Couleur personnalisée')),
                         content: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: <Widget>[
@@ -193,7 +204,7 @@ class _ColorRow extends StatelessWidget {
                         actions: <Widget>[
                           TextButton(
                             onPressed: () => Navigator.pop(dialogContext),
-                            child: const Text('Annuler'),
+                            child: Text(AppStrings.text('Annuler')),
                           ),
                           FilledButton(
                             onPressed: () => Navigator.pop(
@@ -205,7 +216,7 @@ class _ColorRow extends StatelessWidget {
                                 (blue * 255).round(),
                               ),
                             ),
-                            child: const Text('Valider'),
+                            child: Text(AppStrings.text('Valider')),
                           ),
                         ],
                       ),
@@ -312,9 +323,12 @@ class _CornerRadiusSlider extends StatelessWidget {
             .toDouble();
     return Row(
       children: <Widget>[
-        const SizedBox(
+        SizedBox(
           width: 92,
-          child: Text('Rayon des coins', style: TextStyle(fontSize: 12)),
+          child: Text(
+            AppStrings.text('Rayon des coins'),
+            style: const TextStyle(fontSize: 12),
+          ),
         ),
         Expanded(
           child: Slider(

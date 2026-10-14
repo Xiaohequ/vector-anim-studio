@@ -7,6 +7,7 @@ import '../engine/timeline_layout.dart';
 import '../engine/timeline_zoom.dart';
 import '../models/animation.dart';
 import '../models/skeleton.dart';
+import '../settings/language_settings.dart';
 
 /// Timeline : une ligne par piste d'affichage, un rectangle par forme.
 ///
@@ -329,6 +330,13 @@ class _TimelineViewState extends State<TimelineView> {
 
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder<String>(
+      valueListenable: AppStrings.language,
+      builder: (context, _, _) => _buildLocalized(context),
+    );
+  }
+
+  Widget _buildLocalized(BuildContext context) {
     final zoom = widget.zoom;
     // Une ligne par pièce : les pistes d'os SÉPARÉES ont disparu (v0.21.0),
     // les keyframes d'un os vivent sur le segment de la forme qu'il porte.
@@ -709,7 +717,7 @@ class _ShapeBar extends StatelessWidget {
                         behavior: HitTestBehavior.opaque,
                         onTap: () => onDeleteKeyframe(keyTime),
                         child: Tooltip(
-                          message: 'Supprimer la keyframe',
+                          message: AppStrings.text('Supprimer la keyframe'),
                           child: Container(
                             width: 16,
                             height: 16,
@@ -737,7 +745,7 @@ class _ShapeBar extends StatelessWidget {
             _Handle(
               alignment: Alignment.centerLeft,
               msPerPixel: zoom.msPerPixel(width),
-              tooltip: 'Début d’affichage',
+              tooltip: AppStrings.text('Début d’affichage'),
               onDragStart: () => onGestureStart(),
               onDragEnd: () {},
               onDrag: (deltaMs) {
@@ -751,7 +759,7 @@ class _ShapeBar extends StatelessWidget {
             _Handle(
               alignment: Alignment.centerRight,
               msPerPixel: zoom.msPerPixel(width),
-              tooltip: 'Fin d’affichage',
+              tooltip: AppStrings.text('Fin d’affichage'),
               onDragStart: () => onGestureStart(),
               onDragEnd: () {},
               onDrag: (deltaMs) {

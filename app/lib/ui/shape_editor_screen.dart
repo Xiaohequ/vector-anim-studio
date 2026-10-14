@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../engine/scene_painter.dart';
 import '../engine/selection_geometry.dart';
 import '../models/animation.dart';
+import '../settings/language_settings.dart';
 import 'layer_properties_sheet.dart';
 import 'palette.dart';
 
@@ -210,7 +211,7 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
 
   void _removeLayer(ShapeLayer layer) {
     if (_draft.layers.length <= 1) {
-      _snack('Une forme doit garder au moins une couche.');
+      _snack(AppStrings.text('Une forme doit garder au moins une couche.'));
       return;
     }
     setState(() {
@@ -265,7 +266,7 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
                     ),
                   ),
                   IconButton(
-                    tooltip: 'Fermer le message',
+                    tooltip: AppStrings.text('Fermer le message'),
                     visualDensity: VisualDensity.compact,
                     constraints: const BoxConstraints(
                       minWidth: 36,
@@ -310,12 +311,25 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder<String>(
+      valueListenable: AppStrings.language,
+      builder: (context, _, _) => _buildLocalized(context),
+    );
+  }
+
+  Widget _buildLocalized(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isNew ? 'Nouvelle forme' : 'Modifier la forme'),
+        title: Text(
+          AppStrings.text(
+            _isNew
+                ? AppStrings.text('Nouvelle forme')
+                : AppStrings.text('Modifier la forme'),
+          ),
+        ),
         actions: <Widget>[
           IconButton(
-            tooltip: 'Enregistrer',
+            tooltip: AppStrings.text('Enregistrer'),
             onPressed: () {
               final name = _name.text.trim();
               _draft.name = name.isEmpty ? _draft.name : name;
@@ -333,8 +347,8 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
             padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
             child: TextField(
               controller: _name,
-              decoration: const InputDecoration(
-                labelText: 'Nom de la forme',
+              decoration: InputDecoration(
+                labelText: AppStrings.text('Nom de la forme'),
                 isDense: true,
               ),
             ),
@@ -370,17 +384,17 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
         children: <Widget>[
           _editorToolButton(
             icon: Icons.category_outlined,
-            label: 'Formes',
+            label: AppStrings.text('Formes'),
             onPressed: _showShapesSheet,
           ),
           _editorToolButton(
             icon: Icons.polyline_outlined,
-            label: 'Points',
+            label: AppStrings.text('Points'),
             onPressed: _showPointsSheet,
           ),
           _editorToolButton(
             icon: Icons.center_focus_strong,
-            label: 'Aperçu',
+            label: AppStrings.text('Aperçu'),
             onPressed: _showPreviewSheet,
           ),
         ],
@@ -418,7 +432,7 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
               Text(
-                'Ajouter une forme',
+                AppStrings.text('Ajouter une forme'),
                 style: Theme.of(sheetContext).textTheme.titleLarge,
               ),
               const SizedBox(height: 12),
@@ -534,14 +548,16 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
   Future<void> _showPointsSheet() {
     final isPath = _selectedLayer?.kind == ShapeKind.path;
     return _showEditorSheet(
-      title: 'Points',
+      title: AppStrings.text('Points'),
       icon: Icons.polyline_outlined,
       children: <Widget>[
         if (!isPath)
-          const ListTile(
-            leading: Icon(Icons.touch_app_outlined),
-            title: Text('Sélectionne une couche Chemin'),
-            subtitle: Text('Les outils de points concernent les chemins.'),
+          ListTile(
+            leading: const Icon(Icons.touch_app_outlined),
+            title: Text(AppStrings.text('Sélectionne une couche Chemin')),
+            subtitle: Text(
+              AppStrings.text('Les outils de points concernent les chemins.'),
+            ),
           )
         else ...<Widget>[
           Builder(
@@ -550,8 +566,10 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
                 _addPointMode ? Icons.add_circle : Icons.add_circle_outline,
                 color: _addPointMode ? const Color(0xFF3ECF8E) : null,
               ),
-              title: const Text('Ajouter un point'),
-              subtitle: const Text('Active, puis touche un segment du chemin.'),
+              title: Text(AppStrings.text('Ajouter un point')),
+              subtitle: Text(
+                AppStrings.text('Active, puis touche un segment du chemin.'),
+              ),
               value: _addPointMode,
               onChanged: (value) {
                 setState(() => _addPointMode = value);
@@ -559,15 +577,19 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
               },
             ),
           ),
-          const ListTile(
-            leading: Icon(Icons.open_with),
-            title: Text('Déplacer un point'),
-            subtitle: Text('Glisse directement une poignée dans l’aperçu.'),
+          ListTile(
+            leading: const Icon(Icons.open_with),
+            title: Text(AppStrings.text('Déplacer un point')),
+            subtitle: Text(
+              AppStrings.text('Glisse directement une poignée dans l’aperçu.'),
+            ),
           ),
-          const ListTile(
-            leading: Icon(Icons.delete_outline),
-            title: Text('Supprimer un point'),
-            subtitle: Text('Appui long sur sa poignée dans l’aperçu.'),
+          ListTile(
+            leading: const Icon(Icons.delete_outline),
+            title: Text(AppStrings.text('Supprimer un point')),
+            subtitle: Text(
+              AppStrings.text('Appui long sur sa poignée dans l’aperçu.'),
+            ),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
@@ -583,7 +605,7 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
   }
 
   Future<void> _showPreviewSheet() => _showEditorSheet(
-    title: 'Aperçu',
+    title: AppStrings.text('Aperçu'),
     icon: Icons.center_focus_strong,
     children: <Widget>[
       Builder(
@@ -591,8 +613,10 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
           secondary: Icon(
             _previewPanMode ? Icons.pan_tool : Icons.pan_tool_outlined,
           ),
-          title: const Text('Déplacer la vue'),
-          subtitle: const Text('Glisse dans l’aperçu sans déplacer la couche.'),
+          title: Text(AppStrings.text('Déplacer la vue')),
+          subtitle: Text(
+            AppStrings.text('Glisse dans l’aperçu sans déplacer la couche.'),
+          ),
           value: _previewPanMode,
           onChanged: (value) {
             setState(() => _previewPanMode = value);
@@ -602,28 +626,30 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
       ),
       ListTile(
         leading: const Icon(Icons.zoom_out),
-        title: const Text('Zoom arrière'),
+        title: Text(AppStrings.text('Zoom arrière')),
         onTap: () => setState(() => _changePreviewZoom(1 / 1.2)),
       ),
       ListTile(
         leading: const Icon(Icons.zoom_in),
-        title: const Text('Zoom avant'),
+        title: Text(AppStrings.text('Zoom avant')),
         onTap: () => setState(() => _changePreviewZoom(1.2)),
       ),
       Builder(
         builder: (sheetContext) => _editorAction(
           sheetContext,
           icon: Icons.fit_screen_outlined,
-          title: 'Ajuster à l’écran',
-          subtitle: 'Recentrer et remettre le zoom à 100 %.',
+          title: AppStrings.text('Ajuster à l’écran'),
+          subtitle: AppStrings.text('Recentrer et remettre le zoom à 100 %.'),
           onTap: _fitPreview,
         ),
       ),
       Builder(
         builder: (sheetContext) => SwitchListTile(
           secondary: const Icon(Icons.rotate_90_degrees_ccw_outlined),
-          title: const Text('Snap rotation 90°'),
-          subtitle: const Text('Aimanter la rotation aux multiples de 90°.'),
+          title: Text(AppStrings.text('Snap rotation 90°')),
+          subtitle: Text(
+            AppStrings.text('Aimanter la rotation aux multiples de 90°.'),
+          ),
           value: _snapRotation,
           onChanged: (value) {
             setState(() => _snapRotation = value);
@@ -837,7 +863,7 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
       width: size,
       height: size,
       child: IconButton(
-        tooltip: 'Réglages de la couche',
+        tooltip: AppStrings.text('Réglages de la couche'),
         padding: EdgeInsets.zero,
         iconSize: 18,
         style: IconButton.styleFrom(
@@ -1079,7 +1105,7 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
     final layer = _selectedLayer;
     if (_addPointMode && layer != null && layer.visible) {
       if (layer.kind != ShapeKind.path) {
-        _snack('Le mode ✚ s’applique aux couches « Chemin ».');
+        _snack(AppStrings.text('Le mode ✚ s’applique aux couches « Chemin ».'));
         return;
       }
       setState(() => _addPointMode = false);
@@ -1100,7 +1126,7 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
         setState(
           () => _draft.insertLayerPoint(layer, layer.points.length, stored),
         );
-        _snack('Point ajouté');
+        _snack(AppStrings.text('Point ajouté'));
         return;
       }
       final (segment, distance) = SelectionGeometry.nearestClosedSegment(
@@ -1108,11 +1134,15 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
         details.localPosition,
       );
       if (distance > 28) {
-        _snack('Touche un segment du chemin pour y ajouter un point.');
+        _snack(
+          AppStrings.text(
+            'Touche un segment du chemin pour y ajouter un point.',
+          ),
+        );
         return;
       }
       setState(() => _draft.insertLayerPoint(layer, segment + 1, stored));
-      _snack('Point ajouté');
+      _snack(AppStrings.text('Point ajouté'));
       return;
     }
     final geo = _previewGeometry(canvasSize);
@@ -1146,7 +1176,7 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
     );
     if (index < 0) return;
     setState(() => _draft.removeLayerPoint(layer, index));
-    _snack('Point supprimé');
+    _snack(AppStrings.text('Point supprimé'));
   }
 }
 
@@ -1204,25 +1234,25 @@ class LayerPanel extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             IconButton(
-              tooltip: 'Propriétés',
+              tooltip: AppStrings.text('Propriétés'),
               iconSize: 18,
               onPressed: () => onProperties(layer),
               icon: const Icon(Icons.tune),
             ),
             IconButton(
-              tooltip: 'Dupliquer',
+              tooltip: AppStrings.text('Dupliquer'),
               iconSize: 18,
               onPressed: () => onDuplicate(layer),
               icon: const Icon(Icons.copy),
             ),
             IconButton(
-              tooltip: 'Monter',
+              tooltip: AppStrings.text('Monter'),
               iconSize: 18,
               onPressed: () => onMove(index, 1),
               icon: const Icon(Icons.arrow_downward),
             ),
             IconButton(
-              tooltip: 'Descendre',
+              tooltip: AppStrings.text('Descendre'),
               iconSize: 18,
               onPressed: () => onMove(index, -1),
               icon: const Icon(Icons.arrow_upward),

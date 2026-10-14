@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../models/animation.dart';
+import '../settings/language_settings.dart';
 
 /// Animations prêtes à l'emploi, appliquées à la forme sélectionnée.
 enum AnimationPreset {
@@ -16,21 +17,31 @@ enum AnimationPreset {
 
 extension AnimationPresetInfo on AnimationPreset {
   String get label => switch (this) {
-    AnimationPreset.apparition => 'Apparition',
-    AnimationPreset.disparition => 'Disparition',
-    AnimationPreset.deplacement => 'Déplacement',
-    AnimationPreset.rotation => 'Rotation',
-    AnimationPreset.pulsation => 'Pulsation',
-    AnimationPreset.fondu => 'Fondu (aller-retour)',
+    AnimationPreset.apparition => AppStrings.text('Apparition'),
+    AnimationPreset.disparition => AppStrings.text('Disparition'),
+    AnimationPreset.deplacement => AppStrings.text('Déplacement'),
+    AnimationPreset.rotation => AppStrings.text('Rotation'),
+    AnimationPreset.pulsation => AppStrings.text('Pulsation'),
+    AnimationPreset.fondu => AppStrings.text('Fondu (aller-retour)'),
   };
 
   String get description => switch (this) {
-    AnimationPreset.apparition => 'Opacité 0 → 1 en entrée de forme',
-    AnimationPreset.disparition => 'Opacité 1 → 0 en fin de forme',
-    AnimationPreset.deplacement => 'Glisse depuis la gauche vers sa place',
-    AnimationPreset.rotation => 'Rotation complète sur la durée affichée',
-    AnimationPreset.pulsation => 'Échelle 1 → 1,25 → 1',
-    AnimationPreset.fondu => 'Opacité 0 → 1 → 0 sur la durée affichée',
+    AnimationPreset.apparition => AppStrings.text(
+      'Opacité 0 → 1 en entrée de forme',
+    ),
+    AnimationPreset.disparition => AppStrings.text(
+      'Opacité 1 → 0 en fin de forme',
+    ),
+    AnimationPreset.deplacement => AppStrings.text(
+      'Glisse depuis la gauche vers sa place',
+    ),
+    AnimationPreset.rotation => AppStrings.text(
+      'Rotation complète sur la durée affichée',
+    ),
+    AnimationPreset.pulsation => AppStrings.text('Échelle 1 → 1,25 → 1'),
+    AnimationPreset.fondu => AppStrings.text(
+      'Opacité 0 → 1 → 0 sur la durée affichée',
+    ),
   };
 
   IconData get icon => switch (this) {

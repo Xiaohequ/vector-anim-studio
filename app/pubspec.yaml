@@ -2,13 +2,15 @@ name: vector_anim_studio
 description: "Keyform Studio — studio d'animation 2D mobile : formes, couches, keyframes, rig par os, export MP4/GIF."
 publish_to: 'none'
 
-version: 0.35.0+1
+version: 0.36.0+2
 
 environment:
   sdk: ^3.12.0
 
 dependencies:
   flutter:
+    sdk: flutter
+  flutter_localizations:
     sdk: flutter
 
   cupertino_icons: ^1.0.8
@@ -23,6 +25,8 @@ dependencies:
   # Encodage MP4 H.264 via MediaCodec / AVFoundation (aucun ffmpeg embarqué)
   flutter_quick_video_encoder: ^1.7.2
   file_picker: ^13.1.0
+  shared_preferences: ^2.5.3
+  package_info_plus: ^10.2.2
 
 dev_dependencies:
   flutter_test:

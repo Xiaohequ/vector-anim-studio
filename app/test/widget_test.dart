@@ -6,6 +6,7 @@ import 'package:cross_file/cross_file.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:vector_anim_studio/data/project_repository.dart';
 import 'package:vector_anim_studio/data/project_store.dart';
@@ -13,6 +14,8 @@ import 'package:vector_anim_studio/engine/rig_overlay_painter.dart';
 import 'package:vector_anim_studio/engine/scene_painter.dart';
 import 'package:vector_anim_studio/engine/selection_geometry.dart';
 import 'package:vector_anim_studio/main.dart';
+import 'package:vector_anim_studio/settings/language_settings.dart';
+import 'package:vector_anim_studio/ui/settings_screen.dart';
 import 'package:vector_anim_studio/models/animation.dart';
 import 'package:vector_anim_studio/models/skeleton.dart';
 import 'package:vector_anim_studio/ui/shape_properties_sheet.dart';
@@ -78,8 +81,88 @@ void main() {
   late AnimationProject activeProject;
 
   setUp(() {
+    TestWidgetsFlutterBinding.ensureInitialized()
+        .platformDispatcher
+        .localeTestValue = const Locale(
+      'fr',
+    );
+    AppStrings.languageCode = 'fr';
+    SharedPreferences.setMockInitialValues(<String, Object>{});
     repository = _MemoryRepository();
     activeProject = AnimationProject.blank(name: 'Test');
+  });
+
+  testWidgets('le choix de langue est accessible depuis l’accueil', (
+    tester,
+  ) async {
+    await tester.pumpWidget(VectorAnimStudioApp(repository: repository));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Paramètres'));
+    await tester.pumpAndSettle();
+    expect(find.text('Réglages généraux'), findsOneWidget);
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Chinois').last);
+    await tester.pumpAndSettle();
+    expect(AppStrings.languageCode, 'zh');
+    await tester.tap(find.byTooltip('返回'));
+    await tester.pumpAndSettle();
+    expect(AppStrings.text('Paramètres'), '设置');
+    expect(AppStrings.text('Nouveau projet'), '新建项目');
+  });
+
+  testWidgets(
+    'Paramètres affiche version, confidentialité et licences open source',
+    (tester) async {
+      final settings = LanguageSettings();
+      await settings.load();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SettingsScreen(
+            settings: settings,
+            versionOverride: '0.35.0 (1)',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Informations'), findsOneWidget);
+      expect(find.text('0.35.0 (1)'), findsOneWidget);
+      await tester.tap(find.text('Notice de confidentialité'));
+      await tester.pumpAndSettle();
+      expect(find.text('Données des projets'), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Bibliothèques open source'));
+      await tester.pumpAndSettle();
+      expect(find.byType(LicensePage), findsOneWidget);
+      settings.dispose();
+    },
+  );
+
+  testWidgets('la page Paramètres propose les trois langues et le système', (
+    tester,
+  ) async {
+    AppStrings.languageCode = 'fr';
+    final settings = LanguageSettings();
+    await settings.load();
+    await tester.pumpWidget(
+      MaterialApp(home: SettingsScreen(settings: settings)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Langue'), findsNWidgets(2));
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    expect(find.text('Langue du système'), findsNWidgets(2));
+    expect(find.text('Français'), findsOneWidget);
+    expect(find.text('Anglais'), findsOneWidget);
+    expect(find.text('Chinois'), findsOneWidget);
+    await tester.tap(find.text('Chinois').last);
+    await tester.pumpAndSettle();
+    expect(settings.selection, 'zh');
+    expect(AppStrings.text('Réglages généraux'), '通用设置');
+    settings.dispose();
   });
 
   test('ProjectStore nomme le projet avec sa date et son heure', () async {
@@ -98,6 +181,7 @@ void main() {
   testWidgets(
     'l’écran principal affiche l’état vide et le bouton nouveau projet',
     (tester) async {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
       await tester.pumpWidget(VectorAnimStudioApp(repository: repository));
       await tester.pumpAndSettle();
 
@@ -111,6 +195,7 @@ void main() {
   testWidgets('Nouveau projet ouvre directement le Studio avec les défauts', (
     tester,
   ) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
     await tester.pumpWidget(VectorAnimStudioApp(repository: repository));
     await tester.pumpAndSettle();
 

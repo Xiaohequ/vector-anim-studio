@@ -2,15 +2,16 @@ import 'package:flutter/material.dart';
 
 import '../engine/timeline_controller.dart';
 import '../models/animation.dart';
+import '../settings/language_settings.dart';
 import '../models/skeleton.dart';
 
 /// Propriété d'animation d'un os (keyframe d'os, v0.10).
 enum BoneAnimatable { opacity, stretch, squash }
 
 String boneAnimatableLabel(BoneAnimatable property) => switch (property) {
-  BoneAnimatable.opacity => 'Opacité',
-  BoneAnimatable.stretch => 'Étirement',
-  BoneAnimatable.squash => 'Écrasement',
+  BoneAnimatable.opacity => AppStrings.text('Opacité'),
+  BoneAnimatable.stretch => AppStrings.text('Étirement'),
+  BoneAnimatable.squash => AppStrings.text('Écrasement'),
 };
 
 /// Bottom sheet « Propriétés de l'os » : parent, longueur, angle de repos,
@@ -124,13 +125,16 @@ class _BonePropertiesSheetState extends State<BonePropertiesSheet> {
       padding: const EdgeInsets.only(top: 4, bottom: 4),
       child: DropdownButtonFormField<String?>(
         initialValue: selected,
-        decoration: const InputDecoration(
-          labelText: 'Groupe de l’élément porté',
+        decoration: InputDecoration(
+          labelText: AppStrings.text('Groupe de l’élément porté'),
           isDense: true,
           border: OutlineInputBorder(),
         ),
         items: <DropdownMenuItem<String?>>[
-          const DropdownMenuItem<String?>(value: null, child: Text('Aucun')),
+          DropdownMenuItem<String?>(
+            value: null,
+            child: Text(AppStrings.text('Aucun')),
+          ),
           for (final group in project.groups)
             DropdownMenuItem<String?>(value: group.id, child: Text(group.name)),
         ],
@@ -152,7 +156,10 @@ class _BonePropertiesSheetState extends State<BonePropertiesSheet> {
     final maxHeight = MediaQuery.sizeOf(context).height * 0.66;
     final degrees = (bone.restAngle * 180 / 3.141592653589793) % 360;
     return AnimatedBuilder(
-      animation: controller,
+      animation: Listenable.merge(<Listenable>[
+        controller,
+        AppStrings.language,
+      ]),
       builder: (context, _) {
         final keyframe = controller.nearestBoneKeyframe(rig, bone);
         final keyframeAllowed =
@@ -199,8 +206,8 @@ class _BonePropertiesSheetState extends State<BonePropertiesSheet> {
                     ),
                     IconButton(
                       tooltip: keyframe == null
-                          ? 'Ajouter une keyframe au curseur'
-                          : 'Retirer la keyframe au curseur',
+                          ? AppStrings.text('Ajouter une keyframe au curseur')
+                          : AppStrings.text('Retirer la keyframe au curseur'),
                       iconSize: 20,
                       icon: Icon(
                         keyframe == null
@@ -216,7 +223,7 @@ class _BonePropertiesSheetState extends State<BonePropertiesSheet> {
                           : null,
                     ),
                     IconButton(
-                      tooltip: 'Supprimer l’os',
+                      tooltip: AppStrings.text('Supprimer l’os'),
                       iconSize: 20,
                       icon: const Icon(Icons.delete_outline),
                       onPressed: () async {
@@ -231,7 +238,7 @@ class _BonePropertiesSheetState extends State<BonePropertiesSheet> {
                       TextButton.icon(
                         onPressed: () => widget.onMirror!(true),
                         icon: const Icon(Icons.flip, size: 16),
-                        label: const Text('Miroir H'),
+                        label: Text(AppStrings.text('Miroir H')),
                       ),
                       const SizedBox(width: 4),
                       TextButton.icon(
@@ -240,7 +247,7 @@ class _BonePropertiesSheetState extends State<BonePropertiesSheet> {
                           angle: 3.141592653589793 / 2,
                           child: const Icon(Icons.flip, size: 16),
                         ),
-                        label: const Text('Miroir V'),
+                        label: Text(AppStrings.text('Miroir V')),
                       ),
                     ],
                   ),
@@ -257,7 +264,7 @@ class _BonePropertiesSheetState extends State<BonePropertiesSheet> {
                           widget.onEditShape!();
                         },
                         icon: const Icon(Icons.edit, size: 16),
-                        label: const Text('Modifier la forme…'),
+                        label: Text(AppStrings.text('Modifier la forme…')),
                       ),
                     ),
                   ),
@@ -273,7 +280,7 @@ class _BonePropertiesSheetState extends State<BonePropertiesSheet> {
                           widget.onOpenEditor!();
                         },
                         icon: const Icon(Icons.brush, size: 16),
-                        label: const Text('Ouvrir l’éditeur d’os…'),
+                        label: Text(AppStrings.text('Ouvrir l’éditeur d’os…')),
                       ),
                     ),
                   ),
@@ -286,9 +293,12 @@ class _BonePropertiesSheetState extends State<BonePropertiesSheet> {
                 const SizedBox(height: 8),
                 Row(
                   children: <Widget>[
-                    const SizedBox(
+                    SizedBox(
                       width: 92,
-                      child: Text('Longueur', style: TextStyle(fontSize: 12)),
+                      child: Text(
+                        AppStrings.text('Longueur'),
+                        style: TextStyle(fontSize: 12),
+                      ),
                     ),
                     Expanded(
                       child: Slider(
@@ -313,9 +323,12 @@ class _BonePropertiesSheetState extends State<BonePropertiesSheet> {
                 ),
                 Row(
                   children: <Widget>[
-                    const SizedBox(
+                    SizedBox(
                       width: 92,
-                      child: Text('Ordre (z)', style: TextStyle(fontSize: 12)),
+                      child: Text(
+                        AppStrings.text('Ordre (z)'),
+                        style: TextStyle(fontSize: 12),
+                      ),
                     ),
                     Expanded(
                       child: Slider(
@@ -340,9 +353,12 @@ class _BonePropertiesSheetState extends State<BonePropertiesSheet> {
                 ),
                 Row(
                   children: <Widget>[
-                    const SizedBox(
+                    SizedBox(
                       width: 92,
-                      child: Text('Opacité', style: TextStyle(fontSize: 12)),
+                      child: Text(
+                        AppStrings.text('Opacité'),
+                        style: TextStyle(fontSize: 12),
+                      ),
                     ),
                     Expanded(
                       child: Slider(
@@ -365,9 +381,12 @@ class _BonePropertiesSheetState extends State<BonePropertiesSheet> {
                 ),
                 Row(
                   children: <Widget>[
-                    const SizedBox(
+                    SizedBox(
                       width: 92,
-                      child: Text('Étirement', style: TextStyle(fontSize: 12)),
+                      child: Text(
+                        AppStrings.text('Étirement'),
+                        style: TextStyle(fontSize: 12),
+                      ),
                     ),
                     Expanded(
                       child: Slider(
@@ -390,9 +409,12 @@ class _BonePropertiesSheetState extends State<BonePropertiesSheet> {
                 ),
                 Row(
                   children: <Widget>[
-                    const SizedBox(
+                    SizedBox(
                       width: 92,
-                      child: Text('Écrasement', style: TextStyle(fontSize: 12)),
+                      child: Text(
+                        AppStrings.text('Écrasement'),
+                        style: TextStyle(fontSize: 12),
+                      ),
                     ),
                     Expanded(
                       child: Slider(
@@ -415,14 +437,19 @@ class _BonePropertiesSheetState extends State<BonePropertiesSheet> {
                 ),
                 Row(
                   children: <Widget>[
-                    const SizedBox(
+                    SizedBox(
                       width: 92,
-                      child: Text('IK 2 os', style: TextStyle(fontSize: 12)),
+                      child: Text(
+                        AppStrings.text('IK 2 os'),
+                        style: TextStyle(fontSize: 12),
+                      ),
                     ),
                     Expanded(
                       child: Text(
                         ikChild == null
-                            ? 'Sans enfant unique — indisponible'
+                            ? AppStrings.text(
+                                'Sans enfant unique — indisponible',
+                              )
                             : 'Glisser l’extrémité de « ${ikChild.name} » résout la chaîne',
                         style: const TextStyle(
                           fontSize: 11,
@@ -451,16 +478,19 @@ class _BonePropertiesSheetState extends State<BonePropertiesSheet> {
                       },
                       icon: const Icon(Icons.swap_horiz, size: 18),
                       label: Text(
-                        'Inverser le coude (${bone.bendSign > 0 ? '+' : '−'})',
+                        '${AppStrings.text('Inverser le coude')} (${bone.bendSign > 0 ? '+' : '−'})',
                         style: const TextStyle(fontSize: 12),
                       ),
                     ),
                   ),
                 Row(
                   children: <Widget>[
-                    const SizedBox(
+                    SizedBox(
                       width: 92,
-                      child: Text('Os parent', style: TextStyle(fontSize: 12)),
+                      child: Text(
+                        AppStrings.text('Os parent'),
+                        style: TextStyle(fontSize: 12),
+                      ),
                     ),
                     Expanded(
                       child: DropdownButton<String?>(
@@ -493,10 +523,10 @@ class _BonePropertiesSheetState extends State<BonePropertiesSheet> {
                 ),
                 Row(
                   children: <Widget>[
-                    const SizedBox(
+                    SizedBox(
                       width: 92,
                       child: Text(
-                        'Interpolation',
+                        AppStrings.text('Interpolation'),
                         style: TextStyle(fontSize: 12),
                       ),
                     ),

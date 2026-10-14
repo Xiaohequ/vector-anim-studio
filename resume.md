@@ -6,14 +6,11 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Nom technique / dépôt : `vector_anim_studio` / https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`). Nom d'affichage : **Keyform Studio** depuis v0.26.0.
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
-- **Dernière release : v0.30.0 VALIDÉE PAR L’UTILISATEUR** — `v0.30.0-build75`,
-  APK `vector-anim-studio-0.30.0.apk` (54,4 Mo), CI #75 verte.
+- **v0.36.0 en préparation** : page Paramètres avec préférence de langue (système/français/anglais/chinois), localisation de l’interface, informations de version, notice de confidentialité et accès aux licences open source. Branche de release : `release/0.36.0-language-info`.
+- **v0.30.0** reste la dernière version précédemment validée, avant v0.35.0 :
+  `v0.30.0-build75`, APK `vector-anim-studio-0.30.0.apk` (54,4 Mo), CI #75 verte.
   Barre Studio **Éléments / Animation / Os** ; export en haut. Projets unifiés v0.29
-  inclus. Retour utilisateur : « Je valide v0.30 ».
-- **v0.31.0 en préparation** : barre inférieure dédiée à l’éditeur de forme
-  **Couches / Points / Aperçu** ; détails et CI dans la PR de release.
-- Version précédente : **v0.25.0** — build `v0.25.0-build56`, APK
-  `vector-anim-studio-0.25.0.apk` (51,7 Mo) ; CI run #56 verte (commit `bf3a1f5`).
+  inclus.
 - **v0.25.0 = nouvelle icône « TRAIL », VALIDÉE APPAREIL (02/10)** — retour :
   « Icone c'est bon. C'est validé ». Mipmaps Android + icône adaptative
   `anydpi-v26` + catalogue iOS `AppIcon.appiconset`, générés par
@@ -883,10 +880,14 @@ v0.9.0, l'**animation squelette** (rig maître).
 - Vérification dans l'APK publié : 10 ressources d'icône présentes (5 mipmaps RGB
   48→192 px + 5 avant-plans RGBA 108→432 px), `resources.arsc` OK.
 
-### v0.31.0 (préparation de release)
-- Éditeur de forme : barre basse **Couches / Points / Aperçu** en bottom sheets ; retrait de la liste permanente pour agrandir le preview ; Enregistrer en haut, keyframe et curseur temporel conservés près du preview.
-- Couches : liste, sélection, visibilité, duplication, réordonnancement, suppression, ajout de primitives et fenêtre d’affichage. Points : ajout segment, déplacement direct, suppression par appui long et aide morph. Aperçu : pan, zoom, ajuster, snap rotation.
-- Tests widgets dédiés et validation complète à consigner après CI/release.
+### v0.36.0 (préparation de release)
+- Paramètres généraux : sélecteur de langue système/français/anglais/chinois avec
+  mémorisation locale et application immédiate ; repli anglais si le système n’est
+  pas pris en charge. Interface localisée, y compris Studio, éditeurs, timeline,
+  panneaux, dialogues et presets.
+- Section Informations : version installée, notice de confidentialité localisée et
+  page des licences open source (dialogue standard Flutter).
+- Vérifications finales à consigner après préparation de la PR et CI.
 
 ### v0.30.0 (publiée — CI run #75, `v0.30.0-build75` — VALIDÉE PAR L’UTILISATEUR)
 - Barre fixe en bas avec les boutons nommés **Éléments**, **Animation** et **Os** ; ouverture de panneaux bottom-sheet structurés et défilants.
