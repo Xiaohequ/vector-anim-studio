@@ -21,6 +21,7 @@ import '../engine/timeline_zoom.dart';
 import '../engine/undo_stack.dart';
 import '../models/animation.dart';
 import '../models/skeleton.dart';
+import '../settings/language_settings.dart';
 import 'bone_editor_screen.dart';
 import 'bone_properties_sheet.dart';
 import 'shape_editor_screen.dart';
@@ -248,17 +249,17 @@ class _StudioScreenState extends State<StudioScreen>
         child: ListView(
           shrinkWrap: true,
           children: <Widget>[
-            const Padding(
-              padding: EdgeInsets.all(16),
+            Padding(
+              padding: const EdgeInsets.all(16),
               child: Text(
-                'Choisir le projet à imbriquer',
+                AppStrings.text('Choisir le projet à imbriquer'),
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
             if (others.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(16),
-                child: Text('Aucun autre projet.'),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(AppStrings.text('Aucun autre projet.')),
               ),
             for (final summary in others)
               ListTile(
@@ -290,7 +291,9 @@ class _StudioScreenState extends State<StudioScreen>
         allowedExtensions: <String>['json'],
       );
     } catch (error) {
-      _snack('Sélecteur de fichiers indisponible : $error');
+      _snack(
+        '${AppStrings.text('Sélecteur de fichiers indisponible')} : $error',
+      );
       return;
     }
     if (picked.isEmpty || !mounted) return;
@@ -328,12 +331,12 @@ class _StudioScreenState extends State<StudioScreen>
   Future<void> _showImportProblems(String problems) => showDialog<void>(
     context: context,
     builder: (dialogContext) => AlertDialog(
-      title: const Text('Import impossible'),
+      title: Text(AppStrings.text('Import impossible')),
       content: SingleChildScrollView(child: Text(problems)),
       actions: <Widget>[
         TextButton(
           onPressed: () => Navigator.of(dialogContext).pop(),
-          child: const Text('Fermer'),
+          child: Text(AppStrings.text('Fermer')),
         ),
       ],
     ),
@@ -480,7 +483,7 @@ class _StudioScreenState extends State<StudioScreen>
                     ),
                   ),
                   IconButton(
-                    tooltip: 'Fermer le message',
+                    tooltip: AppStrings.text('Fermer le message'),
                     visualDensity: VisualDensity.compact,
                     constraints: const BoxConstraints(
                       minWidth: 36,
@@ -642,7 +645,7 @@ class _StudioScreenState extends State<StudioScreen>
       });
     });
     _scheduleSave();
-    _snack('Forme dupliquée (keyframes incluses)');
+    _snack(AppStrings.text('Forme dupliquée (keyframes incluses)'));
   }
 
   Future<void> _renameShape(VectorShape shape) async {
@@ -650,16 +653,16 @@ class _StudioScreenState extends State<StudioScreen>
     final name = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Renommer la forme'),
+        title: Text(AppStrings.text('Renommer la forme')),
         content: TextField(controller: controller, autofocus: true),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Annuler'),
+            child: Text(AppStrings.text('Annuler')),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(controller.text),
-            child: const Text('Valider'),
+            child: Text(AppStrings.text('Valider')),
           ),
         ],
       ),
@@ -691,21 +694,23 @@ class _StudioScreenState extends State<StudioScreen>
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Ajouter un groupe'),
+          title: Text(AppStrings.text('Ajouter un groupe')),
           content: TextField(
             autofocus: true,
-            decoration: const InputDecoration(labelText: 'Nom du groupe'),
+            decoration: InputDecoration(
+              labelText: AppStrings.text('Nom du groupe'),
+            ),
             onChanged: (value) => setDialogState(() => draftName = value),
             onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
           ),
           actions: <Widget>[
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Annuler'),
+              child: Text(AppStrings.text('Annuler')),
             ),
             FilledButton(
               onPressed: () => Navigator.of(dialogContext).pop(draftName),
-              child: const Text('Créer'),
+              child: Text(AppStrings.text('Créer')),
             ),
           ],
         ),
@@ -730,21 +735,23 @@ class _StudioScreenState extends State<StudioScreen>
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Renommer le groupe'),
+          title: Text(AppStrings.text('Renommer le groupe')),
           content: TextField(
             autofocus: true,
-            decoration: const InputDecoration(labelText: 'Nom du groupe'),
+            decoration: InputDecoration(
+              labelText: AppStrings.text('Nom du groupe'),
+            ),
             onChanged: (value) => setDialogState(() => draftName = value),
             onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
           ),
           actions: <Widget>[
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Annuler'),
+              child: Text(AppStrings.text('Annuler')),
             ),
             FilledButton(
               onPressed: () => Navigator.of(dialogContext).pop(draftName),
-              child: const Text('Valider'),
+              child: Text(AppStrings.text('Valider')),
             ),
           ],
         ),
@@ -763,18 +770,18 @@ class _StudioScreenState extends State<StudioScreen>
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Dissoudre le groupe ?'),
+        title: Text(AppStrings.text('Dissoudre le groupe ?')),
         content: Text(
-          '« ${group.name} » sera supprimé. Ses formes seront conservées dans le projet.',
+          '« ${group.name} » ${AppStrings.text('sera supprimé. Ses formes seront conservées dans le projet.')}',
         ),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Annuler'),
+            child: Text(AppStrings.text('Annuler')),
           ),
           FilledButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Dissoudre'),
+            child: Text(AppStrings.text('Dissoudre')),
           ),
         ],
       ),
@@ -1027,16 +1034,16 @@ class _StudioScreenState extends State<StudioScreen>
       final rig = _rig;
       final carrier = rig?.boneById(rig.carrierBoneId(shape.id));
       return carrier == null
-          ? 'Groupe non lié au rig'
-          : 'Groupe lié à l’os « ${carrier.name} »';
+          ? AppStrings.text('Groupe non lié au rig')
+          : '${AppStrings.text('Groupe lié à l’os')} « ${carrier.name} »';
     }
     final rig = _rig;
     if (rig == null) return null;
     final boneId = rig.carrierBoneId(shape.id);
     final bone = rig.boneById(boneId);
     return bone == null
-        ? 'Pièce non liée au rig (os : —)'
-        : 'Pièce liée à l’os « ${bone.name} »';
+        ? AppStrings.text('Pièce non liée au rig (os : —)')
+        : '${AppStrings.text('Pièce liée à l’os')} « ${bone.name} »';
   }
 
   // ------------------------------------------------------------- squelette
@@ -1110,26 +1117,22 @@ class _StudioScreenState extends State<StudioScreen>
         builder: (context) => AlertDialog(
           title: Text(
             shape.isInstance
-                ? 'Lier le groupe à un os ?'
-                : 'Lier la pièce à un os ?',
+                ? AppStrings.text('Lier le groupe à un os ?')
+                : AppStrings.text('Lier la pièce à un os ?'),
           ),
           content: Text(
             shape.isInstance
-                ? '« ${shape.name} » porte $groupKeyframes keyframe(s) de groupe. '
-                      'Elles seront toutes supprimées à la liaison ; le segment '
-                      'et son animation dépendront ensuite de l’os.'
-                : '« ${shape.name} » porte $transforms transformation(s) '
-                      'keyframée(s) (position, rotation, échelle). Les lier à un os '
-                      'les supprimera — morph, couleurs et opacité sont conservées.',
+                ? '« ${shape.name} » ${AppStrings.text('porte')} $groupKeyframes ${AppStrings.text('keyframe(s) de groupe.')} ${AppStrings.text('Elles seront toutes supprimées à la liaison ; le segment ')}${AppStrings.text('et son animation dépendront ensuite de l’os.')}'
+                : '« ${shape.name} » ${AppStrings.text('porte')} $transforms ${AppStrings.text('transformation(s) keyframée(s) (position, rotation, échelle). Les lier à un os ')}${AppStrings.text('les supprimera — morph, couleurs et opacité sont conservées.')}',
           ),
           actions: <Widget>[
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Annuler'),
+              child: Text(AppStrings.text('Annuler')),
             ),
             FilledButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Ouvrir l’éditeur'),
+              child: Text(AppStrings.text('Ouvrir l’éditeur')),
             ),
           ],
         ),
@@ -1168,7 +1171,9 @@ class _StudioScreenState extends State<StudioScreen>
     });
     await _flushSave();
     final bone = project.skeleton?.boneById(result.carrierBoneId);
-    _snack('« ${shape.name} » liée à l’os « ${bone?.name ?? '?'} »');
+    _snack(
+      '« ${shape.name} » ${AppStrings.text('liée à l’os')} « ${bone?.name ?? '?'} »',
+    );
   }
 
   /// Ouvre l'éditeur d'os depuis les propriétés de l'os sélectionné.
@@ -1176,7 +1181,13 @@ class _StudioScreenState extends State<StudioScreen>
     final shape = _shapeCarriedBySelectedBone();
     if (shape == null) {
       final bone = _selectedBone;
-      if (bone != null) _snack('« ${bone.name} » n’est lié à aucune forme');
+      if (bone != null) {
+        _snack(
+          AppStrings.text(
+            '« osName » n’est lié à aucune forme',
+          ).replaceAll('osName', bone.name),
+        );
+      }
       return;
     }
     await _editShapeBone(shape);
@@ -1203,11 +1214,21 @@ class _StudioScreenState extends State<StudioScreen>
     final shape = _shapeCarriedBySelectedBone();
     if (shape == null) {
       final bone = _selectedBone;
-      if (bone != null) _snack('« ${bone.name} » n’est lié à aucune forme');
+      if (bone != null) {
+        _snack(
+          AppStrings.text(
+            '« osName » n’est lié à aucune forme',
+          ).replaceAll('osName', bone.name),
+        );
+      }
       return;
     }
     if (shape.isInstance) {
-      _snack('Un groupe importé ne possède pas de forme éditable ici');
+      _snack(
+        AppStrings.text(
+          'Un groupe importé ne possède pas de forme éditable ici',
+        ),
+      );
       return;
     }
     await _editShape(shape, editBoneShape: true);
@@ -1232,20 +1253,19 @@ class _StudioScreenState extends State<StudioScreen>
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('Délier le groupe ?'),
+          title: Text(AppStrings.text('Délier le groupe ?')),
           content: Text(
-            'Le groupe « ${shape.name} » sera détaché. Les os du rig hôte '
-            'restent dans le projet.'
-            '${keyframes > 0 ? ' Les $keyframes keyframes associées aux os restent sur le rig.' : ''}',
+            'Le groupe « ${shape.name} » ${AppStrings.text('sera détaché. Les os du rig hôte ')}${AppStrings.text('restent dans le projet.')}'
+            '${keyframes > 0 ? ' ${AppStrings.text('Les keyframes associées aux os restent sur le rig.')}' : ''}',
           ),
           actions: <Widget>[
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Annuler'),
+              child: Text(AppStrings.text('Annuler')),
             ),
             FilledButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Délier'),
+              child: Text(AppStrings.text('Délier')),
             ),
           ],
         ),
@@ -1254,7 +1274,7 @@ class _StudioScreenState extends State<StudioScreen>
       _pushUndo();
       setState(() => rig.unbindShape(shape.id));
       await _flushSave();
-      _snack('Groupe dissocié de l’os');
+      _snack(AppStrings.text('Groupe dissocié de l’os'));
       return;
     }
     final carrier = rig.boneById(rig.carrierBoneId(shape.id));
@@ -1267,20 +1287,20 @@ class _StudioScreenState extends State<StudioScreen>
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Supprimer l’os ?'),
+        title: Text(AppStrings.text('Supprimer l’os ?')),
         content: Text(
-          'L’os « ${carrier.name} » et sa descendance '
-          '(${chain.length} os, $keyframes keyframes) seront supprimés '
-          'avec le lien — « ${shape.name} » redevient libre.',
+          '${AppStrings.text('L’os et sa descendance ')}'
+          '(${chain.length} ${AppStrings.text('os')}, $keyframes ${AppStrings.text('keyframes')}) ${AppStrings.text('seront supprimés')} '
+          '${AppStrings.text('avec le lien')} — « ${shape.name} » ${AppStrings.text('redevient libre.')}',
         ),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Annuler'),
+            child: Text(AppStrings.text('Annuler')),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Supprimer'),
+            child: Text(AppStrings.text('Supprimer')),
           ),
         ],
       ),
@@ -1294,7 +1314,7 @@ class _StudioScreenState extends State<StudioScreen>
       }
     });
     await _flushSave();
-    _snack('Os supprimé (descendance et keyframes compris)');
+    _snack(AppStrings.text('Os supprimé (descendance et keyframes compris)'));
   }
 
   /// Autorise une keyframe d'os si le curseur est sur une pièce ou un groupe
@@ -1323,7 +1343,9 @@ class _StudioScreenState extends State<StudioScreen>
     final controller = _controller;
     if (rig == null || bone == null || controller == null) return;
     if (!_boneKeyframeAllowed(bone, controller.timeMs)) {
-      _snack('Le curseur doit être sur le segment de la forme liée');
+      _snack(
+        AppStrings.text('Le curseur doit être sur le segment de la forme liée'),
+      );
       return;
     }
     _pushUndo();
@@ -1447,16 +1469,16 @@ class _StudioScreenState extends State<StudioScreen>
     final name = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Renommer l’os'),
+        title: Text(AppStrings.text('Renommer l’os')),
         content: TextField(controller: controller, autofocus: true),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Annuler'),
+            child: Text(AppStrings.text('Annuler')),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(controller.text),
-            child: const Text('Valider'),
+            child: Text(AppStrings.text('Valider')),
           ),
         ],
       ),
@@ -1478,7 +1500,7 @@ class _StudioScreenState extends State<StudioScreen>
       if (_selectedBoneId == bone.id) _selectedBoneId = null;
     });
     await _flushSave();
-    _snack('Os supprimé (enfants re-parentés)');
+    _snack(AppStrings.text('Os supprimé (enfants re-parentés)'));
   }
 
   /// Miroir de l'os sélectionné et de sa descendance, avec les pièces liées,
@@ -2259,19 +2281,19 @@ class _StudioScreenState extends State<StudioScreen>
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: Text('Export ${format.label}'),
+          title: Text('${AppStrings.text('Export')} ${format.label}'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               Text(
-                'Durée du projet : '
+                '${AppStrings.text('Durée du projet : ')}'
                 '${((project?.durationMs ?? 0) / 1000).toStringAsFixed(2)} s',
                 style: const TextStyle(fontSize: 12),
               ),
               if (format == VideoFormat.mp4) ...<Widget>[
                 const SizedBox(height: 14),
-                const Text('Résolution vidéo'),
+                Text(AppStrings.text('Résolution vidéo')),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 6,
@@ -2294,7 +2316,7 @@ class _StudioScreenState extends State<StudioScreen>
                   ),
               ],
               const SizedBox(height: 14),
-              const Text('Images par seconde'),
+              Text(AppStrings.text('Images par seconde')),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 6,
@@ -2302,7 +2324,7 @@ class _StudioScreenState extends State<StudioScreen>
                 children: <Widget>[
                   for (final choice in fpsChoices)
                     ChoiceChip(
-                      label: Text('$choice fps'),
+                      label: Text('$choice ${AppStrings.text('fps')}'),
                       selected: choice == selectedFps,
                       onSelected: (_) =>
                           setDialogState(() => selectedFps = choice),
@@ -2314,7 +2336,7 @@ class _StudioScreenState extends State<StudioScreen>
           actions: <Widget>[
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Annuler'),
+              child: Text(AppStrings.text('Annuler')),
             ),
             FilledButton(
               onPressed: () => Navigator.of(context).pop((
@@ -2323,7 +2345,7 @@ class _StudioScreenState extends State<StudioScreen>
                     ? selectedResolution
                     : null,
               )),
-              child: const Text('Exporter'),
+              child: Text(AppStrings.text('Exporter')),
             ),
           ],
         ),
@@ -2355,7 +2377,7 @@ class _StudioScreenState extends State<StudioScreen>
         context: context,
         barrierDismissible: false,
         builder: (_) => AlertDialog(
-          title: Text('Export ${format.label}'),
+          title: Text('${AppStrings.text('Export')} ${format.label}'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
@@ -2396,7 +2418,7 @@ class _StudioScreenState extends State<StudioScreen>
     } catch (error) {
       navigator.pop();
       if (!mounted) return;
-      _snack('Export impossible : $error');
+      _snack('${AppStrings.text('Export impossible : ')}$error');
     }
   }
 
@@ -2412,7 +2434,7 @@ class _StudioScreenState extends State<StudioScreen>
       await _share(file, 'image/png');
     } catch (error) {
       if (!mounted) return;
-      _snack('Export PNG impossible : $error');
+      _snack('${AppStrings.text('Export PNG impossible : ')}$error');
     }
   }
 
@@ -2424,7 +2446,7 @@ class _StudioScreenState extends State<StudioScreen>
       await _share(file, 'application/json');
     } catch (error) {
       if (!mounted) return;
-      _snack('Export JSON impossible : $error');
+      _snack('${AppStrings.text('Export JSON impossible : ')}$error');
     }
   }
 
@@ -2434,7 +2456,7 @@ class _StudioScreenState extends State<StudioScreen>
     await Clipboard.setData(
       ClipboardData(text: jsonEncode(_project!.toJson())),
     );
-    _snack('JSON du projet copié');
+    _snack(AppStrings.text('JSON du projet copié'));
   }
 
   /// Export au format SIMPLE vasf-1 (pour agents IA).
@@ -2446,7 +2468,7 @@ class _StudioScreenState extends State<StudioScreen>
       await _share(file, 'application/json');
     } catch (error) {
       if (!mounted) return;
-      _snack('Export JSON simple impossible : $error');
+      _snack('${AppStrings.text('Export JSON simple impossible : ')}$error');
     }
   }
 
@@ -2460,7 +2482,7 @@ class _StudioScreenState extends State<StudioScreen>
       );
     } catch (error) {
       if (!mounted) return;
-      _snack('Partage impossible : $error');
+      _snack('${AppStrings.text('Partage impossible : ')}$error');
     }
   }
 
@@ -2468,6 +2490,13 @@ class _StudioScreenState extends State<StudioScreen>
 
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder<String>(
+      valueListenable: AppStrings.language,
+      builder: (context, _, _) => _buildLocalized(context),
+    );
+  }
+
+  Widget _buildLocalized(BuildContext context) {
     final project = _project;
     final controller = _controller;
 
@@ -2681,8 +2710,8 @@ class _StudioScreenState extends State<StudioScreen>
       children: <Widget>[
         IconButton(
           tooltip: _previewPanMode
-              ? 'Désactiver le déplacement de la vue'
-              : 'Déplacer la vue',
+              ? AppStrings.text('Désactiver le déplacement de la vue')
+              : AppStrings.text('Déplacer la vue'),
           isSelected: _previewPanMode,
           visualDensity: VisualDensity.compact,
           onPressed: _togglePreviewPanMode,
@@ -2692,7 +2721,7 @@ class _StudioScreenState extends State<StudioScreen>
           ),
         ),
         IconButton(
-          tooltip: 'Zoom arrière du preview',
+          tooltip: AppStrings.text('Zoom arrière du preview'),
           visualDensity: VisualDensity.compact,
           onPressed: () => _changePreviewZoom(1 / 1.2),
           icon: const Icon(Icons.zoom_out, size: 20),
@@ -2702,21 +2731,21 @@ class _StudioScreenState extends State<StudioScreen>
           style: const TextStyle(fontSize: 11),
         ),
         IconButton(
-          tooltip: 'Zoom avant du preview',
+          tooltip: AppStrings.text('Zoom avant du preview'),
           visualDensity: VisualDensity.compact,
           onPressed: () => _changePreviewZoom(1.2),
           icon: const Icon(Icons.zoom_in, size: 20),
         ),
         IconButton(
-          tooltip: 'Ajuster le preview',
+          tooltip: AppStrings.text('Ajuster le preview'),
           visualDensity: VisualDensity.compact,
           onPressed: _fitPreview,
           icon: const Icon(Icons.fit_screen_outlined, size: 18),
         ),
         IconButton(
           tooltip: _previewFullscreen
-              ? 'Quitter le plein écran'
-              : 'Plein écran',
+              ? AppStrings.text('Quitter le plein écran')
+              : AppStrings.text('Plein écran'),
           visualDensity: VisualDensity.compact,
           onPressed: _togglePreviewFullscreen,
           icon: Icon(
@@ -2808,7 +2837,7 @@ class _StudioScreenState extends State<StudioScreen>
             width: size,
             height: size,
             child: IconButton(
-              tooltip: 'Propriétés de l’os',
+              tooltip: AppStrings.text('Propriétés de l’os'),
               padding: EdgeInsets.zero,
               style: IconButton.styleFrom(
                 backgroundColor: const Color(0xCC151922),
@@ -2824,7 +2853,7 @@ class _StudioScreenState extends State<StudioScreen>
             width: size,
             height: size,
             child: Tooltip(
-              message: 'Glisser pour déplacer l’os',
+              message: AppStrings.text('Glisser pour déplacer l’os'),
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onPanStart: _onBonePanStart,
@@ -2895,7 +2924,7 @@ class _StudioScreenState extends State<StudioScreen>
       width: size,
       height: size,
       child: IconButton(
-        tooltip: 'Propriétés de la forme',
+        tooltip: AppStrings.text('Propriétés de la forme'),
         padding: EdgeInsets.zero,
         style: IconButton.styleFrom(
           backgroundColor: const Color(0xCC151922),
@@ -2928,7 +2957,7 @@ class _StudioScreenState extends State<StudioScreen>
               const Spacer(),
               if (zoom != null) ...<Widget>[
                 IconButton(
-                  tooltip: 'Zoom avant',
+                  tooltip: AppStrings.text('Zoom avant'),
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(
@@ -2939,7 +2968,7 @@ class _StudioScreenState extends State<StudioScreen>
                   onPressed: () => setState(zoom.zoomIn),
                 ),
                 IconButton(
-                  tooltip: 'Zoom arrière',
+                  tooltip: AppStrings.text('Zoom arrière'),
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(
@@ -2950,7 +2979,7 @@ class _StudioScreenState extends State<StudioScreen>
                   onPressed: () => setState(zoom.zoomOut),
                 ),
                 IconButton(
-                  tooltip: 'Ajuster au projet',
+                  tooltip: AppStrings.text('Ajuster au projet'),
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(
@@ -3053,7 +3082,7 @@ class _StudioScreenState extends State<StudioScreen>
     final diamondKeyframe = boneSelected ? boneKeyframe : keyframe;
     return IconButton(
       tooltip: boneSelected && !boneKeyframeAllowed
-          ? 'Keyframe d’os indisponible hors du segment'
+          ? AppStrings.text('Keyframe d’os indisponible hors du segment')
           : diamondKeyframe != null
           ? 'Retirer la keyframe au curseur'
           : boneSelected
@@ -3080,13 +3109,13 @@ class _StudioScreenState extends State<StudioScreen>
         mainAxisAlignment: MainAxisAlignment.center,
         children: <Widget>[
           IconButton(
-            tooltip: 'Annuler la dernière action',
+            tooltip: AppStrings.text('Annuler la dernière action'),
             onPressed: _undoStack.canUndo ? _undo : null,
             icon: const Icon(Icons.undo),
           ),
           ...<Widget>[
             IconButton(
-              tooltip: 'Retour au début',
+              tooltip: AppStrings.text('Retour au début'),
               onPressed: controller.rewind,
               icon: const Icon(Icons.skip_previous),
             ),
@@ -3098,13 +3127,13 @@ class _StudioScreenState extends State<StudioScreen>
               icon: Icon(controller.playing ? Icons.pause : Icons.play_arrow),
             ),
             IconButton(
-              tooltip: 'Boucle',
+              tooltip: AppStrings.text('Boucle'),
               onPressed: () => controller.setLoop(!controller.loop),
               icon: Icon(controller.loop ? Icons.repeat_on : Icons.repeat),
             ),
           ],
           IconButton(
-            tooltip: 'Snap rotation 90°',
+            tooltip: AppStrings.text('Snap rotation 90°'),
             isSelected: _snapRotation,
             onPressed: () => setState(() => _snapRotation = !_snapRotation),
             icon: const Icon(Icons.rotate_90_degrees_ccw_outlined),
@@ -3129,17 +3158,17 @@ class _StudioScreenState extends State<StudioScreen>
           children: <Widget>[
             _toolbarButton(
               icon: Icons.category_outlined,
-              label: 'Éléments',
+              label: AppStrings.text('Éléments'),
               onPressed: _showElementsSheet,
             ),
             _toolbarButton(
               icon: Icons.animation,
-              label: 'Animation',
+              label: AppStrings.text('Animation'),
               onPressed: _showAnimationSheet,
             ),
             _toolbarButton(
               icon: Icons.crop_free,
-              label: 'Canvas',
+              label: AppStrings.text('Canvas'),
               onPressed: _showCanvasSheet,
             ),
           ],
@@ -3251,16 +3280,16 @@ class _StudioScreenState extends State<StudioScreen>
   Future<void> _showElementsSheet() {
     final selectedGroup = _project?.groupById(_selectedGroupId);
     return _showToolSheet(
-      title: 'Éléments',
+      title: AppStrings.text('Éléments'),
       icon: Icons.category_outlined,
       children: <Widget>[
         if (selectedGroup != null) ...<Widget>[
-          _toolSection('Groupe · ${selectedGroup.name}'),
+          _toolSection('${AppStrings.text('Groupe')} · ${selectedGroup.name}'),
           Builder(
             builder: (sheetContext) => _toolAction(
               sheetContext,
               icon: Icons.drive_file_rename_outline,
-              title: 'Renommer le groupe…',
+              title: AppStrings.text('Renommer le groupe…'),
               onTap: () => _renameGroup(selectedGroup),
             ),
           ),
@@ -3268,18 +3297,18 @@ class _StudioScreenState extends State<StudioScreen>
             builder: (sheetContext) => _toolAction(
               sheetContext,
               icon: Icons.folder_delete_outlined,
-              title: 'Dissoudre le groupe…',
+              title: AppStrings.text('Dissoudre le groupe…'),
               onTap: () => _dissolveGroup(selectedGroup),
               destructive: true,
             ),
           ),
         ],
-        _toolSection('Ajouter'),
+        _toolSection(AppStrings.text('Ajouter')),
         Builder(
           builder: (sheetContext) => _toolAction(
             sheetContext,
             icon: Icons.folder_outlined,
-            title: 'Ajouter un groupe…',
+            title: AppStrings.text('Ajouter un groupe…'),
             onTap: _createGroup,
           ),
         ),
@@ -3287,7 +3316,7 @@ class _StudioScreenState extends State<StudioScreen>
           builder: (sheetContext) => _toolAction(
             sheetContext,
             icon: Icons.add,
-            title: 'Ajouter une forme…',
+            title: AppStrings.text('Ajouter une forme…'),
             onTap: _addShape,
           ),
         ),
@@ -3295,7 +3324,7 @@ class _StudioScreenState extends State<StudioScreen>
           builder: (sheetContext) => _toolAction(
             sheetContext,
             icon: Icons.movie_outlined,
-            title: 'Insérer une animation…',
+            title: AppStrings.text('Insérer une animation…'),
             onTap: _insertAnimation,
           ),
         ),
@@ -3303,7 +3332,7 @@ class _StudioScreenState extends State<StudioScreen>
           builder: (sheetContext) => _toolAction(
             sheetContext,
             icon: Icons.file_open_outlined,
-            title: 'Importer un VASF comme instance…',
+            title: AppStrings.text('Importer un VASF comme instance…'),
             onTap: _importVasfAsGroup,
           ),
         ),
@@ -3332,10 +3361,10 @@ class _StudioScreenState extends State<StudioScreen>
     if (project == null) return Future<void>.value();
     final selected = ProjectFormatInfo.closestTo(project.width, project.height);
     return _showToolSheet(
-      title: 'Canvas',
+      title: AppStrings.text('Canvas'),
       icon: Icons.crop_free,
       children: <Widget>[
-        _toolSection('Format du projet'),
+        _toolSection(AppStrings.text('Format du projet')),
         RadioGroup<ProjectFormat>(
           groupValue: selected,
           onChanged: (value) {
@@ -3366,16 +3395,20 @@ class _StudioScreenState extends State<StudioScreen>
   Future<void> _showAnimationSheet() {
     final shape = _selected;
     return _showToolSheet(
-      title: 'Animation',
+      title: AppStrings.text('Animation'),
       icon: Icons.animation,
       children: <Widget>[
         if (shape == null)
-          const ListTile(
-            leading: Icon(Icons.touch_app_outlined),
-            title: Text('Sélectionne un élément pour l’animer'),
+          ListTile(
+            leading: const Icon(Icons.touch_app_outlined),
+            title: Text(
+              AppStrings.text('Sélectionne un élément pour l’animer'),
+            ),
           )
         else ...<Widget>[
-          _toolSection('Animations rapides · ${shape.name}'),
+          _toolSection(
+            '${AppStrings.text('Animations rapides')} · ${shape.name}',
+          ),
           for (final preset in AnimationPreset.values)
             Builder(
               builder: (sheetContext) => _toolAction(
@@ -3386,21 +3419,23 @@ class _StudioScreenState extends State<StudioScreen>
                 onTap: () => _applyPreset(preset),
               ),
             ),
-          _toolSection('Autres actions'),
+          _toolSection(AppStrings.text('Autres actions')),
           Builder(
             builder: (sheetContext) => _toolAction(
               sheetContext,
               icon: Icons.delete_sweep_outlined,
-              title: 'Effacer les animations de cet élément',
+              title: AppStrings.text('Effacer les animations de cet élément'),
               onTap: _clearAnimations,
               destructive: true,
             ),
           ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
             child: Text(
-              'La pose au curseur se gère avec ◆ dans la barre de lecture.',
-              style: TextStyle(color: Colors.white54, fontSize: 12),
+              AppStrings.text(
+                'La pose au curseur se gère avec ◆ dans la barre de lecture.',
+              ),
+              style: const TextStyle(color: Colors.white54, fontSize: 12),
             ),
           ),
         ],
@@ -3414,11 +3449,15 @@ class _StudioScreenState extends State<StudioScreen>
     final shape = _selected;
     final bone = _selectedBone;
     final children = <Widget>[
-      _toolSection('Élément sélectionné'),
+      _toolSection(AppStrings.text('Élément sélectionné')),
       if (shape == null)
-        const ListTile(
-          leading: Icon(Icons.touch_app_outlined),
-          title: Text('Sélectionne un élément pour créer ou gérer son os'),
+        ListTile(
+          leading: const Icon(Icons.touch_app_outlined),
+          title: Text(
+            AppStrings.text(
+              'Sélectionne un élément pour créer ou gérer son os',
+            ),
+          ),
         )
       else ...<Widget>[
         ListTile(
@@ -3426,7 +3465,9 @@ class _StudioScreenState extends State<StudioScreen>
             rig?.isAttached(shape.id) == true ? Icons.link : Icons.link_off,
           ),
           title: Text(shape.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-          subtitle: Text(_bindingNote(shape) ?? 'Aucun os associé'),
+          subtitle: Text(
+            _bindingNote(shape) ?? AppStrings.text('Aucun os associé'),
+          ),
         ),
         Builder(
           builder: (sheetContext) => _toolAction(
@@ -3435,7 +3476,7 @@ class _StudioScreenState extends State<StudioScreen>
             title: rig?.isAttached(shape.id) == true
                 ? 'Modifier l’os de cet élément'
                 : 'Créer et lier un os',
-            subtitle: 'Ouvrir l’éditeur d’os',
+            subtitle: AppStrings.text('Ouvrir l’éditeur d’os'),
             onTap: () => _editShapeBone(shape),
           ),
         ),
@@ -3444,19 +3485,21 @@ class _StudioScreenState extends State<StudioScreen>
             builder: (sheetContext) => _toolAction(
               sheetContext,
               icon: Icons.link_off,
-              title: 'Délier et supprimer cet os',
-              subtitle: 'L’élément redevient libre',
+              title: AppStrings.text('Délier et supprimer cet os'),
+              subtitle: AppStrings.text('L’élément redevient libre'),
               destructive: true,
               onTap: () => _deleteShapeBone(shape),
             ),
           ),
       ],
-      _toolSection('Os du projet · ${rig?.bones.length ?? 0}'),
+      _toolSection(
+        '${AppStrings.text('Os du projet')} · ${rig?.bones.length ?? 0}',
+      ),
       if (rig == null || rig.bones.isEmpty)
-        const ListTile(
-          leading: Icon(Icons.accessibility_new_outlined),
-          title: Text('Aucun os créé'),
-          subtitle: Text('Choisis un élément pour commencer.'),
+        ListTile(
+          leading: const Icon(Icons.accessibility_new_outlined),
+          title: Text(AppStrings.text('Aucun os créé')),
+          subtitle: Text(AppStrings.text('Choisis un élément pour commencer.')),
         ),
       if (rig != null)
         for (final item in rig.bones)
@@ -3471,9 +3514,13 @@ class _StudioScreenState extends State<StudioScreen>
                     : null,
               ),
               title: Text(item.name),
-              subtitle: Text(item.parentId == null ? 'Os racine' : 'Os enfant'),
+              subtitle: Text(
+                AppStrings.text(
+                  item.parentId == null ? 'Os racine' : 'Os enfant',
+                ),
+              ),
               trailing: IconButton(
-                tooltip: 'Propriétés de ${item.name}',
+                tooltip: '${AppStrings.text('Propriétés de')} ${item.name}',
                 icon: const Icon(Icons.tune),
                 onPressed: () {
                   Navigator.of(sheetContext).pop();
@@ -3500,7 +3547,8 @@ class _StudioScreenState extends State<StudioScreen>
           builder: (sheetContext) => _toolAction(
             sheetContext,
             icon: Icons.tune,
-            title: 'Propriétés de l’os sélectionné · ${bone.name}',
+            title:
+                '${AppStrings.text('Propriétés de l’os sélectionné')} · ${bone.name}',
             onTap: () {
               Navigator.of(sheetContext).pop();
               WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -3511,7 +3559,7 @@ class _StudioScreenState extends State<StudioScreen>
         ),
     ];
     return _showToolSheet(
-      title: 'Os',
+      title: AppStrings.text('Os'),
       icon: Icons.accessibility_new,
       children: children,
     );
@@ -3519,7 +3567,7 @@ class _StudioScreenState extends State<StudioScreen>
 
   Widget _exportMenu() {
     return PopupMenuButton<String>(
-      tooltip: 'Export',
+      tooltip: AppStrings.text('Export'),
       icon: const Icon(Icons.ios_share),
       onSelected: (value) => switch (value) {
         'mp4' => _exportVideo(VideoFormat.mp4),
@@ -3530,19 +3578,31 @@ class _StudioScreenState extends State<StudioScreen>
         'simple' => _exportSimpleJson(),
         _ => null,
       },
-      itemBuilder: (context) => const <PopupMenuEntry<String>>[
-        PopupMenuItem<String>(value: 'mp4', child: Text('Vidéo MP4 (H.264)')),
-        PopupMenuItem<String>(value: 'gif', child: Text('GIF animé')),
-        PopupMenuItem<String>(value: 'png', child: Text('Image PNG (frame)')),
-        PopupMenuDivider(),
-        PopupMenuItem<String>(value: 'json', child: Text('Projet JSON')),
+      itemBuilder: (context) => <PopupMenuEntry<String>>[
+        PopupMenuItem<String>(
+          value: 'mp4',
+          child: Text(AppStrings.text('Vidéo MP4 (H.264)')),
+        ),
+        PopupMenuItem<String>(
+          value: 'gif',
+          child: Text(AppStrings.text('GIF animé')),
+        ),
+        PopupMenuItem<String>(
+          value: 'png',
+          child: Text(AppStrings.text('Image PNG (frame)')),
+        ),
+        const PopupMenuDivider(),
+        PopupMenuItem<String>(
+          value: 'json',
+          child: Text(AppStrings.text('Projet JSON')),
+        ),
         PopupMenuItem<String>(
           value: 'clipboard',
-          child: Text('Copier le JSON'),
+          child: Text(AppStrings.text('Copier le JSON')),
         ),
         PopupMenuItem<String>(
           value: 'simple',
-          child: Text('JSON simple — agents IA (vasf)'),
+          child: Text(AppStrings.text('JSON simple — agents IA (vasf)')),
         ),
       ],
     );

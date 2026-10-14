@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../engine/timeline_controller.dart';
 import '../models/animation.dart';
+import '../settings/language_settings.dart';
 import '../models/skeleton.dart';
 import 'palette.dart';
 
@@ -117,7 +118,10 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
     final controller = widget.controller;
     final maxHeight = MediaQuery.sizeOf(context).height * 0.66;
     return AnimatedBuilder(
-      animation: controller,
+      animation: Listenable.merge(<Listenable>[
+        controller,
+        AppStrings.language,
+      ]),
       builder: (context, _) {
         final keyframe = controller.nearestKeyframe(shape);
         final hasKeyframes = shape.hasKeyframes;
@@ -143,8 +147,8 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                     // étaient donc incréables (le ◆ de la playbar no-opait).
                     IconButton(
                       tooltip: keyframe == null
-                          ? 'Ajouter une keyframe au curseur'
-                          : 'Retirer la keyframe au curseur',
+                          ? AppStrings.text('Ajouter une keyframe au curseur')
+                          : AppStrings.text('Retirer la keyframe au curseur'),
                       iconSize: 20,
                       icon: Icon(
                         keyframe == null
@@ -164,7 +168,7 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                           widget.onOpenSource?.call();
                         },
                         icon: const Icon(Icons.movie_outlined, size: 16),
-                        label: const Text('Source'),
+                        label: Text(AppStrings.text('Source')),
                       )
                     else
                       TextButton.icon(
@@ -173,7 +177,7 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                           widget.onEditLayers();
                         },
                         icon: const Icon(Icons.edit, size: 16),
-                        label: const Text('Couches'),
+                        label: Text(AppStrings.text('Couches')),
                       ),
                   ],
                 ),
@@ -188,12 +192,12 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                 ],
                 Text(
                   widget.skeletonPiece
-                      ? '${widget.skeletonNote ?? 'Pièce du rig'}'
-                            '${hasKeyframes ? '' : ' · aucune keyframe'}'
-                      : 'Affichée de ${(shape.startMs / 1000).toStringAsFixed(2)} s à '
-                            '${(shape.endMs / 1000).toStringAsFixed(2)} s'
-                            '${shape.visible ? '' : ' · masquée'}'
-                            '${hasKeyframes ? '' : ' · aucune keyframe'}',
+                      ? '${widget.skeletonNote ?? AppStrings.text('Pièce du rig')}'
+                            '${hasKeyframes ? '' : ' · ${AppStrings.text('aucune keyframe')}'}'
+                      : '${AppStrings.text('Affichée de ')}${(shape.startMs / 1000).toStringAsFixed(2)} ${AppStrings.text('s à ')}'
+                            '${(shape.endMs / 1000).toStringAsFixed(2)} ${AppStrings.text('s')}'
+                            '${shape.visible ? '' : ' · ${AppStrings.text('masquée')}'}'
+                            '${hasKeyframes ? '' : ' · ${AppStrings.text('aucune keyframe')}'}',
                   style: const TextStyle(fontSize: 11, color: Colors.white70),
                 ),
                 const SizedBox(height: 4),
@@ -214,7 +218,7 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                         Expanded(
                           child: Text(
                             _boneName(shape) == null
-                                ? 'Aucun os'
+                                ? AppStrings.text('Aucun os')
                                 : 'Os « ${_boneName(shape)} »',
                             style: const TextStyle(fontSize: 12),
                             maxLines: 1,
@@ -232,8 +236,8 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                           ),
                           label: Text(
                             _boneName(shape) == null
-                                ? 'Ajouter un os…'
-                                : 'Modifier l’os…',
+                                ? AppStrings.text('Ajouter un os…')
+                                : AppStrings.text('Modifier l’os…'),
                           ),
                         ),
                         if (_boneName(shape) != null &&
@@ -252,8 +256,8 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                             ),
                             label: Text(
                               shape.isInstance
-                                  ? 'Délier du rig'
-                                  : 'Supprimer l’os',
+                                  ? AppStrings.text('Délier du rig')
+                                  : AppStrings.text('Supprimer l’os'),
                               style: const TextStyle(color: Color(0xFFF2949A)),
                             ),
                           ),
@@ -273,7 +277,7 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                           _refresh();
                         },
                         icon: const Icon(Icons.flip, size: 16),
-                        label: const Text('Miroir H'),
+                        label: Text(AppStrings.text('Miroir H')),
                       ),
                       const SizedBox(width: 4),
                       TextButton.icon(
@@ -285,7 +289,7 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                           angle: math.pi / 2,
                           child: const Icon(Icons.flip, size: 16),
                         ),
-                        label: const Text('Miroir V'),
+                        label: Text(AppStrings.text('Miroir V')),
                       ),
                     ],
                   ),
@@ -327,10 +331,10 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                 // les pièces — leurs poses s'interpolent comme les formes.
                 Row(
                   children: <Widget>[
-                    const SizedBox(
+                    SizedBox(
                       width: 92,
                       child: Text(
-                        'Interpolation',
+                        AppStrings.text('Interpolation'),
                         style: TextStyle(fontSize: 12),
                       ),
                     ),
@@ -386,10 +390,10 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
     TimelineController controller,
   ) {
     final rows = <Widget>[
-      const Padding(
-        padding: EdgeInsets.only(top: 6, bottom: 2),
+      Padding(
+        padding: const EdgeInsets.only(top: 6, bottom: 2),
         child: Text(
-          'Couleurs des couches',
+          AppStrings.text('Couleurs des couches'),
           style: TextStyle(fontSize: 11, color: Colors.white70),
         ),
       ),
@@ -523,10 +527,10 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
     }
 
     return <Widget>[
-      const Padding(
-        padding: EdgeInsets.only(top: 6, bottom: 2),
+      Padding(
+        padding: const EdgeInsets.only(top: 6, bottom: 2),
         child: Text(
-          'Pivot de rotation (offset depuis le centre)',
+          AppStrings.text('Pivot de rotation (offset depuis le centre)'),
           style: TextStyle(fontSize: 11, color: Colors.white70),
         ),
       ),
@@ -607,7 +611,9 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
         SizedBox(
           width: 32,
           child: Tooltip(
-            message: animated ? 'Propriété animée' : 'Valeur fixe',
+            message: AppStrings.text(
+              animated ? 'Propriété animée' : 'Valeur fixe',
+            ),
             triggerMode: TooltipTriggerMode.tap,
             child: Icon(
               animated ? Icons.diamond : Icons.diamond_outlined,
@@ -626,13 +632,16 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
       initialValue: widget.project.groupById(shape.groupId) == null
           ? null
           : shape.groupId,
-      decoration: const InputDecoration(
-        labelText: 'Groupe',
+      decoration: InputDecoration(
+        labelText: AppStrings.text('Groupe'),
         isDense: true,
         border: OutlineInputBorder(),
       ),
       items: <DropdownMenuItem<String?>>[
-        const DropdownMenuItem<String?>(value: null, child: Text('Aucun')),
+        DropdownMenuItem<String?>(
+          value: null,
+          child: Text(AppStrings.text('Aucun')),
+        ),
         for (final group in widget.project.groups)
           DropdownMenuItem<String?>(value: group.id, child: Text(group.name)),
       ],
@@ -666,10 +675,18 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
       spacing: 2,
       runSpacing: 0,
       children: <Widget>[
-        action('Renommer', Icons.drive_file_rename_outline, widget.onRename),
-        action('Dupliquer', Icons.content_copy, widget.onDuplicate),
         action(
-          shape.visible ? 'Masquer' : 'Afficher',
+          AppStrings.text('Renommer'),
+          Icons.drive_file_rename_outline,
+          widget.onRename,
+        ),
+        action(
+          AppStrings.text('Dupliquer'),
+          Icons.content_copy,
+          widget.onDuplicate,
+        ),
+        action(
+          AppStrings.text(shape.visible ? 'Masquer' : 'Afficher'),
           shape.visible ? Icons.visibility_off : Icons.visibility,
           widget.onToggleVisibility,
         ),
@@ -683,16 +700,23 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
           Icons.vertical_align_bottom,
           () => widget.onMove?.call(-1),
         ),
-        action('Supprimer', Icons.delete_outline, widget.onDelete),
+        action(
+          AppStrings.text('Supprimer'),
+          Icons.delete_outline,
+          widget.onDelete,
+        ),
       ],
     );
   }
 
   Widget _buildZIndexSlider(VectorShape shape) => Row(
     children: <Widget>[
-      const SizedBox(
+      SizedBox(
         width: 92,
-        child: Text('Ordre Z', style: TextStyle(fontSize: 12)),
+        child: Text(
+          AppStrings.text('Ordre Z'),
+          style: const TextStyle(fontSize: 12),
+        ),
       ),
       Expanded(
         child: Slider(

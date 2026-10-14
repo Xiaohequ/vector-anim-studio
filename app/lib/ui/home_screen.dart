@@ -6,13 +6,15 @@ import 'package:flutter/material.dart';
 import '../data/project_repository.dart';
 import '../data/project_store.dart';
 import '../engine/json_project_import.dart';
+import '../settings/language_settings.dart';
 import 'studio_screen.dart';
 
 /// Écran principal : liste des projets d'animation.
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, required this.repository});
+  const HomeScreen({super.key, required this.repository, this.onOpenSettings});
 
   final ProjectRepository repository;
+  final ValueChanged<BuildContext>? onOpenSettings;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -47,12 +49,14 @@ class _HomeScreenState extends State<HomeScreen> {
     final List<PlatformFile> picked;
     try {
       picked = await FilePicker.pickFiles(
-        dialogTitle: 'Importer une animation',
+        dialogTitle: AppStrings.text('Importer une animation'),
         type: FileType.custom,
         allowedExtensions: <String>['json'],
       );
     } catch (error) {
-      _snack('Sélecteur de fichiers indisponible : $error');
+      _snack(
+        '${AppStrings.text('Sélecteur de fichiers indisponible')} : $error',
+      );
       return;
     }
     if (picked.isEmpty || !mounted) return;
@@ -61,7 +65,7 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       text = utf8.decode(await picked.first.readAsBytes());
     } catch (error) {
-      _snack('Fichier illisible : $error');
+      _snack('${AppStrings.text('Fichier illisible')} : $error');
       return;
     }
 
@@ -88,7 +92,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Import impossible'),
+        title: Text(AppStrings.text('Import impossible')),
         content: SingleChildScrollView(
           child: Text(
             problems,
@@ -98,7 +102,7 @@ class _HomeScreenState extends State<HomeScreen> {
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Fermer'),
+            child: Text(AppStrings.text('Fermer')),
           ),
         ],
       ),
@@ -116,20 +120,20 @@ class _HomeScreenState extends State<HomeScreen> {
     final name = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Renommer le projet'),
+        title: Text(AppStrings.text('Renommer le projet')),
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(labelText: 'Nom'),
+          decoration: InputDecoration(labelText: AppStrings.text('Nom')),
         ),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Annuler'),
+            child: Text(AppStrings.text('Annuler')),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(controller.text),
-            child: const Text('Valider'),
+            child: Text(AppStrings.text('Valider')),
           ),
         ],
       ),
@@ -142,16 +146,18 @@ class _HomeScreenState extends State<HomeScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Supprimer le projet ?'),
-        content: Text('« ${summary.name} » sera définitivement supprimé.'),
+        title: Text(AppStrings.text('Supprimer le projet ?')),
+        content: Text(
+          '« ${summary.name} » ${AppStrings.text('sera définitivement supprimé.')}',
+        ),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Annuler'),
+            child: Text(AppStrings.text('Annuler')),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Supprimer'),
+            child: Text(AppStrings.text('Supprimer')),
           ),
         ],
       ),
@@ -162,26 +168,41 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder<String>(
+      valueListenable: AppStrings.language,
+      builder: (context, _, _) => _buildLocalized(context),
+    );
+  }
+
+  Widget _buildLocalized(BuildContext context) {
+    final t = AppStrings.text;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Keyform Studio'),
+        title: Text(t('Keyform Studio')),
         actions: <Widget>[
           IconButton(
-            tooltip: 'Importer un fichier JSON',
+            tooltip: t('Importer un fichier JSON'),
             onPressed: _importJsonFile,
             icon: const Icon(Icons.file_open_outlined),
           ),
           IconButton(
-            tooltip: 'Actualiser',
+            tooltip: t('Actualiser'),
             onPressed: _store.refresh,
             icon: const Icon(Icons.refresh),
+          ),
+          IconButton(
+            tooltip: t('Paramètres'),
+            onPressed: widget.onOpenSettings == null
+                ? null
+                : () => widget.onOpenSettings!(context),
+            icon: const Icon(Icons.settings_outlined),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _newProject,
         icon: const Icon(Icons.add),
-        label: const Text('Nouveau projet'),
+        label: Text(t('Nouveau projet')),
       ),
       body: AnimatedBuilder(
         animation: _store,
@@ -192,20 +213,20 @@ class _HomeScreenState extends State<HomeScreen> {
           if (_store.error != null) {
             return _Message(
               icon: Icons.error_outline,
-              title: 'Impossible de charger les projets',
+              title: t('Impossible de charger les projets'),
               message: _store.error!,
-              actionLabel: 'Réessayer',
+              actionLabel: t('Réessayer'),
               onAction: _store.refresh,
             );
           }
           if (_store.isEmpty) {
             return _Message(
               icon: Icons.movie_creation_outlined,
-              title: 'Aucun projet pour l’instant',
-              message:
-                  'Crée ton premier projet d’animation vectorielle : formes, '
-                  'couches, keyframes, export MP4 et GIF.',
-              actionLabel: 'Nouveau projet',
+              title: t('Aucun projet pour l’instant'),
+              message: t(
+                'Crée ton premier projet d’animation vectorielle : formes, couches, keyframes, export MP4 et GIF.',
+              ),
+              actionLabel: t('Nouveau projet'),
               onAction: _newProject,
             );
           }
@@ -313,18 +334,18 @@ class _ProjectTile extends StatelessWidget {
                   'delete' => onDelete(),
                   _ => null,
                 },
-                itemBuilder: (context) => const <PopupMenuEntry<String>>[
+                itemBuilder: (context) => <PopupMenuEntry<String>>[
                   PopupMenuItem<String>(
                     value: 'rename',
-                    child: Text('Renommer'),
+                    child: Text(AppStrings.text('Renommer')),
                   ),
                   PopupMenuItem<String>(
                     value: 'duplicate',
-                    child: Text('Dupliquer'),
+                    child: Text(AppStrings.text('Dupliquer')),
                   ),
                   PopupMenuItem<String>(
                     value: 'delete',
-                    child: Text('Supprimer'),
+                    child: Text(AppStrings.text('Supprimer')),
                   ),
                 ],
               ),

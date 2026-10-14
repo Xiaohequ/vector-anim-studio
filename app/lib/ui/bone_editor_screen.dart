@@ -7,6 +7,7 @@ import '../engine/scene_painter.dart';
 import '../engine/selection_geometry.dart';
 import '../models/animation.dart';
 import '../models/skeleton.dart';
+import '../settings/language_settings.dart';
 
 /// Renvoyé par [BoneEditorScreen] quand l'utilisateur valide (✓).
 ///
@@ -29,7 +30,6 @@ class BoneEditorResult {
 
   /// Os porteur de la forme (racine de la chaîne) à lier.
   final String carrierBoneId;
-
 }
 
 /// Éditeur d'os (v0.20) — « l'os n'existe que par une forme ».
@@ -76,7 +76,6 @@ class _BoneEditorScreenState extends State<BoneEditorScreen> {
 
   /// Os racine de la chaîne porteuse (ceux à retranslater dans l'aperçu).
   late final List<RigBone> _roots;
-
 
   /// Translation éditeur ↔ projet (voir [_toProject]).
   late final Offset _shift;
@@ -380,6 +379,13 @@ class _BoneEditorScreenState extends State<BoneEditorScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder<String>(
+      valueListenable: AppStrings.language,
+      builder: (context, _, _) => _buildLocalized(context),
+    );
+  }
+
+  Widget _buildLocalized(BuildContext context) {
     final hint = _bones.isNotEmpty && !widget.shape.isInstance
         ? 'La forme a déjà son os — glisser au MILIEU = le déplacer, sur '
               'son EXTRÉMITÉ = le pivoter'
@@ -391,10 +397,10 @@ class _BoneEditorScreenState extends State<BoneEditorScreen> {
         : 'Tap : extrémité de l’os — ✕ pour annuler l’articulation';
     return Scaffold(
       appBar: AppBar(
-        title: Text('Os de « ${widget.shape.name} »'),
+        title: Text('${AppStrings.text('Os de')} « ${widget.shape.name} »'),
         actions: <Widget>[
           IconButton(
-            tooltip: 'Enregistrer l’os',
+            tooltip: AppStrings.text('Enregistrer l’os'),
             onPressed: _bones.isEmpty
                 ? null
                 : () => Navigator.of(context).pop(_buildResult()),
@@ -468,7 +474,9 @@ class _BoneEditorScreenState extends State<BoneEditorScreen> {
                           left: 8,
                           top: 8,
                           child: IconButton(
-                            tooltip: 'Annuler l’articulation en attente',
+                            tooltip: AppStrings.text(
+                              'Annuler l’articulation en attente',
+                            ),
                             onPressed: () => setState(() {
                               _pendingJoint = null;
                               _pendingParentId = null;
