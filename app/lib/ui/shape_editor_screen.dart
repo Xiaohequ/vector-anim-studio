@@ -458,7 +458,7 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
                           Icon(shapeKindIcon(kind), size: 24),
                           const SizedBox(height: 4),
                           Text(
-                            shapeKindLabel(kind),
+                            AppStrings.text(shapeKindLabel(kind)),
                             textAlign: TextAlign.center,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -1205,9 +1205,9 @@ class LayerPanel extends StatelessWidget {
     children: <Widget>[
       Row(
         children: <Widget>[
-          const Expanded(
+          Expanded(
             child: Text(
-              'Formes',
+              AppStrings.text('Formes'),
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
           ),

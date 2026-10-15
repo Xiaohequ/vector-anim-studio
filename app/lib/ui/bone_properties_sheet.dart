@@ -285,8 +285,8 @@ class _BonePropertiesSheetState extends State<BonePropertiesSheet> {
                     ),
                   ),
                 Text(
-                  'Angle de repos ${degrees.toStringAsFixed(0)}°'
-                  ' · à ${((controller.timeMs) / 1000).toStringAsFixed(2)} s : '
+                  '${AppStrings.text('Angle de repos')} ${degrees.toStringAsFixed(0)}°'
+                  ' · ${AppStrings.text('à')} ${((controller.timeMs) / 1000).toStringAsFixed(2)} s : '
                   '${deltaDegrees >= 0 ? '+' : ''}${deltaDegrees.toStringAsFixed(0)}°',
                   style: const TextStyle(fontSize: 11, color: Colors.white70),
                 ),
@@ -450,7 +450,9 @@ class _BonePropertiesSheetState extends State<BonePropertiesSheet> {
                             ? AppStrings.text(
                                 'Sans enfant unique — indisponible',
                               )
-                            : 'Glisser l’extrémité de « ${ikChild.name} » résout la chaîne',
+                            : AppStrings.text(
+                                'Glisser l’extrémité de « ${ikChild.name} » résout la chaîne',
+                              ),
                         style: const TextStyle(
                           fontSize: 11,
                           color: Colors.white54,
@@ -501,10 +503,10 @@ class _BonePropertiesSheetState extends State<BonePropertiesSheet> {
                           _refresh();
                         },
                         items: <DropdownMenuItem<String?>>[
-                          const DropdownMenuItem<String?>(
+                          DropdownMenuItem<String?>(
                             value: null,
                             child: Text(
-                              'Racine (aucun)',
+                              AppStrings.text('Racine (aucun)'),
                               style: TextStyle(fontSize: 12),
                             ),
                           ),
@@ -546,7 +548,7 @@ class _BonePropertiesSheetState extends State<BonePropertiesSheet> {
                             DropdownMenuItem<EasingKind>(
                               value: easing,
                               child: Text(
-                                easingLabel(easing),
+                                AppStrings.text(easingLabel(easing)),
                                 style: const TextStyle(fontSize: 12),
                               ),
                             ),
@@ -558,16 +560,18 @@ class _BonePropertiesSheetState extends State<BonePropertiesSheet> {
                 const SizedBox(height: 4),
                 Text(
                   boundShapes.isEmpty
-                      ? 'Aucune pièce liée à cet os.'
-                      : 'Pièces liées : ${boundShapes.join(', ')}',
+                      ? AppStrings.text('Aucune pièce liée à cet os.')
+                      : '${AppStrings.text('Pièces liées : ')}${boundShapes.join(', ')}',
                   style: const TextStyle(fontSize: 11, color: Colors.white54),
                 ),
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
                   child: Text(
-                    hasKeyframes
-                        ? 'Os animé : glisser la poignée de rotation écrit une keyframe au curseur.'
-                        : 'Glisser la poignée de rotation pose le rig ; ◆ fige une keyframe d’angle.',
+                    AppStrings.text(
+                      hasKeyframes
+                          ? 'Os animé : glisser la poignée de rotation écrit une keyframe au curseur.'
+                          : 'Glisser la poignée de rotation pose le rig ; ◆ fige une keyframe d’angle.',
+                    ),
                     style: const TextStyle(fontSize: 11, color: Colors.white54),
                   ),
                 ),

@@ -275,7 +275,7 @@ class _LayerSlider extends StatelessWidget {
         SizedBox(
           width: 92,
           child: Text(
-            layerPropertyLabel(property),
+            AppStrings.text(layerPropertyLabel(property)),
             style: const TextStyle(fontSize: 12),
           ),
         ),

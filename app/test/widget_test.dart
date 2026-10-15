@@ -92,6 +92,30 @@ void main() {
     activeProject = AnimationProject.blank(name: 'Test');
   });
 
+  test('les libellés des propriétés et interpolations sont localisés', () {
+    AppStrings.setLanguage('en');
+    expect(AppStrings.text(propertyLabel(AnimatableProperty.x)), 'X position');
+    expect(AppStrings.text(layerPropertyLabel(LayerProperty.width)), 'Width');
+    expect(AppStrings.text('Monter'), 'Move up');
+    expect(AppStrings.text('Descendre'), 'Move down');
+    expect(AppStrings.text('Angle de repos'), 'Rest angle');
+    expect(AppStrings.text(easingLabel(EasingKind.easeInOut)), 'Ease in/out');
+    expect(
+      AppStrings.text(easingLabel(EasingKind.customBezier)),
+      'Custom (Bézier)',
+    );
+
+    AppStrings.setLanguage('zh');
+    expect(AppStrings.text(propertyLabel(AnimatableProperty.x)), 'X 位置');
+    expect(AppStrings.text(layerPropertyLabel(LayerProperty.width)), '宽度');
+    expect(AppStrings.text('Monter'), '上移');
+    expect(AppStrings.text('Descendre'), '下移');
+    expect(AppStrings.text('Angle de repos'), '静止角度');
+    expect(AppStrings.text(easingLabel(EasingKind.easeInOut)), '缓入缓出');
+    expect(AppStrings.text(easingLabel(EasingKind.customBezier)), '自定义（贝塞尔）');
+    AppStrings.setLanguage('fr');
+  });
+
   testWidgets('le choix de langue est accessible depuis l’accueil', (
     tester,
   ) async {
