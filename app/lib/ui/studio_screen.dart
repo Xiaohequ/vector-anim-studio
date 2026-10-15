@@ -1172,7 +1172,9 @@ class _StudioScreenState extends State<StudioScreen>
     await _flushSave();
     final bone = project.skeleton?.boneById(result.carrierBoneId);
     _snack(
-      '« ${shape.name} » ${AppStrings.text('liée à l’os')} « ${bone?.name ?? '?'} »',
+      AppStrings.text('« shapeName » liée à l’os « boneName »')
+          .replaceAll('shapeName', shape.name)
+          .replaceAll('boneName', bone?.name ?? '?'),
     );
   }
 
@@ -1883,9 +1885,11 @@ class _StudioScreenState extends State<StudioScreen>
       if (SelectionGeometry.hit(bounds, pose, geo, details.localFocalPoint)) {
         final bone = rig.boneById(rig.carrierBoneId(shape.id));
         _snack(
-          '« ${shape.name} » est liée à l’os « ${bone?.name ?? '?'} » : '
-          'transformations bloquées — bougez l’os, ou dissociez la pièce '
-          '(Squelettes ▸ Délier).',
+          AppStrings.text(
+                '« shapeName » est liée à l’os « boneName » : transformations bloquées — bougez l’os, ou dissociez la pièce (Squelettes ▸ Délier).',
+              )
+              .replaceAll('shapeName', shape.name)
+              .replaceAll('boneName', bone?.name ?? '?'),
         );
       }
       return;
@@ -2256,8 +2260,11 @@ class _StudioScreenState extends State<StudioScreen>
       if (bound) {
         final bone = rig.boneById(rig.carrierBoneId(hit.id));
         _snack(
-          '« ${hit.name} » est liée à l’os « ${bone?.name ?? '?'} » : '
-          'transformations verrouillées — déplace l’os pour la modifier.',
+          AppStrings.text(
+                '« shapeName » est liée à l’os « boneName » : transformations verrouillées — déplace l’os pour la modifier.',
+              )
+              .replaceAll('shapeName', hit.name)
+              .replaceAll('boneName', bone?.name ?? '?'),
         );
       }
       return;

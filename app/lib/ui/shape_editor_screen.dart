@@ -901,8 +901,9 @@ class _ShapeEditorScreenState extends State<ShapeEditorScreen> {
   void _endGesture() {
     if (_gesture == _EditorGesture.pointDrag && _gestureWrotePose) {
       _snack(
-        'Pose à ${(_pointTargetMs / 1000).toStringAsFixed(2)} s '
-        'enregistrée (morph)',
+        AppStrings.text(
+          'Pose à TIME s enregistrée (morph)',
+        ).replaceAll('TIME', (_pointTargetMs / 1000).toStringAsFixed(2)),
       );
     }
     _gestureWrotePose = false;

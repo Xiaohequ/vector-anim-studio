@@ -362,16 +362,24 @@ class _CornerSelection extends StatelessWidget {
     alignment: WrapAlignment.center,
     spacing: 4,
     children: <Widget>[
-      _cornerButton('Haut gauche', layer.roundTopLeft, (value) {
+      _cornerButton(AppStrings.text('Haut gauche'), layer.roundTopLeft, (
+        value,
+      ) {
         layer.roundTopLeft = value;
       }),
-      _cornerButton('Haut droit', layer.roundTopRight, (value) {
+      _cornerButton(AppStrings.text('Haut droit'), layer.roundTopRight, (
+        value,
+      ) {
         layer.roundTopRight = value;
       }),
-      _cornerButton('Bas droit', layer.roundBottomRight, (value) {
+      _cornerButton(AppStrings.text('Bas droit'), layer.roundBottomRight, (
+        value,
+      ) {
         layer.roundBottomRight = value;
       }),
-      _cornerButton('Bas gauche', layer.roundBottomLeft, (value) {
+      _cornerButton(AppStrings.text('Bas gauche'), layer.roundBottomLeft, (
+        value,
+      ) {
         layer.roundBottomLeft = value;
       }),
     ],
