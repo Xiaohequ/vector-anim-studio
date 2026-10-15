@@ -178,7 +178,22 @@ class _HomeScreenState extends State<HomeScreen> {
     final t = AppStrings.text;
     return Scaffold(
       appBar: AppBar(
-        title: Text(t('Keyform Studio')),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.asset(
+                'assets/brand/keyform-studio-icon.png',
+                width: 32,
+                height: 32,
+                fit: BoxFit.cover,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(t('Keyform Studio')),
+          ],
+        ),
         actions: <Widget>[
           IconButton(
             tooltip: t('Importer un fichier JSON'),

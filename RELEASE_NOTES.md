@@ -1,14 +1,14 @@
-# Keyform Studio 0.36.0
+# Keyform Studio 0.36.1
 
-## Langue et informations de l’application
+## Corrections de localisation
 
-- Nouvelle page **Paramètres** accessible depuis l’accueil, avec sélection de la langue : système, français, anglais ou chinois.
-- Le choix explicite est mémorisé localement et appliqué immédiatement. En mode système, une langue non prise en charge bascule en anglais.
-- Localisation des pages principales, du Studio, des éditeurs, des panneaux de propriétés, des menus, de la timeline et des dialogues en français, anglais et chinois.
-- Section **Informations** : version installée de l’application, notice de confidentialité et accès aux licences open source Flutter.
-- Notice de confidentialité intégrée et localisée ; elle explique le stockage local des projets, l’import/export et le partage à la demande.
+- Traduction des propriétés des formes et des couches dans l’éditeur de forme et le Studio.
+- Traduction des actions « Monter » et « Descendre » dans le panneau des propriétés d’une forme.
+- Localisation des messages du panneau des formes, notamment les transformations verrouillées des pièces liées à un os.
+- Traduction de l’angle de repos, des aides et des informations sur les pièces liées dans les propriétés des os.
+- Traduction des options d’interpolation pour les formes et les os, en anglais et en chinois.
 
-### Vérifications
+## Vérifications
 
 - `flutter analyze` sans problème.
-- `flutter analyze` sans problème ; tests de widgets des paramètres, de la notice et de l’accès aux licences passés. Suite complète : lancée, mais le délai local a expiré à 289 tests ; validation complète à confirmer par la CI GitHub.
+- Test ciblé de localisation des propriétés et des courbes d’interpolation réussi.

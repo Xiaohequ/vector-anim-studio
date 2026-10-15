@@ -88,17 +88,23 @@ class AppStrings {
       'Bibliothèques open source': 'Open-source libraries',
       'Chargement…': 'Loading…',
       'Confidentialité': 'Privacy',
-      'Cette notice décrit les données utilisées par Keyform Studio.': 'This notice describes how Keyform Studio uses data.',
+      'Cette notice décrit les données utilisées par Keyform Studio.':
+          'This notice describes how Keyform Studio uses data.',
       'Données des projets': 'Project data',
-      'Les projets, formes, animations et réglages sont conservés localement sur votre appareil. L’application utilise le stockage local pour les enregistrer.': 'Projects, shapes, animations and settings are stored locally on your device. The app uses local storage to save them.',
+      'Les projets, formes, animations et réglages sont conservés localement sur votre appareil. L’application utilise le stockage local pour les enregistrer.':
+          'Projects, shapes, animations and settings are stored locally on your device. The app uses local storage to save them.',
       'Importation et exportation': 'Import and export',
-      'Lors d’un import, l’application lit le fichier que vous choisissez. Les exports sont créés à votre demande. Si vous utilisez le partage, le contenu est transmis à l’application que vous sélectionnez.': 'When importing, the app reads the file you select. Exports are created at your request. If you share, the content is passed to the app you choose.',
+      'Lors d’un import, l’application lit le fichier que vous choisissez. Les exports sont créés à votre demande. Si vous utilisez le partage, le contenu est transmis à l’application que vous sélectionnez.':
+          'When importing, the app reads the file you select. Exports are created at your request. If you share, the content is passed to the app you choose.',
       'Préférence de langue': 'Language preference',
-      'Votre choix de langue est enregistré localement sur l’appareil. « Langue du système » n’enregistre pas de préférence linguistique spécifique.': 'Your language choice is stored locally on the device. “System default” does not save a specific language preference.',
+      'Votre choix de langue est enregistré localement sur l’appareil. « Langue du système » n’enregistre pas de préférence linguistique spécifique.':
+          'Your language choice is stored locally on the device. “System default” does not save a specific language preference.',
       'Aucun compte requis': 'No account required',
-      'Keyform Studio ne requiert pas de compte pour créer et modifier des projets. Cette version n’intègre ni publicité ni suivi analytique.': 'Keyform Studio requires no account to create or edit projects. This version includes no advertising or analytics tracking.',
+      'Keyform Studio ne requiert pas de compte pour créer et modifier des projets. Cette version n’intègre ni publicité ni suivi analytique.':
+          'Keyform Studio requires no account to create or edit projects. This version includes no advertising or analytics tracking.',
       'Contrôle des données': 'Your control over data',
-      'Vous gardez le contrôle des fichiers importés et partagés. Vous pouvez supprimer vos projets depuis l’application ou effacer les données de l’application dans les réglages de votre appareil.': 'You stay in control of imported and shared files. You can delete projects in the app or clear app data in your device settings.',
+      'Vous gardez le contrôle des fichiers importés et partagés. Vous pouvez supprimer vos projets depuis l’application ou effacer les données de l’application dans les réglages de votre appareil.':
+          'You stay in control of imported and shared files. You can delete projects in the app or clear app data in your device settings.',
       'Langue': 'Language',
       'Choisissez la langue utilisée par l’application.':
           'Choose the language used by the app.',
@@ -227,6 +233,50 @@ class AppStrings {
       'Miroir H': 'Flip H',
       'Miroir V': 'Flip V',
       'Interpolation': 'Interpolation',
+      'Rectangle': 'Rectangle',
+      'Position X': 'X position',
+      'Position Y': 'Y position',
+      'Largeur': 'Width',
+      'Hauteur': 'Height',
+      'Échelle': 'Scale',
+      'Échelle X': 'Scale X',
+      'Échelle Y': 'Scale Y',
+      'Épaisseur': 'Stroke width',
+      'Linéaire': 'Linear',
+      'Entrée': 'Ease in',
+      'Sortie': 'Ease out',
+      'Entrée/sortie': 'Ease in/out',
+      'Palier': 'Step',
+      'Personnalisé (Bézier)': 'Custom (Bézier)',
+      'Cercle': 'Circle',
+      'Ligne': 'Line',
+      'Chemin': 'Path',
+      'Triangle': 'Triangle',
+      'Étoile': 'Star',
+      'Hexagone': 'Hexagon',
+      'Croix': 'Cross',
+      'Cœur': 'Heart',
+      'Flèche': 'Arrow',
+      'est liée à l’os': 'is bound to bone',
+      'transformations bloquées': 'transformations are locked',
+      'seule l’os la bouge': 'only the bone can move it',
+      'Glisser l’extrémité de «': 'Drag the tip of “',
+      'résout la chaîne': 'to solve the chain',
+      'à': 'at',
+      'Os animé : glisser la poignée de rotation écrit une keyframe au curseur.':
+          'Animated bone: dragging the rotation handle creates a keyframe at the playhead.',
+      'Glisser la poignée de rotation pose le rig ; ◆ fige une keyframe d’angle.':
+          'Drag the rotation handle to pose the rig; ◆ sets an angle keyframe.',
+      'Touche un point pour le déplacer · appui long : le supprimer · ✚ puis touche un segment pour en ajouter':
+          'Tap a point to move it · long-press to delete it · ✚ then tap a segment to add one',
+      'Déplace un point : la 1ʳᵉ pose se crée automatiquement · ◆ pose d’autres instants · appui long : supprimer':
+          'Move a point: the first pose is created automatically · ◆ adds poses at other times · long-press to delete',
+      'Sans keyframe : tu dessines la base · ◆ pour commencer à animer (morph) · appui long : supprimer un point':
+          'Without keyframes: draw the base · ◆ to start animating (morph) · long-press to delete a point',
+      'Une seule pose porte le morph (forme figée ailleurs) : scruble un autre instant, ◆ puis déplace les points':
+          'Only one pose has a morph (the shape is frozen elsewhere): scrub to another time, tap ◆, then move points',
+      'Morph : les points s’interpolent entre les poses · ◆ au curseur ajoute/retire une pose':
+          'Morph: points interpolate between poses · ◆ at the playhead adds/removes a pose',
       'Couleurs des couches': 'Layer colors',
       'Pivot de rotation (offset depuis le centre)':
           'Rotation pivot (offset from center)',
@@ -415,17 +465,23 @@ class AppStrings {
       'Bibliothèques open source': '开源库',
       'Chargement…': '加载中…',
       'Confidentialité': '隐私',
-      'Cette notice décrit les données utilisées par Keyform Studio.': '本声明说明 Keyform Studio 如何使用数据。',
+      'Cette notice décrit les données utilisées par Keyform Studio.':
+          '本声明说明 Keyform Studio 如何使用数据。',
       'Données des projets': '项目数据',
-      'Les projets, formes, animations et réglages sont conservés localement sur votre appareil. L’application utilise le stockage local pour les enregistrer.': '项目、形状、动画和设置保存在您的设备本地。应用使用本地存储保存这些内容。',
+      'Les projets, formes, animations et réglages sont conservés localement sur votre appareil. L’application utilise le stockage local pour les enregistrer.':
+          '项目、形状、动画和设置保存在您的设备本地。应用使用本地存储保存这些内容。',
       'Importation et exportation': '导入与导出',
-      'Lors d’un import, l’application lit le fichier que vous choisissez. Les exports sont créés à votre demande. Si vous utilisez le partage, le contenu est transmis à l’application que vous sélectionnez.': '导入时，应用会读取您选择的文件。导出仅在您主动请求时创建。使用分享功能时，内容会传递给您选择的应用。',
+      'Lors d’un import, l’application lit le fichier que vous choisissez. Les exports sont créés à votre demande. Si vous utilisez le partage, le contenu est transmis à l’application que vous sélectionnez.':
+          '导入时，应用会读取您选择的文件。导出仅在您主动请求时创建。使用分享功能时，内容会传递给您选择的应用。',
       'Préférence de langue': '语言偏好',
-      'Votre choix de langue est enregistré localement sur l’appareil. « Langue du système » n’enregistre pas de préférence linguistique spécifique.': '您的语言选择保存在设备本地。“跟随系统”不会保存特定语言偏好。',
+      'Votre choix de langue est enregistré localement sur l’appareil. « Langue du système » n’enregistre pas de préférence linguistique spécifique.':
+          '您的语言选择保存在设备本地。“跟随系统”不会保存特定语言偏好。',
       'Aucun compte requis': '无需账户',
-      'Keyform Studio ne requiert pas de compte pour créer et modifier des projets. Cette version n’intègre ni publicité ni suivi analytique.': 'Keyform Studio 无需账户即可创建和编辑项目。此版本不包含广告或分析跟踪。',
+      'Keyform Studio ne requiert pas de compte pour créer et modifier des projets. Cette version n’intègre ni publicité ni suivi analytique.':
+          'Keyform Studio 无需账户即可创建和编辑项目。此版本不包含广告或分析跟踪。',
       'Contrôle des données': '数据控制',
-      'Vous gardez le contrôle des fichiers importés et partagés. Vous pouvez supprimer vos projets depuis l’application ou effacer les données de l’application dans les réglages de votre appareil.': '您可以控制导入和分享的文件。您可以在应用中删除项目，或在设备设置中清除应用数据。',
+      'Vous gardez le contrôle des fichiers importés et partagés. Vous pouvez supprimer vos projets depuis l’application ou effacer les données de l’application dans les réglages de votre appareil.':
+          '您可以控制导入和分享的文件。您可以在应用中删除项目，或在设备设置中清除应用数据。',
       'Langue': '语言',
       'Choisissez la langue utilisée par l’application.': '选择应用使用的语言。',
       'Langue du système': '跟随系统',
@@ -546,6 +602,50 @@ class AppStrings {
       'Miroir H': '水平翻转',
       'Miroir V': '垂直翻转',
       'Interpolation': '插值',
+      'Rectangle': '矩形',
+      'Position X': 'X 位置',
+      'Position Y': 'Y 位置',
+      'Largeur': '宽度',
+      'Hauteur': '高度',
+      'Échelle': '缩放',
+      'Échelle X': 'X 缩放',
+      'Échelle Y': 'Y 缩放',
+      'Épaisseur': '线宽',
+      'Linéaire': '线性',
+      'Entrée': '缓入',
+      'Sortie': '缓出',
+      'Entrée/sortie': '缓入缓出',
+      'Palier': '阶梯',
+      'Personnalisé (Bézier)': '自定义（贝塞尔）',
+      'Cercle': '圆形',
+      'Ligne': '直线',
+      'Chemin': '路径',
+      'Triangle': '三角形',
+      'Étoile': '星形',
+      'Hexagone': '六边形',
+      'Croix': '十字形',
+      'Cœur': '心形',
+      'Flèche': '箭头',
+      'est liée à l’os': '已绑定到骨骼',
+      'transformations bloquées': '变换已锁定',
+      'seule l’os la bouge': '只能由骨骼移动',
+      'Glisser l’extrémité de «': '拖动末端「',
+      'résout la chaîne': '以解算骨骼链',
+      'à': '在',
+      'Os animé : glisser la poignée de rotation écrit une keyframe au curseur.':
+          '骨骼已动画化：拖动旋转手柄会在播放头处创建关键帧。',
+      'Glisser la poignée de rotation pose le rig ; ◆ fige une keyframe d’angle.':
+          '拖动旋转手柄以摆姿势；点击 ◆ 添加角度关键帧。',
+      'Touche un point pour le déplacer · appui long : le supprimer · ✚ puis touche un segment pour en ajouter':
+          '点击点以移动 · 长按删除 · 点击 ✚ 后再点线段以添加点',
+      'Déplace un point : la 1ʳᵉ pose se crée automatiquement · ◆ pose d’autres instants · appui long : supprimer':
+          '移动点会自动创建第一个姿势 · ◆ 在其他时间添加姿势 · 长按删除',
+      'Sans keyframe : tu dessines la base · ◆ pour commencer à animer (morph) · appui long : supprimer un point':
+          '没有关键帧：绘制基础形状 · ◆ 开始形变动画 · 长按删除点',
+      'Une seule pose porte le morph (forme figée ailleurs) : scruble un autre instant, ◆ puis déplace les points':
+          '只有一个姿势包含形变（其他时间形状保持不变）：移动播放头，点击 ◆，然后移动各点',
+      'Morph : les points s’interpolent entre les poses · ◆ au curseur ajoute/retire une pose':
+          '形变：各点在姿势间插值 · 点击播放头处的 ◆ 添加/移除姿势',
       'Couleurs des couches': '图层颜色',
       'Pivot de rotation (offset depuis le centre)': '旋转轴（相对中心偏移）',
       'Ordre Z': 'Z 顺序',

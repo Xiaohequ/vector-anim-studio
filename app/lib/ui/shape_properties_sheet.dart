@@ -305,10 +305,9 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                   Padding(
                     padding: const EdgeInsets.only(top: 2, bottom: 2),
                     child: Text(
-                      '« ${shape.name} » est liée à l’os « '
-                      '${_carrierName(shape)} » : transformations bloquées '
-                      '— seule l’os la bouge (« Supprimer l’os » pour '
-                      'libérer).',
+                      AppStrings.text(
+                        '« ${shape.name} » est liée à l’os « ${_carrierName(shape)} » : transformations bloquées — seule l’os la bouge (« Supprimer l’os » pour libérer).',
+                      ),
                       style: const TextStyle(
                         fontSize: 11,
                         color: Color(0xFFF2C94C),
@@ -354,7 +353,7 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                             DropdownMenuItem<EasingKind>(
                               value: easing,
                               child: Text(
-                                easingLabel(easing),
+                                AppStrings.text(easingLabel(easing)),
                                 style: const TextStyle(fontSize: 12),
                               ),
                             ),
@@ -366,9 +365,11 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
                   child: Text(
-                    hasKeyframes
-                        ? 'Forme animée : toute modification écrit une keyframe au curseur.'
-                        : 'Ajoute une keyframe (◆) pour animer toutes les propriétés.',
+                    AppStrings.text(
+                      hasKeyframes
+                          ? 'Forme animée : toute modification écrit une keyframe au curseur.'
+                          : 'Ajoute une keyframe (◆) pour animer toutes les propriétés.',
+                    ),
                     style: const TextStyle(fontSize: 11, color: Colors.white54),
                   ),
                 ),
@@ -590,7 +591,7 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
         SizedBox(
           width: 92,
           child: Text(
-            propertyLabel(property),
+            AppStrings.text(propertyLabel(property)),
             style: const TextStyle(fontSize: 12),
           ),
         ),
@@ -691,12 +692,12 @@ class _ShapePropertiesSheetState extends State<ShapePropertiesSheet> {
           widget.onToggleVisibility,
         ),
         action(
-          'Monter',
+          AppStrings.text('Monter'),
           Icons.vertical_align_top,
           () => widget.onMove?.call(1),
         ),
         action(
-          'Descendre',
+          AppStrings.text('Descendre'),
           Icons.vertical_align_bottom,
           () => widget.onMove?.call(-1),
         ),
