@@ -10,6 +10,12 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      publish_to_play:
+        description: Publier explicitement la version courante en production
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: android-${{ github.ref }}
@@ -28,10 +34,13 @@ jobs:
         working-directory: app
     outputs:
       version: ${{ steps.version.outputs.value }}
+      play_publish_enabled: ${{ steps.play-config.outputs.enabled }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Java 17
         uses: actions/setup-java@v4
@@ -54,6 +63,36 @@ jobs:
         run: |
           version=$(grep '^version:' app/pubspec.yaml | awk '{print $2}' | cut -d'+' -f1)
           echo "value=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Détecter si cette exécution doit publier sur Google Play
+        id: play-config
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_BEFORE: ${{ github.event.before }}
+          MANUAL_PUBLISH: ${{ inputs.publish_to_play }}
+        run: |
+          requested=false
+          current_version=$(grep '^version:' app/pubspec.yaml | awk '{print $2}' | cut -d'+' -f1)
+          if [ "$EVENT_NAME" = 'push' ] && [ -n "$EVENT_BEFORE" ] && [ "$EVENT_BEFORE" != '0000000000000000000000000000000000000000' ]; then
+            previous_version=$(git show "$EVENT_BEFORE:app/pubspec.yaml" | grep '^version:' | awk '{print $2}' | cut -d'+' -f1)
+            if [ "$current_version" != "$previous_version" ]; then requested=true; fi
+          elif [ "$EVENT_NAME" = 'workflow_dispatch' ] && [ "$MANUAL_PUBLISH" = 'true' ]; then
+            requested=true
+          fi
+
+          if [ "$requested" != 'true' ]; then
+            echo 'enabled=false' >> "$GITHUB_OUTPUT"
+            echo 'Version inchangée : publication Play automatique ignorée. Pour republier, relancer manuellement avec publish_to_play=true.' >> "$GITHUB_STEP_SUMMARY"
+          elif [ -n "$PLAY_SERVICE_ACCOUNT_JSON" ]; then
+            echo 'enabled=true' >> "$GITHUB_OUTPUT"
+            echo 'Publication Google Play Production activée.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'enabled=false' >> "$GITHUB_OUTPUT"
+            echo 'Secret PLAY_SERVICE_ACCOUNT_JSON absent : publication Play ignorée.'
+            echo 'La publication Play Production est ignorée : configurez le secret PLAY_SERVICE_ACCOUNT_JSON.' >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Dépendances
         run: flutter pub get
@@ -153,3 +192,50 @@ jobs:
           generate_release_notes: false
           draft: false
           prerelease: false
+
+  publish_play_production:
+    name: Publier sur Google Play Production
+    needs: build
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && needs.build.outputs.play_publish_enabled == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Télécharger l'AAB signé
+        uses: actions/download-artifact@v4
+        with:
+          name: app-release-bundles
+          path: dist
+
+      - name: Publier l'AAB en production
+        uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: fr.xqu.vector_anim_studio
+          releaseFiles: dist/vector-anim-studio-${{ needs.build.outputs.version }}.aab
+          tracks: production
+          status: completed
+          releaseName: ${{ needs.build.outputs.version }}
+          whatsNewDirectory: distribution/whatsnew
+
+  play-publication-summary:
+    name: Résumé de publication Play
+    needs: [build, publish_play_production]
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Résumer le résultat
+        env:
+          PLAY_REQUESTED: ${{ needs.build.outputs.play_publish_enabled }}
+          PLAY_RESULT: ${{ needs.publish_play_production.result }}
+        run: |
+          {
+            echo '## Publication Google Play'
+            if [ "$PLAY_REQUESTED" != 'true' ]; then
+              echo '- Non publiée : PLAY_SERVICE_ACCOUNT_JSON non configuré ou aucune nouvelle version détectée.'
+            elif [ "$PLAY_RESULT" = 'success' ]; then
+              echo '- AAB envoyé à la piste Production. Suivre le statut de la publication dans Google Play Console.'
+            else
+              echo "- Échec de la publication Play (résultat du job : $PLAY_RESULT). Voir les logs du job Publier sur Google Play Production."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
