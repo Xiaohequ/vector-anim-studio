@@ -220,7 +220,7 @@ jobs:
 
   play-publication-summary:
     name: Résumé de publication Play
-    needs: [build, publish-play-production]
+    needs: [build, publish_play_production]
     if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
