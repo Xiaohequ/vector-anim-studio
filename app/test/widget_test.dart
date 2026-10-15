@@ -99,6 +99,11 @@ void main() {
     expect(AppStrings.text('Monter'), 'Move up');
     expect(AppStrings.text('Descendre'), 'Move down');
     expect(AppStrings.text('Angle de repos'), 'Rest angle');
+    expect(AppStrings.text('Rectangle'), 'Rectangle');
+    expect(AppStrings.text('Haut gauche'), 'Top left');
+    expect(AppStrings.text('Haut droit'), 'Top right');
+    expect(AppStrings.text('Bas droit'), 'Bottom right');
+    expect(AppStrings.text('Bas gauche'), 'Bottom left');
     expect(AppStrings.text(easingLabel(EasingKind.easeInOut)), 'Ease in/out');
     expect(
       AppStrings.text(easingLabel(EasingKind.customBezier)),
@@ -111,6 +116,15 @@ void main() {
     expect(AppStrings.text('Monter'), '上移');
     expect(AppStrings.text('Descendre'), '下移');
     expect(AppStrings.text('Angle de repos'), '静止角度');
+    expect(AppStrings.text('Rectangle'), '矩形');
+    expect(AppStrings.text('Haut gauche'), '左上');
+    expect(AppStrings.text('Haut droit'), '右上');
+    expect(AppStrings.text('Bas droit'), '右下');
+    expect(AppStrings.text('Bas gauche'), '左下');
+    expect(
+      AppStrings.text('Pose à TIME s enregistrée (morph)'),
+      '形变姿势已保存（时间：TIME 秒）',
+    );
     expect(AppStrings.text(easingLabel(EasingKind.easeInOut)), '缓入缓出');
     expect(AppStrings.text(easingLabel(EasingKind.customBezier)), '自定义（贝塞尔）');
     AppStrings.setLanguage('fr');

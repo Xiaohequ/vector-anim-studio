@@ -346,6 +346,8 @@ class AppStrings {
       'Haut droit': 'Top right',
       'Bas droit': 'Bottom right',
       'Bas gauche': 'Bottom left',
+      '« shapeName » liée à l’os « boneName »':
+          '“shapeName” bound to bone “boneName”',
       'Nouvelle forme': 'New shape',
       'Modifier la forme': 'Edit shape',
       'Nom de la forme': 'Shape name',
@@ -371,15 +373,29 @@ class AppStrings {
       'Annuler l’articulation en attente': 'Cancel pending joint',
       'Monter': 'Move up',
       'Descendre': 'Move down',
+      'Lier le groupe à un os ?': 'Bind group to a bone?',
+      '« shapeName » n’est lié à aucune forme':
+          '“shapeName” is not bound to any shape',
+      'Lier la pièce à un os ?': 'Bind element to a bone?',
+      'Groupe dissocié de l’os': 'Group unbound from bone',
+      'Os supprimé (descendance et keyframes compris)':
+          'Bone deleted (including descendants and keyframes)',
+      'Os supprimé (enfants re-parentés)': 'Bone deleted (children reparented)',
+      'Le curseur doit être sur le segment de la forme liée':
+          'Playhead must be within the bound shape segment',
+      'Un groupe importé ne possède pas de forme éditable ici':
+          'An imported group has no editable shape here',
+      'Touche un segment du chemin pour y ajouter un point.':
+          'Tap a path segment to add a point.',
+      'Le mode ✚ s’applique aux couches « Chemin ».':
+          'The ✚ mode applies to Path layers.',
       'Propriétés': 'Properties',
       'Sélectionne un élément dans l’aperçu ou la timeline.':
           'Select an element in the preview or timeline.',
       'Forme dupliquée (keyframes incluses)':
           'Shape duplicated (including keyframes)',
-      'Lier le groupe à un os ?': 'Bind group to a bone?',
       '« osName » n’est lié à aucune forme':
           '“osName” is not bound to any shape',
-      'Lier la pièce à un os ?': 'Bind element to a bone?',
       'Vidéo MP4 (H.264)': 'MP4 video (H.264)',
       'GIF animé': 'Animated GIF',
       'Image PNG (frame)': 'PNG image (frame)',
@@ -396,9 +412,6 @@ class AppStrings {
       'Pièce non liée au rig (os : —)': 'Element not bound to rig (bone: —)',
       'Groupe lié à l’os': 'Group bound to bone',
       'Pièce liée à l’os': 'Element bound to bone',
-      'Groupe dissocié de l’os': 'Group unbound from bone',
-      'Un groupe importé ne possède pas de forme éditable ici':
-          'An imported group has no editable shape here',
       'L’os et sa descendance ': 'The bone and its descendants ',
       'seront supprimés': 'will be deleted',
       'avec le lien': 'along with the binding',
@@ -420,10 +433,6 @@ class AppStrings {
       'Masquer le groupe': 'Hide group',
       'Afficher le groupe': 'Show group',
       'Aucun os': 'No bone',
-      'Le mode ✚ s’applique aux couches « Chemin ».':
-          'The ✚ mode applies to Path layers.',
-      'Touche un segment du chemin pour y ajouter un point.':
-          'Tap a path segment to add a point.',
       'Ajouter une forme': 'Add shape',
       'élément(s)': 'element(s)',
       'Poser la couleur au curseur': 'Set color at playhead',
@@ -434,11 +443,6 @@ class AppStrings {
       'Inverser le coude': 'Reverse elbow',
       'Pivot X': 'Pivot X',
       'Pivot Y': 'Pivot Y',
-      'Os supprimé (descendance et keyframes compris)':
-          'Bone deleted (including descendants and keyframes)',
-      'Le curseur doit être sur le segment de la forme liée':
-          'Playhead must be within the bound shape segment',
-      'Os supprimé (enfants re-parentés)': 'Bone deleted (children reparented)',
       'Une forme doit garder au moins une couche.':
           'A shape must keep at least one layer.',
       'Délier du rig': 'Unbind from rig',
@@ -706,6 +710,14 @@ class AppStrings {
       'Haut droit': '右上',
       'Bas droit': '右下',
       'Bas gauche': '左下',
+      'Pose à TIME s enregistrée (morph)': '形变姿势已保存（时间：TIME 秒）',
+      '« shapeName » liée à l’os « boneName »': '“shapeName”已绑定到骨骼“boneName”',
+      '« shapeName » est liée à l’os « boneName » : transformations bloquées — bougez l’os, ou dissociez la pièce (Squelettes ▸ Délier).':
+          '“shapeName”已绑定到骨骼“boneName”：变换已锁定——请移动骨骼或解除元素绑定（骨架 ▸ 解绑）。',
+      '« shapeName » est liée à l’os « boneName » : transformations verrouillées — déplace l’os pour la modifier.':
+          '“shapeName”已绑定到骨骼“boneName”：变换已锁定——移动骨骼以编辑该元素。',
+      'Action os indisponible': '骨骼操作不可用',
+      'Keyframe d’os': '骨骼关键帧',
       'Nouvelle forme': '新建形状',
       'Modifier la forme': '编辑形状',
       'Nom de la forme': '形状名称',
@@ -731,19 +743,21 @@ class AppStrings {
       'Propriétés': '属性',
       'Monter': '上移',
       'Descendre': '下移',
-      'Sélectionne un élément dans l’aperçu ou la timeline.': '在预览或时间轴中选择一个元素。',
-      'Forme dupliquée (keyframes incluses)': '形状已复制（包含关键帧）',
       'Lier le groupe à un os ?': '将组绑定到骨骼？',
-      'Un groupe importé ne possède pas de forme éditable ici':
-          '导入的组在此处没有可编辑形状',
+      '« shapeName » n’est lié à aucune forme': '“shapeName”未绑定任何形状',
+      'Lier la pièce à un os ?': '将元素绑定到骨骼？',
       'Groupe dissocié de l’os': '组已与骨骼解绑',
       'Os supprimé (descendance et keyframes compris)': '骨骼已删除（包括子骨骼和关键帧）',
-      'Le curseur doit être sur le segment de la forme liée': '播放头必须位于绑定形状的片段内',
       'Os supprimé (enfants re-parentés)': '骨骼已删除（子骨骼已重新绑定）',
+      'Le curseur doit être sur le segment de la forme liée': '播放头必须位于绑定形状的片段内',
+      'Un groupe importé ne possède pas de forme éditable ici':
+          '导入的组在此处没有可编辑形状',
+      'Touche un segment du chemin pour y ajouter un point.': '点击路径线段以添加点。',
+      'Le mode ✚ s’applique aux couches « Chemin ».': '✚ 模式适用于“路径”图层。',
+      'Sélectionne un élément dans l’aperçu ou la timeline.': '在预览或时间轴中选择一个元素。',
+      'Forme dupliquée (keyframes incluses)': '形状已复制（包含关键帧）',
       'Une forme doit garder au moins une couche.': '形状至少需要保留一个图层。',
       'Ajouter une forme': '添加形状',
-      'Le mode ✚ s’applique aux couches « Chemin ».': '✚ 模式适用于“路径”图层。',
-      'Touche un segment du chemin pour y ajouter un point.': '点击路径线段以添加点。',
       'Sans enfant unique — indisponible': '没有唯一子骨骼，无法使用',
       'Inverser le coude': '反转肘部',
       'Délier du rig': '与骨架解绑',
@@ -782,7 +796,6 @@ class AppStrings {
       'redevient libre.': '将恢复自由状态。',
       'liée à l’os': '已绑定到骨骼',
       '« osName » n’est lié à aucune forme': '“osName”未绑定任何形状',
-      'Lier la pièce à un os ?': '将元素绑定到骨骼？',
       'Vidéo MP4 (H.264)': 'MP4 视频（H.264）',
       'GIF animé': '动画 GIF',
       'Image PNG (frame)': 'PNG 图片（帧）',
