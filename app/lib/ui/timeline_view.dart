@@ -91,6 +91,10 @@ class TimelineView extends StatefulWidget {
   static const double laneHeight = 30;
   static const int minSpanMs = 100;
 
+  /// Tolérance de sélection d'une keyframe, exprimée en pixels à l'écran.
+  /// La tolérance temporelle suit donc le zoom de la timeline.
+  static const double keyframeSelectionRadiusPx = 10;
+
   @override
   State<TimelineView> createState() => _TimelineViewState();
 }
@@ -293,7 +297,10 @@ class _TimelineViewState extends State<TimelineView> {
       carrier: carrier,
       zoom: widget.zoom,
       timeMs: widget.timeMs,
-      toleranceMs: keyframeSnapToleranceMs(widget.project.durationMs),
+      toleranceMs:
+          (TimelineView.keyframeSelectionRadiusPx *
+                  widget.zoom.msPerPixel(width))
+              .ceil(),
       laneTop: TimelineView.rulerHeight + lane * TimelineView.laneHeight,
       width: width,
       pinching: _pinching,
@@ -712,35 +719,51 @@ class _ShapeBar extends StatelessWidget {
                       1,
                   0.75,
                 ),
-                child: (keyTime - timeMs).abs() <= toleranceMs
-                    ? GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () => onDeleteKeyframe(keyTime),
-                        child: Tooltip(
-                          message: AppStrings.text('Supprimer la keyframe'),
-                          child: Container(
-                            width: 16,
-                            height: 16,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFFF5C5C),
-                              shape: BoxShape.circle,
+                child: SizedBox.square(
+                  dimension: TimelineView.keyframeSelectionRadiusPx * 2,
+                  child: GestureDetector(
+                    key: ValueKey<String>(
+                      'timeline-keyframe-${shape.id}-$keyTime',
+                    ),
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      if ((keyTime - timeMs).abs() <= toleranceMs) {
+                        onDeleteKeyframe(keyTime);
+                      } else {
+                        onSeek(keyTime);
+                      }
+                    },
+                    child: Center(
+                      child: (keyTime - timeMs).abs() <= toleranceMs
+                          ? Tooltip(
+                              message: AppStrings.text(
+                                'Retirer la keyframe au curseur',
+                              ),
+                              child: Container(
+                                width: 16,
+                                height: 16,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFFF5C5C),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.close,
+                                  size: 11,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            )
+                          : Transform.rotate(
+                              angle: 0.785398,
+                              child: Container(
+                                width: 7,
+                                height: 7,
+                                color: const Color(0xFFF2C94C),
+                              ),
                             ),
-                            child: const Icon(
-                              Icons.close,
-                              size: 11,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      )
-                    : Transform.rotate(
-                        angle: 0.785398,
-                        child: Container(
-                          width: 7,
-                          height: 7,
-                          color: const Color(0xFFF2C94C),
-                        ),
-                      ),
+                    ),
+                  ),
+                ),
               ),
             _Handle(
               alignment: Alignment.centerLeft,

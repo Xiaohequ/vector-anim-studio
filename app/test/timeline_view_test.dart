@@ -14,6 +14,7 @@ class _Rec {
   String? selectedShape;
   String? selectedBone;
   String? selectedGroup;
+  final List<int> deletedKeyframes = <int>[];
   final List<(String, int)> groupMoves = <(String, int)>[];
 }
 
@@ -30,12 +31,17 @@ AnimationProject _project() {
   return project;
 }
 
-Widget _host(AnimationProject project, TimelineZoomState zoom, _Rec rec) {
+Widget _host(
+  AnimationProject project,
+  TimelineZoomState zoom,
+  _Rec rec, {
+  int timeMs = 0,
+}) {
   return MaterialApp(
     home: Scaffold(
       body: TimelineView(
         project: project,
-        timeMs: 0,
+        timeMs: timeMs,
         zoom: zoom,
         selectedShapeId: null,
         skeletonRig: project.skeleton,
@@ -54,7 +60,7 @@ Widget _host(AnimationProject project, TimelineZoomState zoom, _Rec rec) {
         },
         onMoveEnd: (shape) => rec.ended = shape.id,
         onSeek: (t) => rec.seeked = t,
-        onDeleteKeyframe: (_, _) {},
+        onDeleteKeyframe: (_, time) => rec.deletedKeyframes.add(time),
         onZoomChanged: () {},
         onGestureStart: (shape) {},
         onSelectGroup: (group) => rec.selectedGroup = group.id,
@@ -196,6 +202,56 @@ void main() {
     expect(zoom.viewMs, 1000);
     expect(_barWidths(tester), contains(800.0));
   });
+
+  testWidgets(
+    'la sélection des keyframes suit une tolérance de 10 px au zoom',
+    (tester) async {
+      final project = _project();
+      final shape = project.shapes.first;
+      final rec = _Rec();
+      final zoom = TimelineZoomState(durationOf: () => 4000);
+      final keyframe = find.byKey(
+        ValueKey<String>('timeline-keyframe-${shape.id}-500'),
+      );
+
+      for (final expectedViewMs in <int>[4000, 2000, 1000]) {
+        expect(zoom.viewMs, expectedViewMs);
+        final msPerPixel = zoom.msPerPixel(800);
+        final insideTolerance = 500 + (9 * msPerPixel).round();
+        final outsideTolerance = 500 + (11 * msPerPixel).round();
+
+        // La cible de contact garde 10 px de chaque côté du losange.
+        await tester.pumpWidget(
+          _host(project, zoom, rec, timeMs: insideTolerance),
+        );
+        final center = tester.getCenter(keyframe);
+        expect(tester.getSize(keyframe), const Size(20, 20));
+        await tester.tapAt(center + const Offset(9, 0));
+        expect(rec.deletedKeyframes, contains(500));
+        rec.deletedKeyframes.clear();
+
+        // Juste au-delà de 10 px temporels, le tap rejoint la keyframe sans la
+        // supprimer : la tolérance est bien convertie selon le zoom courant.
+        await tester.pumpWidget(
+          _host(project, zoom, rec, timeMs: outsideTolerance),
+        );
+        await tester.tap(keyframe);
+        expect(rec.deletedKeyframes, isEmpty);
+        expect(rec.seeked, 500);
+        rec.seeked = null;
+
+        // 11 px à droite du rectangle (rayon 10 px) ne touche plus son hitbox.
+        final centerAfterTap = tester.getCenter(keyframe);
+        rec.seeked = null;
+        await tester.tapAt(centerAfterTap + const Offset(11, 0));
+        expect(rec.seeked, isNull);
+
+        if (expectedViewMs != 1000) {
+          zoom.zoomAt(2, 0);
+        }
+      }
+    },
+  );
 
   testWidgets('un tap sur le fond déplace la tête de lecture', (tester) async {
     final project = _project();
