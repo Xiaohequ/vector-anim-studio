@@ -588,7 +588,13 @@ void main() {
     expect(project.skeleton!.trackOf(bone.id)!.single.timeMs, 0);
 
     // Second appui au même endroit : la keyframe est retirée.
-    await tester.tap(find.byTooltip('Retirer la keyframe au curseur'));
+    await tester.tap(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is IconButton &&
+            widget.tooltip == 'Retirer la keyframe au curseur',
+      ),
+    );
     await tester.pumpAndSettle();
     expect(project.skeleton!.hasKeyframes(bone.id), isFalse);
   });
