@@ -1,13 +1,12 @@
-# Keyform Studio 0.36.2
+# Keyform Studio 0.37.0
 
-## Icône Android et corrections de localisation
+## Sélection des keyframes sur la timeline
 
-- Icône Android adaptative avec premier plan vectoriel : le lanceur applique sa forme système (ronde, carrée arrondie, etc.). Les icônes PNG restent disponibles en repli sur les anciennes versions d’Android.
-- Traduction en anglais et en chinois des quatre options de coins arrondis des rectangles.
-- Localisation des messages du Studio liés aux os et du message de pose morph dans l’éditeur.
+- Zone de sélection d’environ 10 px de part et d’autre du marqueur, quelle que soit l’échelle de zoom.
+- Clic sur une keyframe distante : la tête de lecture rejoint la keyframe ; clic à proximité de la tête de lecture : la keyframe est supprimée.
 
 ## Vérifications
 
 - `flutter analyze` sans problème.
-- Tests ciblés de localisation réussis.
-- Build APK/AAB effectué par GitHub Actions.
+- Tests de la timeline réussis aux différents niveaux de zoom.
+- Build Android et publication de la release par GitHub Actions.
