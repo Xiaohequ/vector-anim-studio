@@ -1,1 +1,1 @@
-Android adaptive icon with a vector foreground that follows the launcher shape. Localization fixes for rounded rectangle corners and bone-related messages.
+Timeline keyframes are easier to select: a hit zone of about 10 px around each marker, whatever the zoom level. Tap a distant keyframe to move the playhead onto it; tap near the playhead to delete it.
