@@ -83,9 +83,15 @@ Widget _host(
 /// (les barres y sont posées avec une width explicite).
 List<double> _barWidths(WidgetTester tester) {
   final widths = <double>[];
-  tester.renderObject<RenderStack>(find.byType(Stack).first).visitChildren((
-    child,
-  ) {
+  // Le Stack des lignes vit sous le SingleChildScrollView : le Stack racine
+  // porte la règle collante et la tête de lecture.
+  final lanesStack = find
+      .descendant(
+        of: find.byType(SingleChildScrollView),
+        matching: find.byType(Stack),
+      )
+      .first;
+  tester.renderObject<RenderStack>(lanesStack).visitChildren((child) {
     final width = (child.parentData as StackParentData?)?.width;
     if (width != null) widths.add(width);
   });
@@ -253,16 +259,26 @@ void main() {
     },
   );
 
-  testWidgets('un tap sur le fond déplace la tête de lecture', (tester) async {
+  testWidgets('la règle déplace la tête de lecture, le fond fait défiler', (
+    tester,
+  ) async {
     final project = _project();
     final rec = _Rec();
-    await tester.pumpWidget(
-      _host(project, TimelineZoomState(durationOf: () => 4000), rec),
-    );
+    // Vue 1000 ms centrée sur 2000 ms : il reste de la place pour défiler.
+    final zoom = TimelineZoomState(durationOf: () => 4000)..zoomAt(4, 0.5);
+    await tester.pumpWidget(_host(project, zoom, rec));
 
-    // Hors de la barre (x > 200) : le tap tombe sur le fond → scrub.
-    await tester.tapAt(const Offset(400, 30));
+    // La règle (bande haute) est la SEULE zone de seek.
+    await tester.tapAt(const Offset(400, 10));
     expect(rec.seeked, 2000);
+
+    // Un glisser horizontal sur les lignes fait défiler la vue, sans seek.
+    rec.seeked = null;
+    final before = zoom.offsetMs;
+    await tester.dragFrom(const Offset(600, 40), const Offset(-200, 0));
+    await tester.pump();
+    expect(rec.seeked, isNull);
+    expect(zoom.offsetMs, greaterThan(before));
   });
 
   testWidgets('appui long + glisser déplace le segment, keyframes suivent', (
@@ -315,26 +331,28 @@ void main() {
     await tester.pump();
   });
 
-  testWidgets('le glisser sur une barre scrub aussi la tête de lecture', (
-    tester,
-  ) async {
-    final project = _project();
-    final shape = project.shapes.first;
-    final rec = _Rec();
-    await tester.pumpWidget(
-      _host(project, TimelineZoomState(durationOf: () => 4000), rec),
-    );
+  testWidgets(
+    'le glisser sur une barre fait défiler, sans scrub ni déplacement',
+    (tester) async {
+      final project = _project();
+      final shape = project.shapes.first;
+      final rec = _Rec();
+      // Vue 1000 ms centrée sur 2000 ms : la vue peut défiler.
+      final zoom = TimelineZoomState(durationOf: () => 4000)..zoomAt(4, 0.5);
+      await tester.pumpWidget(_host(project, zoom, rec));
 
-    // Glisser au milieu de la barre (x = 100) : scrub, pas de déplacement.
-    await tester.dragFrom(const Offset(100, 27), const Offset(120, 0));
-    await tester.pump();
+      final before = zoom.offsetMs;
+      // Glisser au milieu de la barre (x = 100) : défilement, pas de scrub.
+      await tester.dragFrom(const Offset(100, 27), const Offset(-120, 0));
+      await tester.pump();
 
-    expect(rec.seeked, isNotNull);
-    expect(rec.seeked!, closeTo(1100, 20)); // ~220 px × 5 ms/px
-    expect(rec.moved, isEmpty);
-    expect(rec.ended, isNull);
-    expect(shape.startMs, 0);
-  });
+      expect(rec.seeked, isNull);
+      expect(zoom.offsetMs, greaterThan(before));
+      expect(rec.moved, isEmpty);
+      expect(rec.ended, isNull);
+      expect(shape.startMs, 0);
+    },
+  );
 
   testWidgets('groupe squelette lié : segment = keyframes et sélection de l’os', (
     tester,

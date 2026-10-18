@@ -3003,67 +3003,63 @@ class _StudioScreenState extends State<StudioScreen>
           Expanded(
             child: zoom == null
                 ? const SizedBox.shrink()
-                : SingleChildScrollView(
-                    child: TimelineView(
-                      project: project,
-                      timeMs: controller.timeMs,
-                      zoom: zoom,
-                      selectedShapeId: _selectedId,
-                      selectedGroupId: _selectedGroupId,
-                      onSelectGroup: (group) => setState(() {
-                        _selectedGroupId = group.id;
-                        _selectedId = null;
-                        _selectedBoneId = null;
-                      }),
-                      onToggleGroupCollapsed: _toggleGroupCollapsed,
-                      onToggleGroupVisibility: _toggleGroupVisibility,
-                      onGroupGestureStart: (_) => _pushUndo(),
-                      onGroupMoveChanged: _moveGroup,
-                      onGroupMoveEnd: (_) => _scheduleSave(),
-                      onSelect: (shape) => setState(() {
-                        _selectedId = shape.id;
-                        _selectedGroupId = null;
-                        _selectedBoneId = null;
-                      }),
-                      onSeek: controller.setTime,
-                      onRangeChanged: (shape, start, end) {
-                        setState(() {
-                          shape.startMs = start;
-                          shape.endMs = end;
-                        });
-                        _scheduleSave();
-                      },
-                      onMoveChanged: (shape, targetStartMs) {
-                        setState(
-                          () => shape.shiftBy(targetStartMs - shape.startMs),
-                        );
-                      },
-                      onMoveEnd: (_) => _scheduleSave(),
-                      onGestureStart: (shape) => _pushUndo(),
-                      onDeleteKeyframe: (shape, timeMs) {
-                        setState(() => shape.removeKeyframeAt(timeMs));
-                        _scheduleSave();
-                      },
-                      skeletonRig: project.skeleton,
-                      selectedBoneId: _selectedBoneId,
-                      // Sélection depuis le segment (v0.21.0) : un segment
-                      // LIÉ sélectionne l'OS dans le preview (sélection
-                      // exclusive — la pièce n'est plus sélectionnable).
-                      onSelectBone: (bone) => setState(() {
-                        _selectedBoneId = bone.id;
-                        _selectedId = null;
-                      }),
-                      onDeleteBoneKeyframe: (bone, timeMs) {
-                        setState(
-                          () => project.skeleton!.removeKeyframeAt(
-                            bone.id,
-                            timeMs,
-                          ),
-                        );
-                        _scheduleSave();
-                      },
-                      onZoomChanged: () => setState(() {}),
-                    ),
+                : TimelineView(
+                    project: project,
+                    timeMs: controller.timeMs,
+                    zoom: zoom,
+                    selectedShapeId: _selectedId,
+                    selectedGroupId: _selectedGroupId,
+                    onSelectGroup: (group) => setState(() {
+                      _selectedGroupId = group.id;
+                      _selectedId = null;
+                      _selectedBoneId = null;
+                    }),
+                    onToggleGroupCollapsed: _toggleGroupCollapsed,
+                    onToggleGroupVisibility: _toggleGroupVisibility,
+                    onGroupGestureStart: (_) => _pushUndo(),
+                    onGroupMoveChanged: _moveGroup,
+                    onGroupMoveEnd: (_) => _scheduleSave(),
+                    onSelect: (shape) => setState(() {
+                      _selectedId = shape.id;
+                      _selectedGroupId = null;
+                      _selectedBoneId = null;
+                    }),
+                    onSeek: controller.setTime,
+                    onRangeChanged: (shape, start, end) {
+                      setState(() {
+                        shape.startMs = start;
+                        shape.endMs = end;
+                      });
+                      _scheduleSave();
+                    },
+                    onMoveChanged: (shape, targetStartMs) {
+                      setState(
+                        () => shape.shiftBy(targetStartMs - shape.startMs),
+                      );
+                    },
+                    onMoveEnd: (_) => _scheduleSave(),
+                    onGestureStart: (shape) => _pushUndo(),
+                    onDeleteKeyframe: (shape, timeMs) {
+                      setState(() => shape.removeKeyframeAt(timeMs));
+                      _scheduleSave();
+                    },
+                    skeletonRig: project.skeleton,
+                    selectedBoneId: _selectedBoneId,
+                    // Sélection depuis le segment (v0.21.0) : un segment
+                    // LIÉ sélectionne l'OS dans le preview (sélection
+                    // exclusive — la pièce n'est plus sélectionnable).
+                    onSelectBone: (bone) => setState(() {
+                      _selectedBoneId = bone.id;
+                      _selectedId = null;
+                    }),
+                    onDeleteBoneKeyframe: (bone, timeMs) {
+                      setState(
+                        () =>
+                            project.skeleton!.removeKeyframeAt(bone.id, timeMs),
+                      );
+                      _scheduleSave();
+                    },
+                    onZoomChanged: () => setState(() {}),
                   ),
           ),
         ],
