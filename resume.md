@@ -6,7 +6,22 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Nom technique / dépôt : `vector_anim_studio` / https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`). Nom d'affichage : **Keyform Studio** depuis v0.26.0.
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
-- **v0.36.0 en préparation** : page Paramètres avec préférence de langue (système/français/anglais/chinois), localisation de l’interface, informations de version, notice de confidentialité et accès aux licences open source. Branche de release : `release/0.36.0-language-info`.
+- **Publication Google Play (18/10)** : la 0.37.0 (versionCode 5) est publiée sur la
+  piste **test fermé Alpha** (`alpha`, statut `completed`). Compte de service
+  `keyform-play-publisher@keyformstudio-512016.iam.gserviceaccount.com`, secret
+  `PLAY_SERVICE_ACCOUNT_JSON` configuré. Le workflow publie sur `alpha` par défaut
+  (entrée `workflow_dispatch` `play_track` pour viser `beta`, `internal` ou
+  `production`). Pièges rencontrés : l'étape `play-config` héritait du
+  `working-directory: app` du job (version courante vide → publication demandée à
+  chaque push) ; le job Play n'avait pas de `checkout` (`distribution/whatsnew`
+  absent → `ENOENT`) ; les droits Play du compte de service n'étaient pas encore
+  propagés (`The caller does not have permission` au commit de l'édition).
+- **v0.37.0 VALIDÉE APPAREIL (16/10)** — retour : « Je valide v0.37 ». Release
+  `v0.37.0-build108`, fusionnée dans `main`. Contenu : sélection des keyframes sur
+  la timeline avec une zone cliquable d'environ 10 px de part et d'autre du
+  marqueur, quelle que soit l'échelle de zoom ; clic sur une keyframe distante = la
+  tête de lecture la rejoint, clic à proximité de la tête de lecture = suppression.
+- **v0.36.0** : page Paramètres avec préférence de langue (système/français/anglais/chinois), localisation de l’interface, informations de version, notice de confidentialité et accès aux licences open source.
 - **v0.30.0** reste la dernière version précédemment validée, avant v0.35.0 :
   `v0.30.0-build75`, APK `vector-anim-studio-0.30.0.apk` (54,4 Mo), CI #75 verte.
   Barre Studio **Éléments / Animation / Os** ; export en haut. Projets unifiés v0.29
