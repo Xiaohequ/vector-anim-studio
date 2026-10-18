@@ -6,6 +6,13 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Nom technique / dépôt : `vector_anim_studio` / https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`). Nom d'affichage : **Keyform Studio** depuis v0.26.0.
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
+- **v0.38.0 (18/10)** : timeline — la règle de temps reste collée en haut quand
+  les lignes défilent ; la tête de lecture ne se déplace QUE sur la règle (tap ou
+  glisser) ; un glisser horizontal sur le fond ou sur un segment fait défiler la
+  timeline. Release `v0.38.0-build117`, publiée automatiquement sur la piste Play
+  **alpha** par le workflow (première publication CI réussie de bout en bout).
+  Piège : `Column` + `CustomPaint` sans enfant → largeur nulle, la règle ne
+  recevait aucun tap ; `crossAxisAlignment: stretch` corrige.
 - **Publication Google Play (18/10)** : la 0.37.0 (versionCode 5) est publiée sur la
   piste **test fermé Alpha** (`alpha`, statut `completed`). Compte de service
   `keyform-play-publisher@keyformstudio-512016.iam.gserviceaccount.com`, secret
