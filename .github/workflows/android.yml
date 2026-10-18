@@ -12,10 +12,15 @@ on:
   workflow_dispatch:
     inputs:
       publish_to_play:
-        description: Publier explicitement la version courante en production
+        description: Publier explicitement la version courante sur Google Play
         required: false
         type: boolean
         default: false
+      play_track:
+        description: Piste Play cible (alpha = test fermé Alpha, beta, internal, production)
+        required: false
+        type: string
+        default: alpha
 
 concurrency:
   group: android-${{ github.ref }}
@@ -194,12 +199,14 @@ jobs:
           draft: false
           prerelease: false
 
-  publish_play_production:
-    name: Publier sur Google Play Production
+  publish_play:
+    name: Publier sur Google Play (test fermé Alpha)
     needs: build
     if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && needs.build.outputs.play_publish_enabled == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      PLAY_TRACK: ${{ inputs.play_track || 'alpha' }}
 
     steps:
       - name: Checkout
@@ -211,35 +218,36 @@ jobs:
           name: app-release-bundles
           path: dist
 
-      - name: Publier l'AAB en production
+      - name: Publier l'AAB sur la piste Play
         uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
         with:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: fr.xqu.vector_anim_studio
           releaseFiles: dist/vector-anim-studio-${{ needs.build.outputs.version }}.aab
-          tracks: production
+          tracks: ${{ env.PLAY_TRACK }}
           status: completed
           releaseName: ${{ needs.build.outputs.version }}
           whatsNewDirectory: distribution/whatsnew
 
   play-publication-summary:
     name: Résumé de publication Play
-    needs: [build, publish_play_production]
-    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [build, publish_play]
+    if: always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - name: Résumer le résultat
         env:
           PLAY_REQUESTED: ${{ needs.build.outputs.play_publish_enabled }}
-          PLAY_RESULT: ${{ needs.publish_play_production.result }}
+          PLAY_RESULT: ${{ needs.publish_play.result }}
+          PLAY_TRACK: ${{ inputs.play_track || 'alpha' }}
         run: |
           {
             echo '## Publication Google Play'
             if [ "$PLAY_REQUESTED" != 'true' ]; then
               echo '- Non publiée : PLAY_SERVICE_ACCOUNT_JSON non configuré ou aucune nouvelle version détectée.'
             elif [ "$PLAY_RESULT" = 'success' ]; then
-              echo '- AAB envoyé à la piste Production. Suivre le statut de la publication dans Google Play Console.'
+              echo "- AAB envoyé à la piste \`$PLAY_TRACK\`. Suivre le statut de la publication dans Google Play Console."
             else
-              echo "- Échec de la publication Play (résultat du job : $PLAY_RESULT). Voir les logs du job Publier sur Google Play Production."
+              echo "- Échec de la publication Play sur la piste \`$PLAY_TRACK\` (résultat du job : $PLAY_RESULT). Voir les logs du job Publier sur Google Play."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
