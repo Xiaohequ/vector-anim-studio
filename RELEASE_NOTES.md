@@ -1,12 +1,14 @@
-# Keyform Studio 0.37.0
+# Keyform Studio 0.38.0
 
-## Sélection des keyframes sur la timeline
+## Timeline : règle collante et gestes clarifiés
 
-- Zone de sélection d’environ 10 px de part et d’autre du marqueur, quelle que soit l’échelle de zoom.
-- Clic sur une keyframe distante : la tête de lecture rejoint la keyframe ; clic à proximité de la tête de lecture : la keyframe est supprimée.
+- La règle de temps reste visible en haut de la timeline quand les lignes défilent verticalement.
+- La tête de lecture ne se déplace plus que sur la règle : un tap ou un glisser horizontal sur la règle positionne le curseur.
+- Partout ailleurs (fond des lignes et segments), un glisser horizontal fait défiler la timeline au lieu de déplacer le curseur.
+- L'appui long sur un segment continue de déplacer le segment avec ses keyframes.
 
 ## Vérifications
 
 - `flutter analyze` sans problème.
-- Tests de la timeline réussis aux différents niveaux de zoom.
+- Suite complète : 308 tests réussis, dont les tests de la timeline réécrits pour les nouveaux gestes.
 - Build Android et publication de la release par GitHub Actions.

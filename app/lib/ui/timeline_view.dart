@@ -254,7 +254,7 @@ class _TimelineViewState extends State<TimelineView> {
       endMs: span.$2,
       zoom: widget.zoom,
       width: width,
-      laneTop: TimelineView.rulerHeight + lane * TimelineView.laneHeight,
+      laneTop: lane * TimelineView.laneHeight,
       pinching: _pinching,
       moving: _movingGroup?.id == group.id,
       movingOriginMs: _movingGroupOriginMs,
@@ -301,7 +301,7 @@ class _TimelineViewState extends State<TimelineView> {
           (TimelineView.keyframeSelectionRadiusPx *
                   widget.zoom.msPerPixel(width))
               .ceil(),
-      laneTop: TimelineView.rulerHeight + lane * TimelineView.laneHeight,
+      laneTop: lane * TimelineView.laneHeight,
       width: width,
       pinching: _pinching,
       moving: _movingShape?.id == shape.id,
@@ -356,82 +356,107 @@ class _TimelineViewState extends State<TimelineView> {
         final width = constraints.maxWidth;
         _width = width;
 
-        return SizedBox(
-          height: TimelineView.rulerHeight + laneArea,
-          child: Listener(
-            onPointerDown: _onPointerDown,
-            onPointerMove: _onPointerMove,
-            onPointerUp: _onPointerUp,
-            onPointerCancel: _onPointerUp,
-            child: Stack(
-              clipBehavior: Clip.hardEdge,
-              children: <Widget>[
-                Positioned.fill(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTapDown: (details) => widget.onSeek(
-                      zoom.timeFor(details.localPosition.dx, width),
-                    ),
-                    onHorizontalDragUpdate: (details) {
-                      if (_pinching) return;
-                      widget.onSeek(
+        return Listener(
+          onPointerDown: _onPointerDown,
+          onPointerMove: _onPointerMove,
+          onPointerUp: _onPointerUp,
+          onPointerCancel: _onPointerUp,
+          child: Stack(
+            clipBehavior: Clip.hardEdge,
+            children: <Widget>[
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  // Règle collante : elle reste visible quand les lignes
+                  // défilent verticalement, et c'est la SEULE zone où la tête
+                  // de lecture se déplace (tap ou glisser horizontal).
+                  SizedBox(
+                    height: TimelineView.rulerHeight,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTapDown: (details) => widget.onSeek(
                         zoom.timeFor(details.localPosition.dx, width),
-                      );
-                    },
+                      ),
+                      onHorizontalDragUpdate: (details) {
+                        if (_pinching) return;
+                        widget.onSeek(
+                          zoom.timeFor(details.localPosition.dx, width),
+                        );
+                      },
+                      child: CustomPaint(
+                        painter: _RulerPainter(zoom: zoom, width: width),
+                      ),
+                    ),
                   ),
-                ),
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  top: 0,
-                  height: TimelineView.rulerHeight,
-                  child: CustomPaint(
-                    painter: _RulerPainter(zoom: zoom, width: width),
-                  ),
-                ),
-                for (var lane = 0; lane < laneCount; lane++)
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    top:
-                        TimelineView.rulerHeight +
-                        lane * TimelineView.laneHeight,
-                    height: TimelineView.laneHeight,
-                    child: IgnorePointer(
-                      // Décoratif : ne doit pas bloquer le seek sur le fond.
-                      child: Container(
-                        decoration: BoxDecoration(
-                          border: Border(
-                            bottom: BorderSide(
-                              color: Colors.white.withValues(alpha: 0.06),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: SizedBox(
+                        height: laneArea,
+                        child: Stack(
+                          clipBehavior: Clip.hardEdge,
+                          children: <Widget>[
+                            // Fond des lignes : un glisser horizontal y fait
+                            // défiler la timeline (le seek vit sur la règle).
+                            Positioned.fill(
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onHorizontalDragUpdate: (details) {
+                                  if (_pinching) return;
+                                  zoom.panByPixels(details.delta.dx, width);
+                                  widget.onZoomChanged();
+                                },
+                              ),
                             ),
-                          ),
+                            for (var lane = 0; lane < laneCount; lane++)
+                              Positioned(
+                                left: 0,
+                                right: 0,
+                                top: lane * TimelineView.laneHeight,
+                                height: TimelineView.laneHeight,
+                                child: IgnorePointer(
+                                  // Décoratif : ne doit pas bloquer le fond.
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      border: Border(
+                                        bottom: BorderSide(
+                                          color: Colors.white.withValues(
+                                            alpha: 0.06,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            for (var lane = 0; lane < lanes.length; lane++)
+                              for (final row in lanes[lane])
+                                if (row.group case final group?)
+                                  _groupBar(group, lane, width)
+                                else if (row.shape case final shape?)
+                                  _shapeBar(
+                                    shape,
+                                    lane,
+                                    width,
+                                    groupColor: _groupColorFor(shape),
+                                  ),
+                          ],
                         ),
                       ),
                     ),
                   ),
-                for (var lane = 0; lane < lanes.length; lane++)
-                  for (final row in lanes[lane])
-                    if (row.group case final group?)
-                      _groupBar(group, lane, width)
-                    else if (row.shape case final shape?)
-                      _shapeBar(
-                        shape,
-                        lane,
-                        width,
-                        groupColor: _groupColorFor(shape),
-                      ),
-                Positioned(
-                  left: zoom.xFor(widget.timeMs, width) - 1,
-                  top: 0,
-                  bottom: 0,
-                  width: 2,
-                  child: const IgnorePointer(
-                    child: ColoredBox(color: Color(0xFFFF5C5C)),
-                  ),
+                ],
+              ),
+              // Tête de lecture : continue sur la règle ET sur les lignes.
+              Positioned(
+                left: zoom.xFor(widget.timeMs, width) - 1,
+                top: 0,
+                bottom: 0,
+                width: 2,
+                child: const IgnorePointer(
+                  child: ColoredBox(color: Color(0xFFFF5C5C)),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         );
       },
@@ -644,11 +669,9 @@ class _ShapeBar extends StatelessWidget {
       height: TimelineView.laneHeight - 8,
       child: GestureDetector(
         onTap: onSelect,
-        onHorizontalDragUpdate: (details) {
-          // Scrub de la tête de lecture, même au-dessus d'une barre.
-          if (pinching || moving) return;
-          onSeek(zoom.timeFor(details.localPosition.dx, width));
-        },
+        // Le glisser horizontal sur une barre ne déplace plus la tête de
+        // lecture (réservée à la règle) : il fait défiler la timeline, comme
+        // le fond des lignes.
         onLongPressStart: (details) => onMoveStart(),
         onLongPressMoveUpdate: (details) {
           if (!moving) return;

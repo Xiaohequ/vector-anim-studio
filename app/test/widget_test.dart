@@ -769,11 +769,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(piece.keyframes, hasLength(1));
 
-      // Scrubber le studio à 2000 ms : le fond SOUS les lignes du timeline
-      // (le centre vertical tombe sur la barre de pièce → onSelect).
+      // Scrubber le studio à 2000 ms : la RÈGLE en haut du timeline est la
+      // seule zone de seek (le fond des lignes fait défiler la vue).
       final timelineRect = tester.getRect(find.byType(TimelineView));
       await tester.tapAt(
-        timelineRect.bottomLeft + Offset(timelineRect.width / 2, -2),
+        timelineRect.topLeft + Offset(timelineRect.width / 2, 10),
       );
       await tester.pumpAndSettle();
 
@@ -1882,9 +1882,7 @@ void main() {
       );
 
       final timeline = tester.getRect(find.byType(TimelineView));
-      await tester.tapAt(
-        timeline.bottomLeft + Offset(timeline.width * 0.9, -2),
-      );
+      await tester.tapAt(timeline.topLeft + Offset(timeline.width * 0.9, 10));
       await tester.pumpAndSettle();
       expect(
         find.byTooltip('Keyframe d’os indisponible hors du segment'),
