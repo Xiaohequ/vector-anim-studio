@@ -67,6 +67,7 @@ jobs:
       - name: Détecter si cette exécution doit publier sur Google Play
         id: play-config
         if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        working-directory: .
         env:
           PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
           EVENT_NAME: ${{ github.event_name }}
@@ -201,6 +202,9 @@ jobs:
     timeout-minutes: 15
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Télécharger l'AAB signé
         uses: actions/download-artifact@v4
         with:
