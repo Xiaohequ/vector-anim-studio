@@ -6,6 +6,16 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Nom technique / dépôt : `vector_anim_studio` / https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`). Nom d'affichage : **Keyform Studio** depuis v0.26.0.
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
+- **v0.38.4 (18/10)** : timeline — le défilement ne reconstruit plus tout le
+  Studio. Le coût restant n'était pas dans la timeline mais dans son câblage :
+  chaque pixel de défilement appelait `onZoomChanged`, que le Studio branchait
+  sur un `setState` global (preview, barres, panneaux reconstruits à chaque
+  frame). Correctif : `onZoomChanged` devient optionnel, la timeline fait son
+  propre `setState`, le Studio ne s'y abonne plus. Régression attrapée par les
+  tests : pendant un appui long sur un segment, le glisser déplaçait le segment
+  ET faisait défiler la timeline → geste réservé au déplacement dès qu'un
+  segment est soulevé. Release `v0.38.4-build125`, publiée sur la piste Play
+  alpha. 312 tests.
 - **v0.38.3 (18/10)** : timeline — fluidité en zoom. Retour appareil sur la
   0.38.2 : « mieux, mais quand c'est zoomé le scroll horizontal n'est toujours
   pas fluide ». Cause : à fort zoom un segment de 60 s mesure **96 000 px** et
