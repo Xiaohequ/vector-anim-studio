@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -137,6 +138,45 @@ class _TimelineViewState extends State<TimelineView> {
   int _movingGroupCurrentStartMs = 0;
 
   bool get _pinching => _pointers.length >= 2;
+
+  /// Cache de l'empilement des lignes, invalidé par une signature bon marché
+  /// (nombre de formes/groupes, fenêtres, repli, noms). Le défilement ne
+  /// modifie aucune de ces valeurs : la signature reste stable et le calcul
+  /// n'est pas refait.
+  List<List<TimelineRow>>? _lanesCache;
+  String? _lanesSignature;
+
+  List<List<TimelineRow>> _lanesFor(AnimationProject project) {
+    final signature = _signatureOf(project);
+    if (_lanesCache != null && _lanesSignature == signature) {
+      return _lanesCache!;
+    }
+    final lanes = TimelineLayout.packRows(project);
+    _lanesCache = lanes;
+    _lanesSignature = signature;
+    return lanes;
+  }
+
+  static String _signatureOf(AnimationProject project) {
+    final buffer = StringBuffer();
+    for (final group in project.groups) {
+      buffer
+        ..write(group.id)
+        ..write(group.collapsed ? '1' : '0')
+        ..write(group.name)
+        ..write('|');
+    }
+    for (final shape in project.shapes) {
+      buffer
+        ..write(shape.id)
+        ..write(shape.startMs)
+        ..write(shape.endMs)
+        ..write(shape.groupId ?? '')
+        ..write(shape.name)
+        ..write('|');
+    }
+    return buffer.toString();
+  }
 
   void _onPointerDown(PointerDownEvent event) {
     _pointers[event.pointer] = event.localPosition;
@@ -308,6 +348,52 @@ class _TimelineViewState extends State<TimelineView> {
     widget.onGroupMoveEnd?.call(group);
   }
 
+  /// Barre d'une ligne, ou rien si elle est hors de la vue. Un seul point de
+  /// décision (plutôt qu'un `if` imbriqué dans la liste) : le `else` d'un
+  /// `if-case` imbriqué se rattache au mauvais `if` et supprimait toutes les
+  /// barres de formes.
+  Widget? _rowBar(
+    TimelineRow row,
+    int lane,
+    double width,
+    TimelineZoomState zoom,
+  ) {
+    final group = row.group;
+    if (group != null) {
+      if (!_groupVisibleInView(group, zoom, width)) return null;
+      return _groupBar(group, lane, width);
+    }
+    final shape = row.shape;
+    if (shape == null) return null;
+    if (!_shapeVisibleInView(shape, zoom, width)) return null;
+    return _shapeBar(shape, lane, width, groupColor: _groupColorFor(shape));
+  }
+
+  /// Une barre est construite si sa fenêtre croise la vue, avec une marge
+  /// d'une largeur d'écran de chaque côté : le défilement reste fluide et
+  /// rien ne « saute » à l'entrée du cadre.
+  bool _shapeVisibleInView(
+    VectorShape shape,
+    TimelineZoomState zoom,
+    double width,
+  ) {
+    final left = zoom.xFor(shape.startMs, width);
+    final right = zoom.xFor(shape.endMs, width);
+    return right >= -width && left <= width * 2;
+  }
+
+  bool _groupVisibleInView(
+    ShapeGroup group,
+    TimelineZoomState zoom,
+    double width,
+  ) {
+    final span = widget.project.groupSpanMs(group.id);
+    if (span == null) return false;
+    final left = zoom.xFor(span.$1, width);
+    final right = zoom.xFor(span.$2, width);
+    return right >= -width && left <= width * 2;
+  }
+
   Widget _groupBar(ShapeGroup group, int lane, double width) {
     final span = widget.project.groupSpanMs(group.id);
     if (span == null) return const SizedBox.shrink();
@@ -410,7 +496,9 @@ class _TimelineViewState extends State<TimelineView> {
     final zoom = widget.zoom;
     // Une ligne par pièce : les pistes d'os SÉPARÉES ont disparu (v0.21.0),
     // les keyframes d'un os vivent sur le segment de la forme qu'il porte.
-    final lanes = TimelineLayout.packRows(widget.project);
+    // L'empilement est mémoïsé : il était recalculé à chaque frame de
+    // défilement, alors qu'il ne change qu'avec la structure du projet.
+    final lanes = _lanesFor(widget.project);
     final laneCount = math.max(1, lanes.length);
     final laneArea = laneCount * TimelineView.laneHeight;
 
@@ -485,17 +573,13 @@ class _TimelineViewState extends State<TimelineView> {
                                   ),
                                 ),
                               ),
+                            // Seules les barres visibles sont construites :
+                            // une timeline chargée (dizaines de pièces) ne
+                            // payait sinon le prix de toutes ses barres à
+                            // chaque frame de défilement.
                             for (var lane = 0; lane < lanes.length; lane++)
                               for (final row in lanes[lane])
-                                if (row.group case final group?)
-                                  _groupBar(group, lane, width)
-                                else if (row.shape case final shape?)
-                                  _shapeBar(
-                                    shape,
-                                    lane,
-                                    width,
-                                    groupColor: _groupColorFor(shape),
-                                  ),
+                                ?_rowBar(row, lane, width, zoom),
                           ],
                         ),
                       ),
@@ -678,6 +762,26 @@ class _ShapeBar extends StatelessWidget {
   final Color? groupColor;
   final bool? groupVisible;
 
+  /// Keyframe la plus proche de [local] dans la barre, à moins de
+  /// [TimelineView.keyframeSelectionRadiusPx] pixels — même tolérance que
+  /// l'ancienne cible de contact de 20×20 px.
+  int? _keyframeAt(Offset local, double barWidth, List<int> keyTimes) {
+    if (keyTimes.isEmpty) return null;
+    final span = math.max(1, shape.endMs - shape.startMs);
+    int? best;
+    var bestDistance = double.infinity;
+    for (final keyTime in keyTimes) {
+      final x = ((keyTime - shape.startMs) / span).clamp(0.0, 1.0) * barWidth;
+      final distance = (local.dx - x).abs();
+      if (distance <= TimelineView.keyframeSelectionRadiusPx &&
+          distance < bestDistance) {
+        bestDistance = distance;
+        best = keyTime;
+      }
+    }
+    return best;
+  }
+
   @override
   Widget build(BuildContext context) {
     final shape = this.shape;
@@ -703,20 +807,22 @@ class _ShapeBar extends StatelessWidget {
         ? const Color(0xFFC084FC)
         : Theme.of(context).colorScheme.primary;
     // Keyframes affichées : celles de l'OS pour tout élément lié, y compris
-    // un groupe squelette ; sinon celles de la forme.
+    // un groupe squelette ; sinon celles de la forme. Le tri est déjà fait
+    // par le modèle (upsertKeyframe insère en ordre) : pas de Set ni de sort
+    // à chaque frame.
     final List<int> keyTimes;
     if (bound) {
-      keyTimes = <int>{
+      keyTimes = <int>[
         for (final key in rig!.trackOf(carrier!.id) ?? const <BoneKeyframe>[])
           if (key.timeMs >= shape.startMs && key.timeMs <= shape.endMs)
             key.timeMs,
-      }.toList()..sort();
+      ];
     } else {
-      keyTimes = <int>{
+      keyTimes = <int>[
         for (final key in shape.keyframes)
           if (key.timeMs >= shape.startMs && key.timeMs <= shape.endMs)
             key.timeMs,
-      }.toList()..sort();
+      ];
     }
 
     return Positioned(
@@ -725,7 +831,18 @@ class _ShapeBar extends StatelessWidget {
       width: barWidth,
       height: TimelineView.laneHeight - 8,
       child: GestureDetector(
-        onTap: onSelect,
+        // Les keyframes ne sont plus des widgets : le tap est résolu ici, sur
+        // la position locale, avec la même tolérance de 10 px à l'écran.
+        onTapUp: (details) {
+          final hit = _keyframeAt(details.localPosition, barWidth, keyTimes);
+          if (hit == null) {
+            onSelect();
+          } else if ((hit - timeMs).abs() <= toleranceMs) {
+            onDeleteKeyframe(hit);
+          } else {
+            onSeek(hit);
+          }
+        },
         // Le glisser horizontal sur une barre ne déplace plus la tête de
         // lecture (réservée à la règle) : il fait défiler la timeline, comme
         // le fond des lignes.
@@ -789,99 +906,139 @@ class _ShapeBar extends StatelessWidget {
                 width: 3,
                 child: IgnorePointer(child: ColoredBox(color: groupColor!)),
               ),
-            for (final keyTime in keyTimes)
-              Align(
-                alignment: Alignment(
-                  ((keyTime - shape.startMs) /
-                                  math.max(1, shape.endMs - shape.startMs))
-                              .clamp(0.0, 1.0) *
-                          2 -
-                      1,
-                  0.75,
-                ),
-                child: SizedBox.square(
-                  dimension: TimelineView.keyframeSelectionRadiusPx * 2,
-                  child: GestureDetector(
-                    key: ValueKey<String>(
-                      'timeline-keyframe-${shape.id}-$keyTime',
-                    ),
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () {
-                      if ((keyTime - timeMs).abs() <= toleranceMs) {
-                        onDeleteKeyframe(keyTime);
-                      } else {
-                        onSeek(keyTime);
-                      }
-                    },
-                    child: Center(
-                      child: (keyTime - timeMs).abs() <= toleranceMs
-                          ? Tooltip(
-                              message: AppStrings.text(
-                                'Retirer la keyframe au curseur',
-                              ),
-                              child: Container(
-                                width: 16,
-                                height: 16,
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFFFF5C5C),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.close,
-                                  size: 11,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            )
-                          : Transform.rotate(
-                              angle: 0.785398,
-                              child: Container(
-                                width: 7,
-                                height: 7,
-                                color: const Color(0xFFF2C94C),
-                              ),
-                            ),
-                    ),
+            // Keyframes dessinées par UN SEUL painter : un widget par
+            // keyframe (Tooltip + GestureDetector + Transform) coûtait plus
+            // de 2 ms chacune, soit des centaines de ms par frame sur une
+            // timeline chargée.
+            Positioned.fill(
+              child: IgnorePointer(
+                child: CustomPaint(
+                  painter: TimelineKeyframePainter(
+                    keyTimes: keyTimes,
+                    startMs: shape.startMs,
+                    endMs: shape.endMs,
+                    timeMs: timeMs,
+                    toleranceMs: toleranceMs,
                   ),
                 ),
               ),
-            _Handle(
-              alignment: Alignment.centerLeft,
-              msPerPixel: zoom.msPerPixel(width),
-              tooltip: AppStrings.text('Début d’affichage'),
-              onDragStart: () => onGestureStart(),
-              onDragEnd: () {},
-              onDrag: (deltaMs) {
-                final next = (shape.startMs + deltaMs).clamp(
-                  0,
-                  shape.endMs - TimelineView.minSpanMs,
-                );
-                onRangeChanged(next, shape.endMs);
-              },
             ),
-            _Handle(
-              alignment: Alignment.centerRight,
-              msPerPixel: zoom.msPerPixel(width),
-              tooltip: AppStrings.text('Fin d’affichage'),
-              onDragStart: () => onGestureStart(),
-              onDragEnd: () {},
-              onDrag: (deltaMs) {
-                // Sans borne haute : allonger la fin au-delà de la fin du
-                // projet étend la durée (dérivée du contenu) ; le
-                // défilement automatique garde la fin dans la vue.
-                final next = math.max(
-                  shape.startMs + TimelineView.minSpanMs,
-                  shape.endMs + deltaMs,
-                );
-                onRangeChanged(shape.startMs, next);
-                onFollowEdge(next);
-              },
-            ),
+            // Poignées du segment SÉLECTIONNÉ uniquement : deux widgets
+            // interactifs par barre coûtaient plusieurs millisecondes par
+            // frame sur une timeline chargée, pour une cible qu'on ne peut
+            // viser qu'après avoir sélectionné le segment.
+            if (selected) ...<Widget>[
+              _Handle(
+                alignment: Alignment.centerLeft,
+                msPerPixel: msPerPx,
+                tooltip: AppStrings.text('Début d’affichage'),
+                onDragStart: () => onGestureStart(),
+                onDragEnd: () {},
+                onDrag: (deltaMs) {
+                  final next = (shape.startMs + deltaMs).clamp(
+                    0,
+                    shape.endMs - TimelineView.minSpanMs,
+                  );
+                  onRangeChanged(next, shape.endMs);
+                },
+              ),
+              _Handle(
+                alignment: Alignment.centerRight,
+                msPerPixel: msPerPx,
+                tooltip: AppStrings.text('Fin d’affichage'),
+                onDragStart: () => onGestureStart(),
+                onDragEnd: () {},
+                onDrag: (deltaMs) {
+                  // Sans borne haute : allonger la fin au-delà de la fin du
+                  // projet étend la durée (dérivée du contenu) ; le
+                  // défilement automatique garde la fin dans la vue.
+                  final next = math.max(
+                    shape.startMs + TimelineView.minSpanMs,
+                    shape.endMs + deltaMs,
+                  );
+                  onRangeChanged(shape.startMs, next);
+                  onFollowEdge(next);
+                },
+              ),
+            ],
           ],
         ),
       ),
     );
   }
+}
+
+/// Keyframes d'un segment, dessinées en une seule passe.
+///
+/// Remplace un widget par keyframe (Tooltip + GestureDetector + Transform),
+/// qui coûtait plus de 2 ms chacune : sur une timeline chargée (40 pièces ×
+/// 20 poses) la reconstruction dépassait 500 ms par frame.
+class TimelineKeyframePainter extends CustomPainter {
+  const TimelineKeyframePainter({
+    required this.keyTimes,
+    required this.startMs,
+    required this.endMs,
+    required this.timeMs,
+    required this.toleranceMs,
+  });
+
+  final List<int> keyTimes;
+  final int startMs;
+  final int endMs;
+  final int timeMs;
+  final int toleranceMs;
+
+  static const Color _diamond = Color(0xFFF2C94C);
+  static const Color _delete = Color(0xFFFF5C5C);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (keyTimes.isEmpty || size.width <= 0) return;
+    final span = math.max(1, endMs - startMs);
+    final paint = Paint();
+    final centerY = size.height * 0.75;
+    for (final keyTime in keyTimes) {
+      final x = ((keyTime - startMs) / span).clamp(0.0, 1.0) * size.width;
+      final near = (keyTime - timeMs).abs() <= toleranceMs;
+      if (near) {
+        // Pastille de suppression : même repère visuel que l'ancien bouton.
+        paint.color = _delete;
+        canvas.drawCircle(Offset(x, centerY), 8, paint);
+        paint
+          ..color = Colors.white
+          ..strokeWidth = 1.6
+          ..style = PaintingStyle.stroke;
+        const arm = 3.2;
+        canvas.drawLine(
+          Offset(x - arm, centerY - arm),
+          Offset(x + arm, centerY + arm),
+          paint,
+        );
+        canvas.drawLine(
+          Offset(x - arm, centerY + arm),
+          Offset(x + arm, centerY - arm),
+          paint,
+        );
+        paint.style = PaintingStyle.fill;
+      } else {
+        // Losange jaune (carré pivoté à 45°).
+        paint.color = _diamond;
+        canvas.save();
+        canvas.translate(x, centerY);
+        canvas.rotate(math.pi / 4);
+        canvas.drawRect(const Rect.fromLTWH(-3.5, -3.5, 7, 7), paint);
+        canvas.restore();
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(TimelineKeyframePainter oldDelegate) =>
+      oldDelegate.timeMs != timeMs ||
+      oldDelegate.toleranceMs != toleranceMs ||
+      oldDelegate.startMs != startMs ||
+      oldDelegate.endMs != endMs ||
+      !listEquals(oldDelegate.keyTimes, keyTimes);
 }
 
 class _GroupBar extends StatelessWidget {
@@ -1044,10 +1201,13 @@ class _Handle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Pas de Tooltip ici : deux par segment suffisaient à coûter plusieurs
+    // millisecondes par frame sur une timeline chargée. Le libellé reste
+    // accessible via la sémantique.
     return Align(
       alignment: alignment,
-      child: Tooltip(
-        message: tooltip,
+      child: Semantics(
+        label: tooltip,
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onHorizontalDragStart: (details) => onDragStart?.call(),

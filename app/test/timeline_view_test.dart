@@ -213,26 +213,26 @@ void main() {
     'la sélection des keyframes suit une tolérance de 10 px au zoom',
     (tester) async {
       final project = _project();
-      final shape = project.shapes.first;
       final rec = _Rec();
       final zoom = TimelineZoomState(durationOf: () => 4000);
-      final keyframe = find.byKey(
-        ValueKey<String>('timeline-keyframe-${shape.id}-500'),
-      );
+      // Le segment 0–1000 ms occupe 200 px à la vue 4000 ms : la keyframe de
+      // 500 ms est à x = 100. Les lignes commencent SOUS la règle (20 px).
+      const barCenterY =
+          TimelineView.rulerHeight + 3 + (TimelineView.laneHeight - 8) / 2;
 
       for (final expectedViewMs in <int>[4000, 2000, 1000]) {
         expect(zoom.viewMs, expectedViewMs);
         final msPerPixel = zoom.msPerPixel(800);
         final insideTolerance = 500 + (9 * msPerPixel).round();
         final outsideTolerance = 500 + (11 * msPerPixel).round();
+        // Position de la keyframe de 500 ms à CE zoom.
+        final keyX = zoom.xFor(500, 800);
 
-        // La cible de contact garde 10 px de chaque côté du losange.
+        // À 9 px de la keyframe, le tap la supprime (tolérance de 10 px).
         await tester.pumpWidget(
           _host(project, zoom, rec, timeMs: insideTolerance),
         );
-        final center = tester.getCenter(keyframe);
-        expect(tester.getSize(keyframe), const Size(20, 20));
-        await tester.tapAt(center + const Offset(9, 0));
+        await tester.tapAt(Offset(keyX + 9, barCenterY));
         expect(rec.deletedKeyframes, contains(500));
         rec.deletedKeyframes.clear();
 
@@ -241,15 +241,14 @@ void main() {
         await tester.pumpWidget(
           _host(project, zoom, rec, timeMs: outsideTolerance),
         );
-        await tester.tap(keyframe);
+        await tester.tapAt(Offset(keyX, barCenterY));
         expect(rec.deletedKeyframes, isEmpty);
         expect(rec.seeked, 500);
         rec.seeked = null;
 
-        // 11 px à droite du rectangle (rayon 10 px) ne touche plus son hitbox.
-        final centerAfterTap = tester.getCenter(keyframe);
-        rec.seeked = null;
-        await tester.tapAt(centerAfterTap + const Offset(11, 0));
+        // 11 px à droite de la keyframe : plus aucune cible, le tap
+        // sélectionne le segment au lieu de bouger la tête de lecture.
+        await tester.tapAt(Offset(keyX + 11, barCenterY));
         expect(rec.seeked, isNull);
 
         if (expectedViewMs != 1000) {
@@ -458,16 +457,23 @@ void main() {
       _host(project, TimelineZoomState(durationOf: () => 4000), rec),
     );
 
-    // Deux losanges (keyframes de l’os), jamais celui du groupe (1000 ms).
-    final boneDiamonds = find.byWidgetPredicate(
-      (widget) =>
-          widget is Container && widget.color == const Color(0xFFF2C94C),
-    );
-    expect(boneDiamonds, findsNWidgets(2));
-    expect(
-      tester.widget<Container>(boneDiamonds.at(0)).color,
-      const Color(0xFFF2C94C),
-    );
+    // Les keyframes de l’os sont celles du segment : taper à 500 ms et à
+    // 1500 ms rejoint ces temps, alors qu’un tap à 1000 ms (la pose propre au
+    // groupe) ne trouve aucune keyframe et sélectionne le segment.
+    // Vue 4000 ms sur 800 px → 5 ms/px ; le segment 0–2000 ms fait 400 px.
+    const barCenterY =
+        TimelineView.rulerHeight + 3 + (TimelineView.laneHeight - 8) / 2;
+    rec.seeked = null;
+    await tester.tapAt(const Offset(100, barCenterY)); // 500 ms
+    expect(rec.seeked, 500);
+    rec.seeked = null;
+    await tester.tapAt(const Offset(300, barCenterY)); // 1500 ms
+    expect(rec.seeked, 1500);
+    rec.seeked = null;
+    rec.selectedBone = null;
+    await tester.tapAt(const Offset(200, barCenterY)); // 1000 ms : pas de pose
+    expect(rec.seeked, isNull);
+    expect(rec.selectedBone, bone.id);
 
     await tester.tap(find.text('Groupe importé'));
     await tester.pump();
