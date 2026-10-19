@@ -1,13 +1,12 @@
-# Keyform Studio 0.38.3
+# Keyform Studio 0.38.4
 
-## Timeline : défilement fluide quand c'est zoomé
+## Timeline : le défilement ne reconstruit plus tout le Studio
 
-- Les segments sont découpés à la vue : à fort zoom, un segment peut mesurer des dizaines de milliers de pixels de large, et Flutter peignait alors son fond arrondi et son nom sur toute cette largeur, même hors écran. Seule la portion visible est désormais dessinée.
-- Le fond, le liseré de groupe, le nom et les keyframes d'un segment sont peints en une seule passe, au lieu d'empiler un conteneur décoré, un texte et un painter.
-- Le nom d'un segment n'est plus peint quand on a défilé loin à l'intérieur : il n'apparaît qu'à son début.
+- Le zoom et le défilement de la timeline ne déclenchent plus de reconstruction de l'écran entier : la timeline se redessine seule. Le preview, les barres d'outils et les panneaux ne sont plus reconstruits à chaque pixel de défilement.
+- Pendant un appui long sur un segment, le glisser déplace le segment sans faire défiler la timeline en même temps.
 
 ## Vérifications
 
 - `flutter analyze` sans problème.
-- Suite complète : 312 tests réussis, dont les garde-fous de performance et les tests de gestes de la timeline.
+- Suite complète : 312 tests réussis.
 - Build Android et publication de la release par GitHub Actions.
