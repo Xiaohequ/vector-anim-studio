@@ -6,6 +6,20 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Nom technique / dépôt : `vector_anim_studio` / https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`). Nom d'affichage : **Keyform Studio** depuis v0.26.0.
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
+- **v0.38.2 (18/10)** : timeline — performance sur les projets chargés. Retour
+  appareil : « beaucoup d'éléments et beaucoup de keyframes → l'image saccade ».
+  Mesure : 40 pièces × 20 poses coûtaient **470 ms par frame** (budget 60 fps :
+  16,7 ms), avec un coût proportionnel aux keyframes (~2,3 ms par keyframe :
+  Tooltip + GestureDetector + Transform). Correctifs : keyframes peintes par un
+  seul `CustomPainter` (tap résolu sur la position locale, tolérance 10 px
+  conservée), culling des segments hors vue, empilement des lignes mémoïsé par
+  signature, poignées construites seulement sur le segment sélectionné. Le
+  nombre de widgets est désormais constant quel que soit le nombre de keyframes
+  (443 avec 2 comme avec 40 par pièce). Release `v0.38.2-build121`, publiée sur
+  la piste Play alpha. 312 tests. Pièges : un `if-case` imbriqué dans une liste
+  rattache son `else` au mauvais `if` (toutes les barres disparaissaient) ; une
+  mesure en ms dans le harnais de test (debug + JIT, ~20-45 ms de base) est trop
+  bruitée pour servir de garde-fou → tests structurels.
 - **v0.38.1 (18/10)** : timeline — arbitrage d'axe du glisser. Retour appareil
   sur la 0.38.0 : « le scroll horizontal ne marche pas chaque fois, l'appli
   priorise le vertical ». Cause : le `SingleChildScrollView` vertical et le
