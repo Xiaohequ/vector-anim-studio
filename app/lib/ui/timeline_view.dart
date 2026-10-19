@@ -825,16 +825,34 @@ class _ShapeBar extends StatelessWidget {
       ];
     }
 
+    // Découpe à la vue : à fort zoom une barre peut mesurer des dizaines de
+    // milliers de pixels de large, et Flutter peint alors un rectangle
+    // arrondi et un texte sur toute cette largeur, même hors écran. On ne
+    // construit que la portion visible (avec une marge), en gardant les
+    // coordonnées du segment pour les gestes et les keyframes.
+    final visibleLeft = math.max(pinnedLeft, -width * 0.5);
+    final visibleRight = math.min(pinnedLeft + barWidth, width * 1.5);
+    final clippedWidth = math.max(1.0, visibleRight - visibleLeft);
+    final offsetInBar = visibleLeft - pinnedLeft;
+
     return Positioned(
-      left: pinnedLeft,
+      left: visibleLeft,
       top: laneTop + 3,
-      width: barWidth,
+      width: clippedWidth,
       height: TimelineView.laneHeight - 8,
       child: GestureDetector(
+        // Opaque : le contenu de la barre est peint par un CustomPaint sous
+        // IgnorePointer, donc plus aucun enfant ne répond au hit-test. Sans
+        // ça le segment ne recevait plus ni tap ni appui long.
+        behavior: HitTestBehavior.opaque,
         // Les keyframes ne sont plus des widgets : le tap est résolu ici, sur
         // la position locale, avec la même tolérance de 10 px à l'écran.
         onTapUp: (details) {
-          final hit = _keyframeAt(details.localPosition, barWidth, keyTimes);
+          final hit = _keyframeAt(
+            details.localPosition + Offset(offsetInBar, 0),
+            barWidth,
+            keyTimes,
+          );
           if (hit == null) {
             onSelect();
           } else if ((hit - timeMs).abs() <= toleranceMs) {
@@ -861,147 +879,198 @@ class _ShapeBar extends StatelessWidget {
         onLongPressCancel: () {
           if (moving) onMoveEnd();
         },
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: <Widget>[
-            Container(
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: effectiveVisible ? 0.30 : 0.12),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(
-                  color: moving
-                      ? Colors.white
-                      : selected
-                      ? color
-                      : color.withValues(alpha: 0.5),
-                  width: moving || selected ? 2 : 1,
-                ),
-                boxShadow: moving
-                    ? <BoxShadow>[
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.45),
-                          blurRadius: 10,
-                          offset: const Offset(0, 3),
-                        ),
-                      ]
-                    : null,
-              ),
-              alignment: Alignment.centerLeft,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Text(
-                shape.name,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: effectiveVisible ? Colors.white : Colors.white38,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            if (groupColor != null)
-              Positioned(
-                left: 0,
-                top: 0,
-                bottom: 0,
-                width: 3,
-                child: IgnorePointer(child: ColoredBox(color: groupColor!)),
-              ),
-            // Keyframes dessinées par UN SEUL painter : un widget par
-            // keyframe (Tooltip + GestureDetector + Transform) coûtait plus
-            // de 2 ms chacune, soit des centaines de ms par frame sur une
-            // timeline chargée.
-            Positioned.fill(
-              child: IgnorePointer(
-                child: CustomPaint(
-                  painter: TimelineKeyframePainter(
-                    keyTimes: keyTimes,
-                    startMs: shape.startMs,
-                    endMs: shape.endMs,
-                    timeMs: timeMs,
-                    toleranceMs: toleranceMs,
+        child: SizedBox.expand(
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: <Widget>[
+              // Fond, liseré de groupe, nom et keyframes : UN SEUL painter,
+              // borné à la portion visible du segment. Un Container décoré +
+              // un Text + un CustomPaint par barre coûtaient plusieurs
+              // millisecondes par frame sur une timeline chargée.
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: CustomPaint(
+                    painter: TimelineBarPainter(
+                      color: color,
+                      visible: effectiveVisible,
+                      selected: selected,
+                      moving: moving,
+                      label: shape.name,
+                      groupColor: groupColor,
+                      keyTimes: keyTimes,
+                      startMs: shape.startMs,
+                      endMs: shape.endMs,
+                      timeMs: timeMs,
+                      toleranceMs: toleranceMs,
+                      barWidth: barWidth,
+                      offsetInBar: offsetInBar,
+                    ),
                   ),
                 ),
               ),
-            ),
-            // Poignées du segment SÉLECTIONNÉ uniquement : deux widgets
-            // interactifs par barre coûtaient plusieurs millisecondes par
-            // frame sur une timeline chargée, pour une cible qu'on ne peut
-            // viser qu'après avoir sélectionné le segment.
-            if (selected) ...<Widget>[
-              _Handle(
-                alignment: Alignment.centerLeft,
-                msPerPixel: msPerPx,
-                tooltip: AppStrings.text('Début d’affichage'),
-                onDragStart: () => onGestureStart(),
-                onDragEnd: () {},
-                onDrag: (deltaMs) {
-                  final next = (shape.startMs + deltaMs).clamp(
-                    0,
-                    shape.endMs - TimelineView.minSpanMs,
-                  );
-                  onRangeChanged(next, shape.endMs);
-                },
-              ),
-              _Handle(
-                alignment: Alignment.centerRight,
-                msPerPixel: msPerPx,
-                tooltip: AppStrings.text('Fin d’affichage'),
-                onDragStart: () => onGestureStart(),
-                onDragEnd: () {},
-                onDrag: (deltaMs) {
-                  // Sans borne haute : allonger la fin au-delà de la fin du
-                  // projet étend la durée (dérivée du contenu) ; le
-                  // défilement automatique garde la fin dans la vue.
-                  final next = math.max(
-                    shape.startMs + TimelineView.minSpanMs,
-                    shape.endMs + deltaMs,
-                  );
-                  onRangeChanged(shape.startMs, next);
-                  onFollowEdge(next);
-                },
-              ),
+              // Poignées du segment SÉLECTIONNÉ uniquement : deux widgets
+              // interactifs par barre coûtaient plusieurs millisecondes par
+              // frame sur une timeline chargée, pour une cible qu'on ne peut
+              // viser qu'après avoir sélectionné le segment.
+              if (selected) ...<Widget>[
+                _Handle(
+                  alignment: Alignment.centerLeft,
+                  msPerPixel: msPerPx,
+                  tooltip: AppStrings.text('Début d’affichage'),
+                  onDragStart: () => onGestureStart(),
+                  onDragEnd: () {},
+                  onDrag: (deltaMs) {
+                    final next = (shape.startMs + deltaMs).clamp(
+                      0,
+                      shape.endMs - TimelineView.minSpanMs,
+                    );
+                    onRangeChanged(next, shape.endMs);
+                  },
+                ),
+                _Handle(
+                  alignment: Alignment.centerRight,
+                  msPerPixel: msPerPx,
+                  tooltip: AppStrings.text('Fin d’affichage'),
+                  onDragStart: () => onGestureStart(),
+                  onDragEnd: () {},
+                  onDrag: (deltaMs) {
+                    // Sans borne haute : allonger la fin au-delà de la fin du
+                    // projet étend la durée (dérivée du contenu) ; le
+                    // défilement automatique garde la fin dans la vue.
+                    final next = math.max(
+                      shape.startMs + TimelineView.minSpanMs,
+                      shape.endMs + deltaMs,
+                    );
+                    onRangeChanged(shape.startMs, next);
+                    onFollowEdge(next);
+                  },
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
   }
 }
 
-/// Keyframes d'un segment, dessinées en une seule passe.
+/// Tout le contenu d'un segment en une seule passe : fond arrondi, liseré de
+/// groupe, nom et keyframes.
 ///
-/// Remplace un widget par keyframe (Tooltip + GestureDetector + Transform),
-/// qui coûtait plus de 2 ms chacune : sur une timeline chargée (40 pièces ×
-/// 20 poses) la reconstruction dépassait 500 ms par frame.
-class TimelineKeyframePainter extends CustomPainter {
-  const TimelineKeyframePainter({
+/// Deux raisons de tout peindre ici plutôt que d'empiler des widgets :
+///
+/// - un widget par keyframe (Tooltip + GestureDetector + Transform) coûtait
+///   plus de 2 ms chacune, soit des centaines de ms par frame sur une timeline
+///   chargée (40 pièces × 20 poses) ;
+/// - à fort zoom un segment peut mesurer des dizaines de milliers de pixels :
+///   le painter ne dessine que la portion visible ([offsetInBar] donne le
+///   décalage de la fenêtre dans le segment, [barWidth] sa largeur totale).
+class TimelineBarPainter extends CustomPainter {
+  const TimelineBarPainter({
+    required this.color,
+    required this.visible,
+    required this.selected,
+    required this.moving,
+    required this.label,
     required this.keyTimes,
     required this.startMs,
     required this.endMs,
     required this.timeMs,
     required this.toleranceMs,
+    required this.barWidth,
+    required this.offsetInBar,
+    this.groupColor,
   });
 
+  final Color color;
+  final bool visible;
+  final bool selected;
+  final bool moving;
+  final String label;
   final List<int> keyTimes;
   final int startMs;
   final int endMs;
   final int timeMs;
   final int toleranceMs;
 
+  /// Largeur TOTALE du segment, et décalage de la portion dessinée dedans.
+  final double barWidth;
+  final double offsetInBar;
+  final Color? groupColor;
+
   static const Color _diamond = Color(0xFFF2C94C);
   static const Color _delete = Color(0xFFFF5C5C);
 
   @override
   void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(6));
+
+    if (moving) {
+      canvas.drawShadow(
+        Path()..addRRect(rrect),
+        Colors.black.withValues(alpha: 0.45),
+        10,
+        false,
+      );
+    }
+    canvas.drawRRect(
+      rrect,
+      Paint()..color = color.withValues(alpha: visible ? 0.30 : 0.12),
+    );
+    canvas.drawRRect(
+      rrect.deflate(moving || selected ? 1 : 0.5),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = moving || selected ? 2 : 1
+        ..color = moving
+            ? Colors.white
+            : selected
+            ? color
+            : color.withValues(alpha: 0.5),
+    );
+
+    if (groupColor != null) {
+      canvas.drawRect(
+        Rect.fromLTWH(0, 0, 3, size.height),
+        Paint()..color = groupColor!,
+      );
+    }
+
+    // Nom du segment : ancré au début du SEGMENT, donc hors écran quand on a
+    // défilé loin dedans — il n'est alors pas peint du tout.
+    final labelX = 8 - offsetInBar;
+    if (labelX + 40 > 0 && labelX < size.width) {
+      final painter = TextPainter(
+        text: TextSpan(
+          text: label,
+          style: TextStyle(
+            fontSize: 11,
+            color: visible ? Colors.white : Colors.white38,
+          ),
+        ),
+        maxLines: 1,
+        ellipsis: '…',
+        textDirection: TextDirection.ltr,
+      )..layout(maxWidth: math.max(0, barWidth - 16));
+      painter.paint(canvas, Offset(labelX, (size.height - painter.height) / 2));
+    }
+
+    _paintKeyframes(canvas, size);
+  }
+
+  void _paintKeyframes(Canvas canvas, Size size) {
     if (keyTimes.isEmpty || size.width <= 0) return;
     final span = math.max(1, endMs - startMs);
     final paint = Paint();
     final centerY = size.height * 0.75;
     for (final keyTime in keyTimes) {
-      final x = ((keyTime - startMs) / span).clamp(0.0, 1.0) * size.width;
+      // Position dans le SEGMENT, ramenée dans la fenêtre dessinée.
+      final x =
+          ((keyTime - startMs) / span).clamp(0.0, 1.0) * barWidth - offsetInBar;
+      if (x < -12 || x > size.width + 12) continue;
       final near = (keyTime - timeMs).abs() <= toleranceMs;
       if (near) {
-        // Pastille de suppression : même repère visuel que l'ancien bouton.
         paint.color = _delete;
         canvas.drawCircle(Offset(x, centerY), 8, paint);
         paint
@@ -1021,7 +1090,6 @@ class TimelineKeyframePainter extends CustomPainter {
         );
         paint.style = PaintingStyle.fill;
       } else {
-        // Losange jaune (carré pivoté à 45°).
         paint.color = _diamond;
         canvas.save();
         canvas.translate(x, centerY);
@@ -1033,11 +1101,19 @@ class TimelineKeyframePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(TimelineKeyframePainter oldDelegate) =>
+  bool shouldRepaint(TimelineBarPainter oldDelegate) =>
+      oldDelegate.color != color ||
+      oldDelegate.visible != visible ||
+      oldDelegate.selected != selected ||
+      oldDelegate.moving != moving ||
+      oldDelegate.label != label ||
+      oldDelegate.groupColor != groupColor ||
       oldDelegate.timeMs != timeMs ||
       oldDelegate.toleranceMs != toleranceMs ||
       oldDelegate.startMs != startMs ||
       oldDelegate.endMs != endMs ||
+      oldDelegate.barWidth != barWidth ||
+      oldDelegate.offsetInBar != offsetInBar ||
       !listEquals(oldDelegate.keyTimes, keyTimes);
 }
 

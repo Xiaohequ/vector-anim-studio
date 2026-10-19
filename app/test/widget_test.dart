@@ -22,6 +22,29 @@ import 'package:vector_anim_studio/ui/shape_properties_sheet.dart';
 import 'package:vector_anim_studio/ui/studio_screen.dart';
 import 'package:vector_anim_studio/ui/timeline_view.dart';
 
+/// Libellés des segments de la timeline : les noms de pièces sont PEINTS par
+/// [TimelineBarPainter], plus des widgets `Text`.
+List<String> _timelineLabels(WidgetTester tester) => tester
+    .widgetList<CustomPaint>(find.byType(CustomPaint))
+    .map((paint) => paint.painter)
+    .whereType<TimelineBarPainter>()
+    .map((painter) => painter.label)
+    .toList();
+
+/// Tape le segment dont le libellé est [label] (les noms sont peints, donc
+/// introuvables par `find.text`).
+Future<void> _tapTimelineBar(WidgetTester tester, String label) async {
+  final bars = find.byWidgetPredicate(
+    (w) =>
+        w is CustomPaint &&
+        w.painter is TimelineBarPainter &&
+        (w.painter! as TimelineBarPainter).label == label,
+  );
+  expect(bars, findsOneWidget, reason: 'segment « $label » introuvable');
+  await tester.tap(bars);
+  await tester.pumpAndSettle();
+}
+
 /// Dépôt en mémoire pour les tests de widgets.
 ///
 /// `sqflite_common_ffi` ne progresse pas dans la zone fake-async de
@@ -374,8 +397,7 @@ void main() {
             ),
           )
           .size;
-      await tester.tap(find.text('Visible'));
-      await tester.pumpAndSettle();
+      await _tapTimelineBar(tester, 'Visible');
       expect(find.byTooltip('Propriétés de la forme'), findsOneWidget);
 
       final after = tester
@@ -414,7 +436,7 @@ void main() {
     await tester.tap(find.byIcon(Icons.undo).last);
     await tester.pumpAndSettle();
     expect(undoButton().onPressed, isNull);
-    expect(find.text('Bloc'), findsOneWidget);
+    expect(_timelineLabels(tester), contains('Bloc'));
   });
 
   testWidgets('undo annule l’ajout d’une forme', (tester) async {
@@ -432,14 +454,14 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Enregistrer'));
     await tester.pumpAndSettle();
-    expect(find.text('Forme 1'), findsOneWidget);
+    expect(_timelineLabels(tester), contains('Forme 1'));
     expect(undoButton().onPressed, isNotNull);
 
     // Annuler : la forme disparaît de la timeline.
     await tester.tap(find.byIcon(Icons.undo).last);
     await tester.pumpAndSettle();
     expect(undoButton().onPressed, isNull);
-    expect(find.text('Forme 1'), findsNothing);
+    expect(_timelineLabels(tester), isNot(contains('Forme 1')));
   });
 
   testWidgets('créer un groupe depuis Éléments et le sauvegarder', (
@@ -1031,32 +1053,36 @@ void main() {
 
       // ① Plus de piste d'os séparée (🦴) : une seule ligne, celle de la pièce.
       expect(find.textContaining('\u{1F9B4}'), findsNothing);
-      expect(find.text('Bloc'), findsOneWidget);
+      expect(_timelineLabels(tester), contains('Bloc'));
 
       // ② Les keyframes dessinées sont celles de l'OS (500 et 1500 ms), pas
       // celles de la forme (250 ms).
       final painters = tester
           .widgetList<CustomPaint>(find.byType(CustomPaint))
           .map((paint) => paint.painter)
-          .whereType<TimelineKeyframePainter>()
+          .whereType<TimelineBarPainter>()
           .toList();
       expect(painters, hasLength(1), reason: 'un painter par segment');
       expect(painters.single.keyTimes, <int>[500, 1500]);
 
-      // ③ Couleur propre au segment lié (vert os, alpha de remplissage 0.30).
-      final bars = tester
-          .widgetList<Container>(find.byType(Container))
-          .where(
-            (c) =>
-                c.decoration is BoxDecoration &&
-                (c.decoration! as BoxDecoration).color ==
-                    const Color(0xFF3ECF8E).withValues(alpha: 0.30),
-          )
-          .toList();
-      expect(bars, hasLength(1), reason: 'un segment lié coloré en vert os');
+      // ③ Couleur propre au segment lié (vert os).
+      expect(
+        painters.single.color,
+        const Color(0xFF3ECF8E),
+        reason: 'un segment lié est coloré en vert os',
+      );
 
       // ④ Clic sur le segment → l'OS est sélectionné (sélection exclusive).
-      await tester.tap(find.text('Bloc'));
+      final timeline = tester.getRect(find.byType(TimelineView));
+      await tester.tapAt(
+        Offset(
+          timeline.left + 20,
+          timeline.top +
+              TimelineView.rulerHeight +
+              3 +
+              (TimelineView.laneHeight - 8) / 2,
+        ),
+      );
       await tester.pumpAndSettle();
       expect(find.byTooltip('Propriétés de l’os'), findsOneWidget);
       expect(find.byTooltip('Propriétés de la forme'), findsNothing);
@@ -1111,7 +1137,7 @@ void main() {
       expect(group.isInstance, isTrue);
       expect(group.embeddedIsSkeleton, isTrue);
       expect(group.embeddedProjectId, source.id);
-      expect(find.textContaining('Personnage source'), findsOneWidget);
+      expect(_timelineLabels(tester), contains('Personnage source'));
       expect(find.textContaining('🦴'), findsNothing);
 
       // Le groupe a des transformations et ses propres keyframes, et peut être
@@ -1235,7 +1261,7 @@ void main() {
     );
     expect(savedSource.name, 'VASF importé');
     expect(savedSource.isSkeleton, isTrue);
-    expect(find.textContaining('VASF importé'), findsOneWidget);
+    expect(_timelineLabels(tester), contains('VASF importé'));
   });
 
   testWidgets('une instance de projet squelette s’anime dans un vectoriel', (
@@ -1270,7 +1296,7 @@ void main() {
     );
 
     await pumpStudio(tester, repository, host);
-    expect(find.textContaining('Rat'), findsOneWidget);
+    expect(_timelineLabels(tester), contains('Rat'));
 
     // Lecture : le rig du sous-projet est échantillonné à son temps de
     // boucle, sans planter (rendu à chaque frame).
@@ -1928,15 +1954,13 @@ void main() {
       await pumpStudio(tester, repository, project);
 
       // Le segment lié sélectionne l'os, comme en v0.21.0.
-      await tester.tap(find.text('Liée'));
-      await tester.pumpAndSettle();
+      await _tapTimelineBar(tester, 'Liée');
       expect(find.byTooltip('Propriétés de l’os'), findsOneWidget);
       expect(find.byTooltip('Propriétés de la forme'), findsNothing);
 
       // Une autre forme sélectionnée dans la timeline doit effacer la
       // sélection d'os et sélectionner la forme correspondante.
-      await tester.tap(find.text('Libre'));
-      await tester.pumpAndSettle();
+      await _tapTimelineBar(tester, 'Libre');
       expect(find.byTooltip('Propriétés de l’os'), findsNothing);
       expect(find.byTooltip('Propriétés de la forme'), findsOneWidget);
     },
@@ -2119,7 +2143,7 @@ void main() {
       await pumpStudio(tester, repository, project);
       await tester.tap(find.text('Éléments'));
       await tester.pumpAndSettle();
-      expect(find.text('Bloc'), findsWidgets);
+      expect(_timelineLabels(tester), contains('Bloc'));
       await tester.tapAt(const Offset(10, 10));
       await tester.pumpAndSettle();
       // Le bouton de propriétés reste accessible pour la forme sélectionnée.
