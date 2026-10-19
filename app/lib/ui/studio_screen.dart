@@ -3059,7 +3059,10 @@ class _StudioScreenState extends State<StudioScreen>
                       );
                       _scheduleSave();
                     },
-                    onZoomChanged: () => setState(() {}),
+                    // Pas d'abonnement au zoom/défilement : la timeline se
+                    // reconstruit elle-même. Un setState global ici
+                    // reconstruisait tout le Studio (preview compris) à
+                    // chaque pixel de défilement.
                   ),
           ),
         ],

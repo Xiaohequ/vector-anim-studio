@@ -30,8 +30,8 @@ class TimelineView extends StatefulWidget {
     required this.onMoveEnd,
     required this.onSeek,
     required this.onDeleteKeyframe,
-    required this.onZoomChanged,
     required this.onGestureStart,
+    this.onZoomChanged,
     this.skeletonRig,
     this.selectedBoneId,
     this.onSelectBone,
@@ -63,8 +63,11 @@ class TimelineView extends StatefulWidget {
   final ValueChanged<int> onSeek;
   final void Function(VectorShape shape, int timeMs) onDeleteKeyframe;
 
-  /// Notifie l'écran d'un zoom/défilement (setState).
-  final VoidCallback onZoomChanged;
+  /// Notifie l'écran d'un zoom/défilement. Optionnel : la timeline se
+  /// reconstruit elle-même (setState local), l'écran n'a rien à refaire —
+  /// un setState global par pixel de défilement reconstruisait tout le
+  /// Studio, preview compris.
+  final VoidCallback? onZoomChanged;
 
   /// Début d'un geste modifiant la timeline (appui long ou poignée) : l'écran
   /// y prend le snapshot d'annulation AVANT modification.
@@ -138,6 +141,14 @@ class _TimelineViewState extends State<TimelineView> {
   int _movingGroupCurrentStartMs = 0;
 
   bool get _pinching => _pointers.length >= 2;
+
+  /// Reconstruit la timeline SEULE après un zoom/défilement. L'écran n'est
+  /// prévenu que s'il s'y est abonné : un setState global par pixel de
+  /// défilement reconstruisait tout le Studio, preview compris.
+  void _notifyZoomChanged() {
+    setState(() {});
+    widget.onZoomChanged?.call();
+  }
 
   /// Cache de l'empilement des lignes, invalidé par une signature bon marché
   /// (nombre de formes/groupes, fenêtres, repli, noms). Le défilement ne
@@ -219,7 +230,7 @@ class _TimelineViewState extends State<TimelineView> {
     widget.zoom.panByPixels(focal.dx - _pinchFocal.dx, _width);
     _pinchDistance = distance;
     _pinchFocal = focal;
-    widget.onZoomChanged();
+    _notifyZoomChanged();
   }
 
   /// Un seul doigt : l'axe est verrouillé au premier déplacement significatif,
@@ -238,8 +249,11 @@ class _TimelineViewState extends State<TimelineView> {
     if (_dragAxis == 1) {
       // La règle déplace la tête de lecture : pas de défilement ici.
       if (_dragOnRuler || _width <= 0) return;
+      // Un segment soulevé par un appui long se déplace : le geste ne doit
+      // pas faire défiler la timeline en même temps.
+      if (_movingShape != null || _movingGroup != null) return;
       widget.zoom.panByPixels(delta.dx, _width);
-      widget.onZoomChanged();
+      _notifyZoomChanged();
       return;
     }
     if (!_verticalScroll.hasClients) return;
@@ -304,7 +318,7 @@ class _TimelineViewState extends State<TimelineView> {
   /// Défilement automatique : garde le bord manipulé dans la vue (95 % de la
   /// largeur), comme le suivi de la tête de lecture pendant la lecture.
   void _followEdge(int timeMs) {
-    if (widget.zoom.followEdge(timeMs)) widget.onZoomChanged();
+    if (widget.zoom.followEdge(timeMs)) _notifyZoomChanged();
   }
 
   void _handleMoveEnd(VectorShape shape) {
