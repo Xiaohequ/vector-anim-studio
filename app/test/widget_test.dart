@@ -1033,14 +1033,15 @@ void main() {
       expect(find.textContaining('\u{1F9B4}'), findsNothing);
       expect(find.text('Bloc'), findsOneWidget);
 
-      // ② Losanges = keyframes de l'OS (2), pas celles de la forme (1 à 250).
-      final diamonds = find.byWidgetPredicate(
-        (w) =>
-            w is Container &&
-            w.color == const Color(0xFFF2C94C) &&
-            w.constraints == const BoxConstraints.tightFor(width: 7, height: 7),
-      );
-      expect(diamonds, findsNWidgets(2));
+      // ② Les keyframes dessinées sont celles de l'OS (500 et 1500 ms), pas
+      // celles de la forme (250 ms).
+      final painters = tester
+          .widgetList<CustomPaint>(find.byType(CustomPaint))
+          .map((paint) => paint.painter)
+          .whereType<TimelineKeyframePainter>()
+          .toList();
+      expect(painters, hasLength(1), reason: 'un painter par segment');
+      expect(painters.single.keyTimes, <int>[500, 1500]);
 
       // ③ Couleur propre au segment lié (vert os, alpha de remplissage 0.30).
       final bars = tester
