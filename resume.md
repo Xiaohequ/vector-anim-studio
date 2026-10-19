@@ -6,6 +6,20 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Nom technique / dépôt : `vector_anim_studio` / https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`). Nom d'affichage : **Keyform Studio** depuis v0.26.0.
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
+- **v0.38.3 (18/10)** : timeline — fluidité en zoom. Retour appareil sur la
+  0.38.2 : « mieux, mais quand c'est zoomé le scroll horizontal n'est toujours
+  pas fluide ». Cause : à fort zoom un segment de 60 s mesure **96 000 px** et
+  Flutter peignait son fond arrondi + bordure + nom sur toute cette largeur,
+  hors écran compris. Correctifs : découpe des barres à la vue (marge d'une
+  demi-largeur d'écran, `offsetInBar` conservé pour gestes et keyframes) ; fond,
+  liseré, nom et keyframes dans un seul `TimelineBarPainter` ; nom peint
+  seulement près du début du segment. Bug attrapé : le `GestureDetector` d'une
+  barre délègue le hit-test à ses enfants, tous passés sous `IgnorePointer` →
+  tap et appui long morts ; corrigé par `behavior: HitTestBehavior.opaque`.
+  Release `v0.38.3-build123`, publiée sur la piste Play alpha. 312 tests.
+  Piège tests : les noms de segments sont désormais PEINTS, `find.text` ne les
+  trouve plus → helpers `_timelineLabels` / `_tapTimelineBar` qui lisent
+  `TimelineBarPainter.label`.
 - **v0.38.2 (18/10)** : timeline — performance sur les projets chargés. Retour
   appareil : « beaucoup d'éléments et beaucoup de keyframes → l'image saccade ».
   Mesure : 40 pièces × 20 poses coûtaient **470 ms par frame** (budget 60 fps :
