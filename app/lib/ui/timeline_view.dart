@@ -108,6 +108,26 @@ class _TimelineViewState extends State<TimelineView> {
   Offset _pinchFocal = Offset.zero;
   double _width = 0;
 
+  /// Défilement vertical des lignes, piloté MANUELLEMENT depuis le [Listener]
+  /// racine : le scroll natif et un détecteur horizontal se disputaient
+  /// l'arène de gestes et le vertical gagnait souvent. Ici un seul arbitre
+  /// décide de l'axe (voir [_handleSinglePointerDrag]).
+  final ScrollController _verticalScroll = ScrollController();
+
+  /// Dernière position connue du doigt unique et axe verrouillé du geste :
+  /// 0 = indécis, 1 = horizontal (défilement de la timeline), 2 = vertical
+  /// (défilement des lignes).
+  Offset? _dragLast;
+  int _dragAxis = 0;
+
+  /// Le geste a commencé sur la règle : c'est elle qui déplace la tête de
+  /// lecture, le [Listener] ne doit pas défiler la timeline.
+  bool _dragOnRuler = false;
+
+  /// Déplacement minimal avant de verrouiller un axe (absorbe le tremblement
+  /// du doigt et laisse les taps et appuis longs intacts).
+  static const double _axisLockSlop = 6;
+
   /// Segment en cours de déplacement (appui long) : détenu ici pour pouvoir
   /// l'annuler immédiatement dès qu'un pincement à deux doigts démarre.
   VectorShape? _movingShape;
@@ -120,6 +140,11 @@ class _TimelineViewState extends State<TimelineView> {
 
   void _onPointerDown(PointerDownEvent event) {
     _pointers[event.pointer] = event.localPosition;
+    if (_pointers.length == 1) {
+      _dragLast = event.localPosition;
+      _dragAxis = 0;
+      _dragOnRuler = event.localPosition.dy < TimelineView.rulerHeight;
+    }
     if (_pointers.length == 2) {
       _pinchDistance = _distance();
       _pinchFocal = _midpoint();
@@ -137,7 +162,11 @@ class _TimelineViewState extends State<TimelineView> {
   void _onPointerMove(PointerMoveEvent event) {
     if (!_pointers.containsKey(event.pointer)) return;
     _pointers[event.pointer] = event.localPosition;
-    if (!_pinching || _width <= 0) return;
+    if (!_pinching) {
+      _handleSinglePointerDrag(event.localPosition);
+      return;
+    }
+    if (_width <= 0) return;
     final distance = _distance();
     final focal = _midpoint();
     if (_pinchDistance > 0 && distance > 0) {
@@ -153,9 +182,43 @@ class _TimelineViewState extends State<TimelineView> {
     widget.onZoomChanged();
   }
 
+  /// Un seul doigt : l'axe est verrouillé au premier déplacement significatif,
+  /// puis tenu jusqu'au relâchement. Un glisser horizontal défile la timeline,
+  /// un glisser vertical défile les lignes — jamais les deux à la fois, et
+  /// jamais l'inverse de ce que le doigt a amorcé.
+  void _handleSinglePointerDrag(Offset position) {
+    final last = _dragLast;
+    if (last == null) return;
+    final delta = position - last;
+    _dragLast = position;
+    if (_dragAxis == 0) {
+      if (delta.distance < _axisLockSlop) return;
+      _dragAxis = delta.dx.abs() > delta.dy.abs() ? 1 : 2;
+    }
+    if (_dragAxis == 1) {
+      // La règle déplace la tête de lecture : pas de défilement ici.
+      if (_dragOnRuler || _width <= 0) return;
+      widget.zoom.panByPixels(delta.dx, _width);
+      widget.onZoomChanged();
+      return;
+    }
+    if (!_verticalScroll.hasClients) return;
+    final metrics = _verticalScroll.position;
+    final target = (_verticalScroll.offset - delta.dy).clamp(
+      0.0,
+      metrics.maxScrollExtent,
+    );
+    if (target != _verticalScroll.offset) _verticalScroll.jumpTo(target);
+  }
+
   void _onPointerUp(PointerEvent event) {
     _pointers.remove(event.pointer);
     if (!_pinching) _pinchDistance = 0;
+    if (_pointers.isEmpty) {
+      _dragLast = null;
+      _dragAxis = 0;
+      _dragOnRuler = false;
+    }
   }
 
   double _distance() {
@@ -389,24 +452,18 @@ class _TimelineViewState extends State<TimelineView> {
                     ),
                   ),
                   Expanded(
+                    // Défilement vertical piloté par le [Listener] racine :
+                    // `NeverScrollableScrollPhysics` retire le scroll natif de
+                    // l'arène de gestes, sinon il gagne le geste horizontal et
+                    // les lignes montent au lieu de la timeline de défiler.
                     child: SingleChildScrollView(
+                      controller: _verticalScroll,
+                      physics: const NeverScrollableScrollPhysics(),
                       child: SizedBox(
                         height: laneArea,
                         child: Stack(
                           clipBehavior: Clip.hardEdge,
                           children: <Widget>[
-                            // Fond des lignes : un glisser horizontal y fait
-                            // défiler la timeline (le seek vit sur la règle).
-                            Positioned.fill(
-                              child: GestureDetector(
-                                behavior: HitTestBehavior.opaque,
-                                onHorizontalDragUpdate: (details) {
-                                  if (_pinching) return;
-                                  zoom.panByPixels(details.delta.dx, width);
-                                  widget.onZoomChanged();
-                                },
-                              ),
-                            ),
                             for (var lane = 0; lane < laneCount; lane++)
                               Positioned(
                                 left: 0,
