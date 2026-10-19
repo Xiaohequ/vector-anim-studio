@@ -281,6 +281,80 @@ void main() {
     expect(zoom.offsetMs, greaterThan(before));
   });
 
+  testWidgets('un glisser vertical défile les lignes, sans toucher au temps', (
+    tester,
+  ) async {
+    // Beaucoup de lignes : la zone défilante a de la matière à faire défiler.
+    final project = AnimationProject.blank();
+    for (var i = 0; i < 20; i++) {
+      final shape = VectorShape(name: 'P$i', startMs: 0, endMs: 1000);
+      shape.layers.add(ShapeLayer(name: 'L', kind: ShapeKind.rect));
+      project.shapes.add(shape);
+    }
+    final rec = _Rec();
+    final zoom = TimelineZoomState(durationOf: () => 4000)..zoomAt(4, 0.5);
+    await tester.pumpWidget(_host(project, zoom, rec));
+
+    final beforeOffset = zoom.offsetMs;
+    final scrollable = find.byType(SingleChildScrollView);
+    final beforeScroll = tester
+        .state<ScrollableState>(
+          find.descendant(of: scrollable, matching: find.byType(Scrollable)),
+        )
+        .position
+        .pixels;
+
+    // Glisser vers le haut : les lignes montent, le temps ne bouge pas.
+    await tester.dragFrom(const Offset(400, 200), const Offset(0, -120));
+    await tester.pump();
+
+    final afterScroll = tester
+        .state<ScrollableState>(
+          find.descendant(of: scrollable, matching: find.byType(Scrollable)),
+        )
+        .position
+        .pixels;
+    expect(afterScroll, greaterThan(beforeScroll));
+    expect(zoom.offsetMs, beforeOffset);
+    expect(rec.seeked, isNull);
+  });
+
+  testWidgets('un glisser horizontal ne fait pas défiler les lignes', (
+    tester,
+  ) async {
+    final project = AnimationProject.blank();
+    for (var i = 0; i < 20; i++) {
+      final shape = VectorShape(name: 'P$i', startMs: 0, endMs: 1000);
+      shape.layers.add(ShapeLayer(name: 'L', kind: ShapeKind.rect));
+      project.shapes.add(shape);
+    }
+    final rec = _Rec();
+    final zoom = TimelineZoomState(durationOf: () => 4000)..zoomAt(4, 0.5);
+    await tester.pumpWidget(_host(project, zoom, rec));
+
+    final scrollable = find.byType(SingleChildScrollView);
+    final beforeScroll = tester
+        .state<ScrollableState>(
+          find.descendant(of: scrollable, matching: find.byType(Scrollable)),
+        )
+        .position
+        .pixels;
+    final beforeOffset = zoom.offsetMs;
+
+    // Glisser franchement horizontal : la timeline défile, les lignes non.
+    await tester.dragFrom(const Offset(600, 200), const Offset(-200, 0));
+    await tester.pump();
+
+    final afterScroll = tester
+        .state<ScrollableState>(
+          find.descendant(of: scrollable, matching: find.byType(Scrollable)),
+        )
+        .position
+        .pixels;
+    expect(afterScroll, beforeScroll);
+    expect(zoom.offsetMs, greaterThan(beforeOffset));
+  });
+
   testWidgets('appui long + glisser déplace le segment, keyframes suivent', (
     tester,
   ) async {

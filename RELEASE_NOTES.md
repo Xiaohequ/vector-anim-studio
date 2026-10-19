@@ -1,14 +1,13 @@
-# Keyform Studio 0.38.0
+# Keyform Studio 0.38.1
 
-## Timeline : règle collante et gestes clarifiés
+## Timeline : le glisser horizontal est fiable
 
-- La règle de temps reste visible en haut de la timeline quand les lignes défilent verticalement.
-- La tête de lecture ne se déplace plus que sur la règle : un tap ou un glisser horizontal sur la règle positionne le curseur.
-- Partout ailleurs (fond des lignes et segments), un glisser horizontal fait défiler la timeline au lieu de déplacer le curseur.
-- L'appui long sur un segment continue de déplacer le segment avec ses keyframes.
+- Le défilement horizontal de la timeline ne part plus en défilement vertical : l'axe est verrouillé dès les premiers pixels du geste, puis tenu jusqu'au relâchement.
+- Un glisser vertical défile les lignes, un glisser horizontal défile le temps — jamais l'un à la place de l'autre.
+- La règle de temps reste collée en haut et reste la seule zone qui déplace la tête de lecture.
 
 ## Vérifications
 
 - `flutter analyze` sans problème.
-- Suite complète : 308 tests réussis, dont les tests de la timeline réécrits pour les nouveaux gestes.
+- Suite complète : 310 tests réussis, dont deux nouveaux tests qui reproduisent le conflit d'axes (glisser vertical = lignes seules, glisser horizontal = temps seul).
 - Build Android et publication de la release par GitHub Actions.
