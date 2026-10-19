@@ -1,15 +1,13 @@
-# Keyform Studio 0.38.2
+# Keyform Studio 0.38.3
 
-## Timeline : défilement fluide sur les projets chargés
+## Timeline : défilement fluide quand c'est zoomé
 
-- Les keyframes ne sont plus des widgets : elles sont peintes en une seule passe. Une timeline de 40 pièces × 20 poses construisait plus de 800 widgets interactifs par frame ; elle en construit désormais un nombre constant.
-- Seuls les segments visibles sont construits : un projet de plusieurs dizaines de pièces ne paie plus le prix des segments hors du cadre.
-- L'empilement des lignes est mémoïsé : il n'est plus recalculé à chaque frame de défilement.
-- Les poignées de redimensionnement n'apparaissent que sur le segment sélectionné.
-- La sélection des keyframes garde sa zone cliquable d'environ 10 px, quel que soit le zoom.
+- Les segments sont découpés à la vue : à fort zoom, un segment peut mesurer des dizaines de milliers de pixels de large, et Flutter peignait alors son fond arrondi et son nom sur toute cette largeur, même hors écran. Seule la portion visible est désormais dessinée.
+- Le fond, le liseré de groupe, le nom et les keyframes d'un segment sont peints en une seule passe, au lieu d'empiler un conteneur décoré, un texte et un painter.
+- Le nom d'un segment n'est plus peint quand on a défilé loin à l'intérieur : il n'apparaît qu'à son début.
 
 ## Vérifications
 
 - `flutter analyze` sans problème.
-- Suite complète : 312 tests réussis, dont deux garde-fous de performance (le nombre de widgets ne dépend plus du nombre de keyframes ; les segments hors vue ne sont pas construits).
+- Suite complète : 312 tests réussis, dont les garde-fous de performance et les tests de gestes de la timeline.
 - Build Android et publication de la release par GitHub Actions.

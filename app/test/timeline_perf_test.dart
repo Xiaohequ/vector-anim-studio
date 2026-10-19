@@ -94,7 +94,7 @@ void main() {
     await tester.pumpWidget(_host(project, zoom));
     final allVisible = tester
         .widgetList<CustomPaint>(find.byType(CustomPaint))
-        .where((paint) => paint.painter is TimelineKeyframePainter)
+        .where((paint) => paint.painter is TimelineBarPainter)
         .length;
 
     // Zoom maximal sur le début du projet : la plupart des segments sortent
@@ -103,7 +103,7 @@ void main() {
     await tester.pumpWidget(_host(project, zoom));
     final zoomed = tester
         .widgetList<CustomPaint>(find.byType(CustomPaint))
-        .where((paint) => paint.painter is TimelineKeyframePainter)
+        .where((paint) => paint.painter is TimelineBarPainter)
         .length;
 
     debugPrint('PERF segments construits : $allVisible → $zoomed après zoom');

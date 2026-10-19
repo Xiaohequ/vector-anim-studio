@@ -98,6 +98,17 @@ List<double> _barWidths(WidgetTester tester) {
   return widths;
 }
 
+/// Libellés des segments : les pièces sont peintes par [TimelineBarPainter],
+/// les groupes restent des widgets `Text`.
+List<String> _labels(WidgetTester tester) => <String>[
+  ...tester
+      .widgetList<CustomPaint>(find.byType(CustomPaint))
+      .map((paint) => paint.painter)
+      .whereType<TimelineBarPainter>()
+      .map((painter) => painter.label),
+  ...tester.widgetList<Text>(find.byType(Text)).map((text) => text.data ?? ''),
+];
+
 void main() {
   testWidgets('groupe replié affiche sa ligne et la déplie avec ses fils', (
     tester,
@@ -114,15 +125,17 @@ void main() {
     final zoom = TimelineZoomState(durationOf: () => 4000);
     await tester.pumpWidget(_host(project, zoom, rec));
 
-    expect(find.text('Groupe tête'), findsOneWidget);
-    expect(find.text('Œil'), findsNothing);
-    expect(find.text('Bouche'), findsNothing);
+    // Les noms sont PEINTS par le painter des barres, plus des widgets Text :
+    // on lit les libellés dans les painters.
+    expect(_labels(tester), contains('Groupe tête'));
+    expect(_labels(tester), isNot(contains('Œil')));
+    expect(_labels(tester), isNot(contains('Bouche')));
     await tester.tap(find.byTooltip('Déplier le groupe'));
     await tester.pumpWidget(_host(project, zoom, rec));
 
-    expect(find.text('Œil'), findsOneWidget);
-    expect(find.text('Bouche'), findsOneWidget);
-    expect(find.text('Fond'), findsOneWidget);
+    expect(_labels(tester), contains('Œil'));
+    expect(_labels(tester), contains('Bouche'));
+    expect(_labels(tester), contains('Fond'));
     expect(find.byTooltip('Replier le groupe'), findsOneWidget);
   });
 
@@ -202,11 +215,20 @@ void main() {
     // donnait durée × ms/px = 5000 px, une barre qui couvre tout l'écran).
     expect(_barWidths(tester), contains(200.0));
 
-    // Zoom ×4 (vue 1000 ms) : le même segment occupe toute la largeur.
+    // Zoom ×4 (vue 1000 ms, centré sur 2000 ms) : le segment 0–4000 ms
+    // mesurerait 3200 px. Il est DÉCOUPÉ à la vue (marge d'une demi-largeur
+    // d'écran de chaque côté) : aucune barre construite ne dépasse 2 × la
+    // largeur de l'écran, même quand le segment est immense.
     final zoom = TimelineZoomState(durationOf: () => 4000)..zoomAt(4, 0.5);
     await tester.pumpWidget(_host(project, zoom, rec));
     expect(zoom.viewMs, 1000);
-    expect(_barWidths(tester), contains(800.0));
+    final widths = _barWidths(tester);
+    expect(widths, isNotEmpty);
+    expect(
+      widths.every((w) => w <= 1600),
+      isTrue,
+      reason: 'les barres sont découpées à la vue : $widths',
+    );
   });
 
   testWidgets(
@@ -475,7 +497,9 @@ void main() {
     expect(rec.seeked, isNull);
     expect(rec.selectedBone, bone.id);
 
-    await tester.tap(find.text('Groupe importé'));
+    // Le nom est peint : on tape le segment lui-même (au centre de la barre).
+    rec.selectedBone = null;
+    await tester.tapAt(const Offset(200, barCenterY));
     await tester.pump();
     expect(rec.selectedBone, bone.id);
     expect(rec.selectedShape, isNull);
