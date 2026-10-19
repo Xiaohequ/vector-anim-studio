@@ -6,6 +6,14 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Nom technique / dépôt : `vector_anim_studio` / https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`). Nom d'affichage : **Keyform Studio** depuis v0.26.0.
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
+- **v0.38.1 (18/10)** : timeline — arbitrage d'axe du glisser. Retour appareil
+  sur la 0.38.0 : « le scroll horizontal ne marche pas chaque fois, l'appli
+  priorise le vertical ». Cause : le `SingleChildScrollView` vertical et le
+  détecteur horizontal se disputaient l'arène de gestes. Correctif : le scroll
+  passe en `NeverScrollableScrollPhysics` et son défilement est piloté depuis le
+  `Listener` racine (`ScrollController`) ; l'axe est verrouillé au premier
+  déplacement significatif (6 px) puis tenu jusqu'au relâchement. Release
+  `v0.38.1-build119`, publiée sur la piste Play alpha. 310 tests.
 - **v0.38.0 (18/10)** : timeline — la règle de temps reste collée en haut quand
   les lignes défilent ; la tête de lecture ne se déplace QUE sur la règle (tap ou
   glisser) ; un glisser horizontal sur le fond ou sur un segment fait défiler la
