@@ -194,7 +194,7 @@ IMPLÉMENTÉ + VALIDÉ APPAREIL v0.12.0 (26/09) :**
 
 Compatibilité : tout en champs optionnels — un vasf-1 reste importable ;
 `version: 3` marque les fichiers qui dépendent des extensions v3. Côté
-agent : skill `generer-animation-json` (workspace nanobot) — génère le vasf
+agent : skill `keyformstudio-animation-json` (workspace nanobot) — génère le vasf
 et le valide (`scripts/validate_vasf.py`, v1/v2/v3) ; exemples :
 `docs/vasf-3-example.json` (ciel couchant + flamme morphée + bras 3 os en
 IK avec `move`), import + rendu vérifiés par `test/vasf_g3_example_test.dart`.

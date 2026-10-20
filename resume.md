@@ -6,6 +6,13 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Nom technique / dépôt : `vector_anim_studio` / https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`). Nom d'affichage : **Keyform Studio** depuis v0.26.0.
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
+- **Skill agent dans le dépôt (21/10)** : `skills/keyformstudio-animation-json/`
+  est désormais versionné avec le code (spec `docs/vasf-1-format.md` + exemples
+  `docs/vasf-*.json` = source de vérité, `references/` = miroir exact).
+  Frontmatter `version` / `vasf` / `app` + `CHANGELOG.md` ; `scripts/sync_skill.sh`
+  copie le skill vers le workspace de l'agent (`--check` vérifie la dérive,
+  `--pull` rapatrie une édition faite côté agent) et la CI exécute `--check`.
+  Une évolution du format touche docs + code + tests + skill dans le MÊME commit.
 - **v0.38.4 (18/10)** : timeline — le défilement ne reconstruit plus tout le
   Studio. Le coût restant n'était pas dans la timeline mais dans son câblage :
   chaque pixel de défilement appelait `onZoomChanged`, que le Studio branchait
@@ -893,7 +900,7 @@ v0.9.0, l'**animation squelette** (rig maître).
   translation d'os + IK à plus de 2 os.
 - Autres options v0.12 : reciblage de binding à la keyframe, test de rendu
   permanent en CI, import par fichier.
-- Le skill agent `skills/generer-animation-json/` génère le vasf-1
+- Le skill agent `skills/keyformstudio-animation-json/` génère le vasf-1
   (références + validateur `validate_vasf.py`) — à étendre à la v2.
 
 ### v0.22.0 (publiée et validée sur appareil — CI run #51 verte)

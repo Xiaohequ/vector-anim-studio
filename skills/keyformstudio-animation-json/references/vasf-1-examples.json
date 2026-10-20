@@ -1,0 +1,92 @@
+{
+  "_readme": "Trois exemples valides. Exemple 1 : personnage squelette (bras saluant, vasf-1). Exemple 2 : balle rebondissante vectorielle (vasf-1). Exemple 3 : personnage multi-couches avec palette, defs et cycle (vasf-2). L'application accepte UN SEUL de ces objets par import.",
+  "example1_skeleton_waving": {
+    "version": 1,
+    "name": "Rat qui salue",
+    "canvas": {"width": 720, "height": 1280, "fps": 25, "background": "#14161C"},
+    "shapes": [
+      {"name": "Torse", "type": "rect", "color": "#3ECF8E", "width": 140, "height": 180, "x": 360, "y": 700, "end": 2.5},
+      {"name": "Bras", "type": "rect", "color": "#5B8DEF", "width": 40, "height": 110, "x": 300, "y": 660, "end": 2.5},
+      {"name": "Avant-bras", "type": "rect", "color": "#7DD3FC", "width": 34, "height": 90, "x": 300, "y": 560, "end": 2.5}
+    ],
+    "skeleton": {
+      "name": "Corps",
+      "bones": [
+        {"name": "Épaule", "joint": [360, 620], "angle": 0, "length": 90},
+        {"name": "Coude", "parent": "Épaule", "joint": [360, 710], "angle": 100, "length": 80, "ik": true},
+        {"name": "Poignet", "parent": "Coude", "joint": [425, 740], "angle": 60, "length": 60}
+      ],
+      "bind": {"Bras": "Épaule", "Avant-bras": "Coude"},
+      "keyframes": [
+        {"bone": "Épaule", "t": 0.0, "angle": 0},
+        {"bone": "Épaule", "t": 0.8, "angle": 20},
+        {"bone": "Épaule", "t": 1.6, "angle": 0},
+        {"bone": "Coude", "t": 0.0, "angle": 100},
+        {"bone": "Coude", "t": 0.8, "angle": 150},
+        {"bone": "Coude", "t": 1.6, "angle": 100},
+        {"bone": "Poignet", "t": 0.0, "angle": 60},
+        {"bone": "Poignet", "t": 0.8, "angle": 20},
+        {"bone": "Poignet", "t": 1.6, "angle": 60}
+      ]
+    }
+  },
+  "example2_bouncing_ball": {
+    "version": 1,
+    "name": "Balle rebondissante",
+    "canvas": {"width": 720, "height": 1280, "fps": 25, "background": "#14161C"},
+    "shapes": [
+      {
+        "name": "Balle",
+        "type": "circle",
+        "color": "#FF5C5C",
+        "width": 120, "height": 120,
+        "end": 1.6,
+        "x": 360, "y": 400,
+        "keyframes": [
+          {"t": 0.0, "x": 360, "y": 300},
+          {"t": 0.4, "x": 360, "y": 1040, "easing": "easeIn"},
+          {"t": 0.8, "x": 360, "y": 300, "easing": "easeOut"},
+          {"t": 1.2, "x": 360, "y": 1040, "easing": "easeIn"},
+          {"t": 1.6, "x": 360, "y": 300, "easing": "easeOut"}
+        ]
+      }
+    ]
+  },
+  "example3_multilayer_vasf2": {
+    "version": 2,
+    "name": "Bonhomme qui hoche la tête",
+    "canvas": {"width": 720, "height": 1280, "fps": 25, "background": "#14161C"},
+    "theme": {"peau": "#FFE3C2", "encre": "#14161C", "veste": "#5B8DEF"},
+    "defs": {
+      "main": {"type": "circle", "color": "$peau", "width": 56, "height": 56}
+    },
+    "shapes": [
+      {
+        "name": "Corps",
+        "type": "rect",
+        "color": "$veste",
+        "width": 150, "height": 220,
+        "x": 360, "y": 980, "end": 2
+      },
+      {
+        "name": "Tête",
+        "x": 360, "y": 800, "end": 2,
+        "layers": [
+          {"name": "Peau", "type": "circle", "color": "$peau", "width": 170, "height": 170},
+          {"name": "Œil gauche", "type": "circle", "color": "$encre", "width": 26, "height": 26, "x": -34, "y": -22},
+          {"name": "Œil droit", "type": "circle", "color": "$encre", "width": 26, "height": 26, "x": 34, "y": -22},
+          {"name": "Sourire", "type": "path", "filled": false, "strokeWidth": 5,
+           "points": [[-38, 28], [38, 28], [0, 58]], "y": 43}
+        ],
+        "keyframes": [
+          {"t": 0.0, "y": 800, "easing": "easeInOut"},
+          {"t": 0.5, "y": 780, "easing": "easeInOut"},
+          {"t": 1.0, "y": 800, "easing": "easeInOut"}
+        ],
+        "cycle": {"repeat": 1}
+      },
+      {"name": "Main gauche", "ref": "main", "x": 240, "y": 900, "end": 2},
+      {"name": "Main droite", "ref": "main", "x": 480, "y": 900, "end": 2}
+    ]
+  }
+}

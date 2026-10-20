@@ -47,7 +47,10 @@ vector_anim_studio/
 │  │  └─ ui/                            # home_screen, studio_screen, shape_editor_screen, timeline_view, palette
 │  └─ test/                             # repository, timeline layout, modèle, widgets
 ├─ docs/PLAN.md                         # décisions techniques
+├─ docs/vasf-1-format.md                # spec du format d'échange VASF (source de vérité)
+├─ skills/keyformstudio-animation-json/  # skill agent : génère et valide un VASF
 ├─ scripts/flutter_docker.sh            # CLI Flutter via le conteneur cirruslabs
+├─ scripts/sync_skill.sh                # copie le skill vers le workspace de l'agent
 └─ tmp/                                 # artefacts de build (non versionné)
 ```
 
@@ -64,6 +67,23 @@ scripts/flutter_docker.sh flutter build apk --release
 ```
 
 Le build Android de référence est fait par **GitHub Actions** (`.github/workflows/android.yml`) : `flutter analyze`, `flutter test`, build de l'APK release, puis publication d'une release GitHub contenant l'APK. Le workflow ne produit volontairement **pas** d'App Bundle (`.aab`).
+
+## Skill agent VASF
+
+Le skill `skills/keyformstudio-animation-json/` apprend à un agent à générer et valider un fichier VASF importable. Il est versionné avec le code : la spec (`docs/vasf-1-format.md`) et les exemples (`docs/vasf-*.json`) sont la source de vérité, `references/` en est un miroir exact.
+
+```bash
+# Vérifier la cohérence (references/ = docs/, frontmatter, validateur)
+scripts/sync_skill.sh --check
+
+# Copier le skill vers le workspace de l'agent nanobot
+scripts/sync_skill.sh
+
+# Rapatrier une édition faite côté agent (à relire avant commit)
+scripts/sync_skill.sh --pull
+```
+
+Le frontmatter de `SKILL.md` porte `version` (skill), `vasf` (version de format couverte) et `app` (version d'appli de référence) ; l'historique est dans `skills/keyformstudio-animation-json/CHANGELOG.md`. Une évolution du format touche `docs/`, le code, les tests et le skill dans le **même commit**, puis incrémente `version`. La CI exécute `sync_skill.sh --check` à chaque build.
 
 ## Contraintes d'environnement
 
