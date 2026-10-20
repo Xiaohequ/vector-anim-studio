@@ -6,13 +6,15 @@ v0.9.0, l'**animation squelette** (rig maître).
 
 - Nom technique / dépôt : `vector_anim_studio` / https://github.com/Xiaohequ/vector-anim-studio (privé, branche `main`). Nom d'affichage : **Keyform Studio** depuis v0.26.0.
 - Workspace : `/root/.nanobot/workspace/vector_anim_studio`
-- **Skill agent dans le dépôt (21/10)** : `skills/keyformstudio-animation-json/`
-  est désormais versionné avec le code (spec `docs/vasf-1-format.md` + exemples
-  `docs/vasf-*.json` = source de vérité, `references/` = miroir exact).
-  Frontmatter `version` / `vasf` / `app` + `CHANGELOG.md` ; `scripts/sync_skill.sh`
-  copie le skill vers le workspace de l'agent (`--check` vérifie la dérive,
-  `--pull` rapatrie une édition faite côté agent) et la CI exécute `--check`.
-  Une évolution du format touche docs + code + tests + skill dans le MÊME commit.
+- **Skill agent dans son propre dépôt (21/10)** : `keyformstudio-animation-json`
+  vit dans https://github.com/Xiaohequ/keyformstudio-animation-json (public, MIT)
+  et est publié sur ClawHub. Ce dépôt-ci reste la source de vérité de la spec
+  (`docs/vasf-1-format.md`) et des exemples (`docs/vasf-*.json`), recopiés dans
+  `references/` du dépôt du skill. `scripts/sync_skill.sh` recopie docs/ vers le
+  dépôt du skill puis vers le workspace de l'agent (`--check` vérifie la dérive,
+  `--pull` rapatrie une édition faite côté skill) ; la CI exécute `--check`.
+  Une évolution du format touche docs + code + tests dans le MÊME commit, puis
+  on synchronise et on publie une nouvelle version du skill.
 - **v0.38.4 (18/10)** : timeline — le défilement ne reconstruit plus tout le
   Studio. Le coût restant n'était pas dans la timeline mais dans son câblage :
   chaque pixel de défilement appelait `onZoomChanged`, que le Studio branchait

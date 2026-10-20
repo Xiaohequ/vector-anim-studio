@@ -1,18 +1,21 @@
 #!/usr/bin/env bash
-# Synchronise le skill keyformstudio-animation-json entre le dépôt (source de
-# vérité) et le workspace de l'agent nanobot.
+# Synchronise le skill keyformstudio-animation-json, qui vit désormais dans son
+# PROPRE dépôt public (Xiaohequ/keyformstudio-animation-json, publié sur
+# ClawHub). Ce dépôt-ci reste la source de vérité de la spec et des exemples.
 #
-#   scripts/sync_skill.sh            copie dépôt -> workspace
+#   scripts/sync_skill.sh            copie docs/ -> dépôt du skill, puis
+#                                    dépôt du skill -> workspace de l'agent
 #   scripts/sync_skill.sh --check    vérifie seulement (code retour 1 si dérive)
-#   scripts/sync_skill.sh --pull     copie workspace -> dépôt (édition faite
-#                                    côté agent, à relire avant commit)
+#   scripts/sync_skill.sh --pull     copie dépôt du skill -> docs/ (édition faite
+#                                    côté skill, à relire avant commit)
 #
-# Vérifie aussi que references/ est identique à docs/ (miroir de contrôle).
+# Le dépôt du skill est cherché dans $SKILL_REPO, sinon dans un dossier voisin
+# du projet (../keyformstudio-animation-json).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 NAME="keyformstudio-animation-json"
-SRC="$ROOT/skills/$NAME"
+SKILL_REPO="${SKILL_REPO:-$ROOT/../$NAME}"
 WORKSPACE="${NANOBOT_WORKDIR:-$HOME/.nanobot/workspace}"
 DST="$WORKSPACE/skills/$NAME"
 
@@ -26,8 +29,14 @@ esac
 
 fail=0
 
-# Copie récursive sans rsync (absent de l'image nanobot) : remplace la cible
-# et ignore les caches Python.
+if [ ! -d "$SKILL_REPO" ]; then
+  printf '✘ dépôt du skill introuvable : %s\n' "$SKILL_REPO" >&2
+  printf '  cloner https://github.com/Xiaohequ/%s à côté du projet,\n' "$NAME" >&2
+  printf '  ou définir SKILL_REPO=/chemin/vers/%s\n' "$NAME" >&2
+  exit 2
+fi
+
+# Copie récursive sans rsync (absent de l'image nanobot).
 copy_tree() {
   local from="$1" to="$2"
   rm -rf "$to"
@@ -36,28 +45,30 @@ copy_tree() {
     | (cd "$to" && tar -xf -)
 }
 
-# 1. references/ doit refléter docs/ (mêmes fichiers, même contenu).
-for f in "$SRC"/references/*; do
+# 1. references/ du dépôt du skill doit refléter docs/ (mêmes fichiers, même
+#    contenu) : c'est le miroir publié de la spec.
+for f in "$ROOT"/docs/vasf-*.md "$ROOT"/docs/vasf-*.json; do
   base="$(basename "$f")"
-  if [ ! -f "$ROOT/docs/$base" ]; then
-    printf '✘ docs/%s manquant (présent dans references/)\n' "$base" >&2
+  if [ ! -f "$SKILL_REPO/references/$base" ]; then
+    printf '✘ references/%s manquant dans le dépôt du skill\n' "$base" >&2
     fail=1
-  elif ! diff -q "$f" "$ROOT/docs/$base" >/dev/null; then
+  elif ! diff -q "$f" "$SKILL_REPO/references/$base" >/dev/null; then
     printf '✘ references/%s diffère de docs/%s\n' "$base" "$base" >&2
     fail=1
   fi
 done
 
-# 2. Le frontmatter doit déclarer version / vasf / app.
+# 2. Le frontmatter du skill doit déclarer version / vasf / app.
 for key in version vasf app; do
-  if ! grep -q "^$key:" "$SRC/SKILL.md"; then
+  if ! grep -q "^$key:" "$SKILL_REPO/SKILL.md"; then
     printf '✘ frontmatter : clé « %s » absente de SKILL.md\n' "$key" >&2
     fail=1
   fi
 done
 
-# 3. Les scripts doivent être exécutables et valider un exemple.
-if ! python3 "$SRC/scripts/validate_vasf.py" "$ROOT/docs/vasf-6-example.json" >/dev/null; then
+# 3. Le validateur du skill doit accepter l'exemple VASF-6.
+if ! python3 "$SKILL_REPO/scripts/validate_vasf.py" \
+    "$ROOT/docs/vasf-6-example.json" >/dev/null; then
   printf '✘ validate_vasf.py refuse docs/vasf-6-example.json\n' >&2
   fail=1
 fi
@@ -75,15 +86,19 @@ if [ "$fail" -ne 0 ]; then
 fi
 
 if [ "$MODE" = "pull" ]; then
-  if [ ! -d "$DST" ]; then
-    printf '✘ %s introuvable : rien à rapatrier\n' "$DST" >&2
-    exit 1
-  fi
-  copy_tree "$DST" "$SRC"
-  printf '✔ skill rapatrié depuis %s — relire puis committer\n' "$DST"
+  for f in "$SKILL_REPO"/references/*; do
+    cp "$f" "$ROOT/docs/$(basename "$f")"
+  done
+  printf '✔ docs/ rapatrié depuis %s — relire puis committer\n' "$SKILL_REPO"
   exit 0
 fi
 
+# push : docs/ -> dépôt du skill, puis dépôt du skill -> workspace de l'agent.
+for f in "$ROOT"/docs/vasf-*.md "$ROOT"/docs/vasf-*.json; do
+  cp "$f" "$SKILL_REPO/references/$(basename "$f")"
+done
+printf '✔ docs/ copié vers %s/references\n' "$SKILL_REPO"
+
 mkdir -p "$WORKSPACE/skills"
-copy_tree "$SRC" "$DST"
+copy_tree "$SKILL_REPO" "$DST"
 printf '✔ skill copié vers %s\n' "$DST"

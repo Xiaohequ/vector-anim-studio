@@ -48,9 +48,8 @@ vector_anim_studio/
 │  └─ test/                             # repository, timeline layout, modèle, widgets
 ├─ docs/PLAN.md                         # décisions techniques
 ├─ docs/vasf-1-format.md                # spec du format d'échange VASF (source de vérité)
-├─ skills/keyformstudio-animation-json/  # skill agent : génère et valide un VASF
 ├─ scripts/flutter_docker.sh            # CLI Flutter via le conteneur cirruslabs
-├─ scripts/sync_skill.sh                # copie le skill vers le workspace de l'agent
+├─ scripts/sync_skill.sh                # synchronise le skill (dépôt séparé + workspace)
 └─ tmp/                                 # artefacts de build (non versionné)
 ```
 
@@ -70,20 +69,22 @@ Le build Android de référence est fait par **GitHub Actions** (`.github/workfl
 
 ## Skill agent VASF
 
-Le skill `skills/keyformstudio-animation-json/` apprend à un agent à générer et valider un fichier VASF importable. Il est versionné avec le code : la spec (`docs/vasf-1-format.md`) et les exemples (`docs/vasf-*.json`) sont la source de vérité, `references/` en est un miroir exact.
+Le skill `keyformstudio-animation-json` apprend à un agent à générer et valider un fichier VASF importable. Il vit dans son **propre dépôt public** — https://github.com/Xiaohequ/keyformstudio-animation-json — et est publié sur ClawHub.
+
+Ce dépôt-ci reste la source de vérité : `docs/vasf-1-format.md` et `docs/vasf-*.json` sont la spec et les exemples officiels, recopiés dans `references/` du dépôt du skill.
 
 ```bash
-# Vérifier la cohérence (references/ = docs/, frontmatter, validateur)
+# Vérifier la cohérence (references/ du skill = docs/, frontmatter, validateur)
 scripts/sync_skill.sh --check
 
-# Copier le skill vers le workspace de l'agent nanobot
+# Recopier docs/ vers le dépôt du skill, puis vers le workspace de l'agent
 scripts/sync_skill.sh
 
-# Rapatrier une édition faite côté agent (à relire avant commit)
+# Rapatrier une édition faite côté skill (à relire avant commit)
 scripts/sync_skill.sh --pull
 ```
 
-Le frontmatter de `SKILL.md` porte `version` (skill), `vasf` (version de format couverte) et `app` (version d'appli de référence) ; l'historique est dans `skills/keyformstudio-animation-json/CHANGELOG.md`. Une évolution du format touche `docs/`, le code, les tests et le skill dans le **même commit**, puis incrémente `version`. La CI exécute `sync_skill.sh --check` à chaque build.
+Le dépôt du skill est cherché dans `$SKILL_REPO`, sinon dans un dossier voisin (`../keyformstudio-animation-json`). Le frontmatter de son `SKILL.md` porte `version` (skill), `vasf` (version de format couverte) et `app` (version d'appli de référence) ; son historique est dans son `CHANGELOG.md`. Une évolution du format touche `docs/`, le code et les tests dans le **même commit**, puis on lance `sync_skill.sh` et on publie une nouvelle version du skill. La CI de ce dépôt exécute `sync_skill.sh --check` à chaque build.
 
 ## Contraintes d'environnement
 
