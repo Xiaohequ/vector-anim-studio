@@ -38,7 +38,7 @@ Rules of thumb for generating a valid file:
 
 | field | type | default | notes |
 |---|---|---|---|
-| version | int | required | `1`–`5`; choose the highest extension version used |
+| version | int | required | `1`–`6`; choose the highest extension version used |
 | name | string | "Animation importée" | project name |
 | canvas.width / height | number | 720 / 1280 | 16…4096 |
 | canvas.fps | int | 25 | 5…60 (export fps) |
@@ -353,7 +353,7 @@ of a shape to a bone; a plain key keeps binding the whole shape.
 
 Heavy engine features, delivered in v0.15. All fields are optional; a file
 that uses none of them exports as v1/v2. Mixing v2 and v3 fields in one file
-is fine. The importer accepts versions 1 to 5; the exporter uses the highest
+is fine. The importer accepts versions 1 to 6; the exporter uses the highest
 extension version present, so later v4/v5 features take precedence.
 
 ## Animated color — `color` / `colors` in a shape keyframe
