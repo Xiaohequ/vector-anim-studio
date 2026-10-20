@@ -1382,6 +1382,24 @@ class AnimationProject {
   bool isShapeVisibleAt(VectorShape shape, int timeMs) =>
       shape.isVisibleAt(timeMs) && (groupById(shape.groupId)?.visible ?? true);
 
+  /// Centre visuel d'un groupe : moyenne des positions de BASE de ses fils
+  /// (x/y de repos). Sert de pivot à la transformation statique du groupe —
+  /// tourner ou mettre à l'échelle un groupe le fait autour de son centre
+  /// visuel, pas de l'origine du canvas. Null si le groupe n'a aucun fil.
+  Offset? groupCenter(String groupId) {
+    var sumX = 0.0;
+    var sumY = 0.0;
+    var count = 0;
+    for (final shape in shapes) {
+      if (shape.groupId != groupId) continue;
+      sumX += shape.x;
+      sumY += shape.y;
+      count++;
+    }
+    if (count == 0) return null;
+    return Offset(sumX / count, sumY / count);
+  }
+
   /// Étendue temporelle d'un groupe, dérivée de ses fils (début minimal, fin
   /// maximale). Null si le groupe n'a aucun fil.
   (int, int)? groupSpanMs(String groupId) {

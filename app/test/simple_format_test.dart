@@ -476,7 +476,7 @@ void main() {
   });
 
   group('vasf-2', () {
-    test('versions 1/2/3/4/5 acceptées, version 6 rejetée', () {
+    test('versions 1/2/3/4/5/6 acceptées, version 7 rejetée', () {
       final imported = SimpleAnimationFormat.fromJson(<String, Object?>{
         'version': 2,
         'shapes': <Object?>[
@@ -509,9 +509,17 @@ void main() {
         ],
       });
       expect(v5.shapes, hasLength(1));
+      // v0.39 : la version 6 (groupes d'éléments) est acceptée.
+      final v6 = SimpleAnimationFormat.fromJson(<String, Object?>{
+        'version': 6,
+        'shapes': <Object?>[
+          <String, Object?>{'name': 'Bloc', 'type': 'rect'},
+        ],
+      });
+      expect(v6.shapes, hasLength(1));
       expect(
         () => SimpleAnimationFormat.fromJson(<String, Object?>{
-          'version': 6,
+          'version': 7,
           'shapes': <Object?>[
             <String, Object?>{'name': 'Bloc', 'type': 'rect'},
           ],
@@ -520,14 +528,17 @@ void main() {
       );
       try {
         SimpleAnimationFormat.fromJson(<String, Object?>{
-          'version': 6,
+          'version': 7,
           'shapes': <Object?>[
             <String, Object?>{'name': 'Bloc', 'type': 'rect'},
           ],
         });
         fail('SimpleFormatException attendu');
       } on SimpleFormatException catch (error) {
-        expect(error.toString(), contains('version : 1, 2, 3, 4 ou 5 attendu'));
+        expect(
+          error.toString(),
+          contains('version : 1, 2, 3, 4, 5 ou 6 attendu'),
+        );
       }
     });
 
@@ -1876,6 +1887,96 @@ void main() {
       expect((layers.first as Map)['cornerRadius'], 9);
       final imported = SimpleAnimationFormat.fromJson(json);
       expect(imported.shapes.single.layers.first.cornerRadius, 9);
+    });
+
+    test('groupes v6 : export, import et round-trip par NOM', () {
+      final project = AnimationProject.blank(name: 'Groupes');
+      final group = ShapeGroup(
+        name: 'Tête',
+        colorValue: 0xFFFF8800,
+        visible: false,
+        collapsed: true,
+        offsetX: 12,
+        offsetY: -8,
+        rotation: math.pi / 6,
+        scaleX: 1.5,
+        scaleY: 0.5,
+      );
+      project.groups.add(group);
+      final a = VectorShape(name: 'Oeil gauche', groupId: group.id);
+      a.layers.add(ShapeLayer(name: 'Cercle', kind: ShapeKind.circle));
+      final b = VectorShape(name: 'Oeil droit', groupId: group.id);
+      b.layers.add(ShapeLayer(name: 'Cercle', kind: ShapeKind.circle));
+      final c = VectorShape(name: 'Libre');
+      c.layers.add(ShapeLayer(name: 'Rect', kind: ShapeKind.rect));
+      project.shapes.addAll(<VectorShape>[a, b, c]);
+
+      final json = SimpleAnimationFormat.toJson(project);
+      expect(json['version'], 6);
+      final groups = json['groups'] as List;
+      expect(groups.length, 1);
+      final groupJson = groups.single as Map<String, Object?>;
+      expect(groupJson['name'], 'Tête');
+      expect(groupJson['color'], '#FF8800');
+      expect(groupJson['visible'], isFalse);
+      expect(groupJson['collapsed'], isTrue);
+      expect(groupJson['x'], 12);
+      expect(groupJson['y'], -8);
+      expect(groupJson['scaleX'], 1.5);
+      expect(groupJson['scaleY'], 0.5);
+      // Les formes référencent le groupe par son NOM.
+      final shapes = json['shapes'] as List;
+      expect((shapes[0] as Map)['groupId'], 'Tête');
+      expect((shapes[1] as Map)['groupId'], 'Tête');
+      expect((shapes[2] as Map).containsKey('groupId'), isFalse);
+
+      final imported = SimpleAnimationFormat.fromJson(json);
+      expect(imported.groups.length, 1);
+      final importedGroup = imported.groups.single;
+      expect(importedGroup.name, 'Tête');
+      expect(importedGroup.colorValue, 0xFFFF8800);
+      expect(importedGroup.visible, isFalse);
+      expect(importedGroup.collapsed, isTrue);
+      expect(importedGroup.offsetX, 12);
+      expect(importedGroup.offsetY, -8);
+      expect(importedGroup.scaleX, 1.5);
+      expect(importedGroup.scaleY, 0.5);
+      expect(importedGroup.rotation, closeTo(math.pi / 6, 1e-9));
+      // Les deux formes partagent le MÊME groupe importé (id interne).
+      expect(imported.shapes[0].groupId, importedGroup.id);
+      expect(imported.shapes[1].groupId, importedGroup.id);
+      expect(imported.shapes[2].groupId, isNull);
+      // Le nom du groupe survit au round-trip (référence par NOM).
+      expect(imported.groups.single.name, 'Tête');
+    });
+
+    test('groupe inconnu référencé par une forme → erreur explicite', () {
+      final json = <String, Object?>{
+        'version': 6,
+        'name': 'G',
+        'shapes': <Object?>[
+          <String, Object?>{'name': 'A', 'type': 'rect', 'groupId': 'Absent'},
+        ],
+      };
+      expect(
+        () => SimpleAnimationFormat.fromJson(json),
+        throwsA(
+          predicate(
+            (Object? e) => e.toString().contains('groupe « Absent » inconnu'),
+          ),
+        ),
+      );
+    });
+
+    test('groupe vide non exporté et version 1 sans groupe', () {
+      final project = AnimationProject.blank(name: 'Vide');
+      project.groups.add(ShapeGroup(name: 'Orphelin'));
+      final shape = VectorShape(name: 'Seule');
+      shape.layers.add(ShapeLayer(name: 'Rect', kind: ShapeKind.rect));
+      project.shapes.add(shape);
+      final json = SimpleAnimationFormat.toJson(project);
+      expect(json.containsKey('groups'), isFalse);
+      expect(json['version'], 1);
     });
 
     test('zIndex interne ne change pas l’ordre VASF existant', () {

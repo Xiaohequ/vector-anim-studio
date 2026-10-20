@@ -686,6 +686,102 @@ class _StudioScreenState extends State<StudioScreen>
     await _flushSave();
   }
 
+  /// Sliders de la transformation STATIQUE du groupe (décalage, rotation,
+  /// échelle d'axe). Elle tourne autour du centre visuel du groupe et
+  /// s'applique à toutes ses formes ; une entrée d'annulation par geste.
+  Widget _groupTransformRows(ShapeGroup group) {
+    Widget row(
+      String label,
+      double value,
+      double min,
+      double max,
+      int divisions,
+      void Function(double) onChanged,
+      String Function(double) format,
+    ) {
+      return Row(
+        children: <Widget>[
+          SizedBox(
+            width: 92,
+            child: Text(label, style: const TextStyle(fontSize: 12)),
+          ),
+          Expanded(
+            child: Slider(
+              min: min,
+              max: max,
+              divisions: divisions,
+              value: value.clamp(min, max),
+              onChanged: (next) {
+                _pushUndo();
+                setState(() => onChanged(next));
+                _flushSave();
+              },
+            ),
+          ),
+          SizedBox(
+            width: 44,
+            child: Text(
+              format(value),
+              textAlign: TextAlign.end,
+              style: const TextStyle(fontSize: 10, color: Colors.white54),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        row(
+          AppStrings.text('Décalage X'),
+          group.offsetX,
+          -1000,
+          1000,
+          400,
+          (v) => group.offsetX = v,
+          (v) => '${v.round()}',
+        ),
+        row(
+          AppStrings.text('Décalage Y'),
+          group.offsetY,
+          -1000,
+          1000,
+          400,
+          (v) => group.offsetY = v,
+          (v) => '${v.round()}',
+        ),
+        row(
+          AppStrings.text('Rotation'),
+          group.rotation * 180 / math.pi,
+          -180,
+          180,
+          360,
+          (v) => group.rotation = v * math.pi / 180,
+          (v) => '${v.round()}°',
+        ),
+        row(
+          AppStrings.text('Échelle X'),
+          group.scaleX,
+          0.1,
+          4,
+          78,
+          (v) => group.scaleX = v,
+          (v) => v.toStringAsFixed(2),
+        ),
+        row(
+          AppStrings.text('Échelle Y'),
+          group.scaleY,
+          0.1,
+          4,
+          78,
+          (v) => group.scaleY = v,
+          (v) => v.toStringAsFixed(2),
+        ),
+      ],
+    );
+  }
+
   Future<void> _createGroup() async {
     final project = _project;
     if (project == null) return;
@@ -3308,6 +3404,8 @@ class _StudioScreenState extends State<StudioScreen>
               destructive: true,
             ),
           ),
+          _toolSection(AppStrings.text('Transformation du groupe')),
+          _groupTransformRows(selectedGroup),
         ],
         _toolSection(AppStrings.text('Ajouter')),
         Builder(

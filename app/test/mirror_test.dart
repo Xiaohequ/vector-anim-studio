@@ -302,17 +302,17 @@ void main() {
     expect(imported[1].flipH, isFalse);
   });
 
-  test('vasf : version 6 refusée (message à jour)', () {
+  test('vasf : version 7 refusée (message à jour)', () {
     try {
       SimpleAnimationFormat.fromJson(<String, Object?>{
-        'version': 6,
+        'version': 7,
         'shapes': <Object?>[
           <String, Object?>{'name': 'Bloc', 'type': 'rect'},
         ],
       });
       fail('SimpleFormatException attendu');
     } on SimpleFormatException catch (error) {
-      expect(error.toString(), contains('1, 2, 3, 4 ou 5'));
+      expect(error.toString(), contains('1, 2, 3, 4, 5 ou 6'));
     }
   });
 

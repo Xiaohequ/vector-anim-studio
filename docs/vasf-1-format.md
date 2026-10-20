@@ -1,4 +1,4 @@
-# VASF — Keyform Studio simple JSON format (v1 + extensions v2, v3, v4, v5)
+# VASF — Keyform Studio simple JSON format (v1 + extensions v2, v3, v4, v5, v6)
 
 VASF is a compact, LLM-friendly JSON format for describing a complete 2D vector
 animation (shapes, keyframes, optional skeleton rig) that the **Keyform Studio**
@@ -21,8 +21,8 @@ Rules of thumb for generating a valid file:
   keyframe fields.
 - The importer collects ALL problems and reports them in French — fix them and retry.
 - Nested project instances are not representable in VASF-1 (ignored on export).
-- The VASF-2 through VASF-5 extensions (below) are optional: a `version: 1`
-  file stays valid. The importer accepts versions 1 to 5.
+- The VASF-2 through VASF-6 extensions (below) are optional: a `version: 1`
+  file stays valid. The importer accepts versions 1 to 6.
 
 # Top level
 
@@ -514,6 +514,56 @@ rectangles, on a flat shape or on a primitive inside `layers[]`:
   a non-default corner selection. `zIndex` is app-internal and does not alter
   the existing VASF array draw order.
 
+# VASF-6 extensions — element groups
+
+VASF-6 adds named element groups. A group organises shapes in the timeline
+(name, track colour, collapse state, visibility) and carries a static
+transform. Shapes reference their group **by name**:
+
+```json
+{
+  "version": 6,
+  "name": "Grouped face",
+  "groups": [
+    {"name": "Tête", "color": "#FF8800", "visible": true,
+     "collapsed": false, "x": 0, "y": 0, "rotation": 0,
+     "scaleX": 1, "scaleY": 1}
+  ],
+  "shapes": [
+    {"name": "Oeil gauche", "type": "circle", "width": 40, "height": 40,
+     "x": 150, "y": 300, "end": 2, "groupId": "Tête"},
+    {"name": "Oeil droit", "type": "circle", "width": 40, "height": 40,
+     "x": 210, "y": 300, "end": 2, "groupId": "Tête"}
+  ]
+}
+```
+
+| group field | type | default | notes |
+|---|---|---|---|
+| name | string | required | unique; shapes reference it through `groupId` |
+| color | string | `#2DD4BF` | timeline track colour (alias `"$nom"` allowed) |
+| visible | bool | true | `false` hides every shape of the group |
+| collapsed | bool | false | timeline fold state (editor only) |
+| x / y | number | 0 | static group offset |
+| rotation | number | 0 | static group rotation, degrees |
+| scaleX / scaleY | number | 1 | static group axis factors |
+
+- `groupId` on a shape is the group **NAME**, not an id: the importer resolves
+  it after creating the groups, so the JSON key order does not matter. An
+  unknown name is a collected error.
+- A group holds no keyframes and no bones: its time span is DERIVED from its
+  children (earliest start, latest end). Group visibility multiplies the
+  shape's own visibility.
+- The static group transform (`x`/`y`/`rotation`/`scaleX`/`scaleY`) IS applied
+  by the renderer: it wraps the pose of every shape of the group and turns
+  around the group's VISUAL CENTRE — the mean of its children's rest positions
+  (`x`/`y` base values), not the canvas origin. A neutral group (all defaults)
+  renders exactly like ungrouped shapes.
+- Groups are flat: no nested groups, and a shape belongs to at most one group.
+- The exporter writes `version: 6` as soon as a shape carries a `groupId`, and
+  only exports groups that actually hold at least one shape (an empty group is
+  dropped). Default-valued group fields are omitted.
+
 # Limitations
 
 - VASF-2 layer pose is static: a layer's x/y/rotation/scale/opacity cannot be
@@ -531,9 +581,10 @@ rectangles, on a flat shape or on a primitive inside `layers[]`:
 - VASF-3 chains of ≥ 3 bones solve with CCD: the end effector lands on the
   target but the elbow side is not guaranteed (`bend` only controls the
   2-bone analytic solver).
-- The export writes `version: 5` when VASF-5 rectangle-corner settings are
-  used; otherwise `version: 4` for content mirroring, `version: 3` for shape
-  keyframe colors/morph or bone `move`, and `version: 2` for the other v2
-  extensions (several layers, axis factor ≠ 1, pivot ≠ 0, `cubic-bezier`,
-  layer binding). Single-layer shapes without extensions export flat (v1);
+- The export writes `version: 6` when a shape belongs to a group, otherwise
+  `version: 5` when VASF-5 rectangle-corner settings are used, otherwise
+  `version: 4` for content mirroring, `version: 3` for shape keyframe
+  colors/morph or bone `move`, and `version: 2` for the other v2 extensions
+  (several layers, axis factor ≠ 1, pivot ≠ 0, `cubic-bezier`, layer
+  binding). Single-layer shapes without extensions export flat (v1);
   palette/defs are never exported (colors are expanded).

@@ -187,6 +187,24 @@ class ScenePainter extends CustomPainter {
       if (rigPose != null) {
         frame = rigPose.frameOf(_boneIdForShapeFrame(rig!, shape));
       }
+      // Transformation de groupe (v0.39) : statique, appliquée autour du
+      // centre visuel du groupe — elle enveloppe la pose de la forme.
+      final group = project.groupById(shape.groupId);
+      final groupCenter = group == null
+          ? null
+          : project.groupCenter(group.id);
+      final hasGroupTransform =
+          group != null &&
+          groupCenter != null &&
+          (group.offsetX != 0 ||
+              group.offsetY != 0 ||
+              group.rotation != 0 ||
+              group.scaleX != 1 ||
+              group.scaleY != 1);
+      if (hasGroupTransform) {
+        canvas.save();
+        _applyGroupTransform(canvas, group, groupCenter);
+      }
       _paintShape(
         canvas,
         shape,
@@ -196,6 +214,7 @@ class ScenePainter extends CustomPainter {
         rigPose: rigPose,
         sampleMs: timeMs,
       );
+      if (hasGroupTransform) canvas.restore();
     }
 
     // Ordre de dessin par os (v0.10) : en projet squelette, les pièces sont
@@ -315,6 +334,17 @@ class ScenePainter extends CustomPainter {
       );
       canvas.restore();
     }
+  }
+
+  /// Transformation STATIQUE d'un groupe d'éléments (v0.39) : décalage,
+  /// rotation et échelle d'axe autour du centre visuel du groupe (moyenne des
+  /// positions de repos de ses fils). Identité quand tout est neutre — le
+  /// painter n'appelle donc la méthode que si un champ diffère du défaut.
+  void _applyGroupTransform(Canvas canvas, ShapeGroup group, Offset center) {
+    canvas.translate(center.dx + group.offsetX, center.dy + group.offsetY);
+    canvas.rotate(group.rotation);
+    canvas.scale(group.scaleX, group.scaleY);
+    canvas.translate(-center.dx, -center.dy);
   }
 
   /// Mouvement rigide de l'os entre son repos et l'instant courant :

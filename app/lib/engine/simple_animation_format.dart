@@ -36,6 +36,9 @@ class SimpleAnimationFormat {
   /// v5 (v0.33) : coins arrondis sélectifs sur les rectangles.
   static const int version5 = 5;
 
+  /// v6 (v0.39) : groupes d'éléments (`groups` + `groupId` sur les formes).
+  static const int version6 = 6;
+
   // Défauts (canvas validé utilisateur : 720×1280, 25 fps).
   static const double defaultWidth = 720;
   static const double defaultHeight = 1280;
@@ -58,6 +61,7 @@ class SimpleAnimationFormat {
     var usesV3 = false;
     var usesV4 = false;
     var usesV5 = false;
+    var usesV6 = false;
     // Une forme avec une liaison de COUCHE est exportée en layers[] (avec
     // une seule couche si besoin) : le nom de couche doit survivre au
     // round-trip pour que « Forme/Couche » reste importable.
@@ -67,6 +71,10 @@ class SimpleAnimationFormat {
               .map((b) => b.shapeId)
               .toSet()
         : <String>{};
+    // Le fichier référence les groupes par NOM (pas par id interne).
+    final groupNames = <String, String>{
+      for (final group in project.groups) group.id: group.name,
+    };
     for (final shape in project.shapes) {
       if (shape.isInstance) continue;
       final forceLayers = layerBoundIds.contains(shape.id);
@@ -79,8 +87,22 @@ class SimpleAnimationFormat {
         usesV5 = true;
         usesV2 = true;
       }
-      shapes.add(_shapeToJson(shape, forceLayers: forceLayers));
+      if (shape.groupId != null) usesV6 = true;
+      shapes.add(
+        _shapeToJson(shape, forceLayers: forceLayers, groupNames: groupNames),
+      );
     }
+    // Groupes d'éléments (v6) : seuls ceux qui portent au moins une forme
+    // sont exportés (un groupe vide n'a pas de sens dans un fichier).
+    final usedGroupIds = <String>{
+      for (final shape in project.shapes)
+        if (shape.groupId != null) shape.groupId!,
+    };
+    final groups = <Map<String, Object?>>[
+      for (final group in project.groups)
+        if (usedGroupIds.contains(group.id)) _groupToJson(group),
+    ];
+    if (groups.isNotEmpty) usesV6 = true;
     if (usesV4) usesV2 = true;
     final rig = project.skeleton;
     if (rig != null) {
@@ -93,7 +115,9 @@ class SimpleAnimationFormat {
       if (rig.bindings.any((b) => b.layerId != null)) usesV2 = true;
     }
     final json = <String, Object?>{
-      'version': usesV5
+      'version': usesV6
+          ? version6
+          : usesV5
           ? version5
           : usesV4
           ? version4
@@ -111,18 +135,37 @@ class SimpleAnimationFormat {
       },
       'shapes': shapes,
     };
+    if (groups.isNotEmpty) json['groups'] = groups;
     if (rig != null) {
       json['skeleton'] = _skeletonToJson(rig, project);
     }
     return json;
   }
 
+  /// Groupe d'éléments (v6) : nom, couleur de piste, visibilité, repliage et
+  /// transformation statique. Les champs aux valeurs par défaut sont omis.
+  static Map<String, Object?> _groupToJson(ShapeGroup group) {
+    final json = <String, Object?>{'name': group.name};
+    if (group.colorValue != 0xFF2DD4BF) {
+      json['color'] = _colorToHex(group.colorValue);
+    }
+    if (!group.visible) json['visible'] = false;
+    if (group.collapsed) json['collapsed'] = true;
+    if (group.offsetX != 0) json['x'] = group.offsetX;
+    if (group.offsetY != 0) json['y'] = group.offsetY;
+    if (group.rotation != 0) json['rotation'] = _radToDeg(group.rotation);
+    if (group.scaleX != 1) json['scaleX'] = group.scaleX;
+    if (group.scaleY != 1) json['scaleY'] = group.scaleY;
+    return json;
+  }
+
   static Map<String, Object?> _shapeToJson(
     VectorShape shape, {
     bool forceLayers = false,
+    Map<String, String> groupNames = const <String, String>{},
   }) {
     if (shape.layers.length > 1 || forceLayers) {
-      return _multiLayerShapeToJson(shape);
+      return _multiLayerShapeToJson(shape, groupNames: groupNames);
     }
     final layer = shape.layers.isEmpty
         ? ShapeLayer(name: 'Couche', kind: ShapeKind.rect)
@@ -133,7 +176,7 @@ class SimpleAnimationFormat {
             !layer.roundTopRight ||
             !layer.roundBottomRight ||
             !layer.roundBottomLeft)) {
-      return _multiLayerShapeToJson(shape);
+      return _multiLayerShapeToJson(shape, groupNames: groupNames);
     }
     final json = <String, Object?>{
       'name': shape.name,
@@ -159,7 +202,21 @@ class SimpleAnimationFormat {
     }
     _addShapeLevelExtras(json, shape);
     _addShapeKeyframes(json, shape, multiLayer: false);
+    _addGroupId(json, shape, groupNames);
     return json;
+  }
+
+  /// Écrit `groupId` avec le NOM du groupe (le fichier ne connaît pas les
+  /// ids internes). Un groupe introuvable est ignoré (forme non groupée).
+  static void _addGroupId(
+    Map<String, Object?> json,
+    VectorShape shape,
+    Map<String, String> groupNames,
+  ) {
+    final id = shape.groupId;
+    if (id == null) return;
+    final name = groupNames[id];
+    if (name != null) json['groupId'] = name;
   }
 
   /// Les champs extras de la forme (axes, pivot, bezier) forcent-ils la v2 ?
@@ -223,7 +280,10 @@ class SimpleAnimationFormat {
   }
 
   /// Forme multi-couches (vasf-2) : chaque couche porte sa primitive.
-  static Map<String, Object?> _multiLayerShapeToJson(VectorShape shape) {
+  static Map<String, Object?> _multiLayerShapeToJson(
+    VectorShape shape, {
+    Map<String, String> groupNames = const <String, String>{},
+  }) {
     final json = <String, Object?>{
       'name': shape.name,
       'layers': [for (final layer in shape.layers) _layerToJson(layer)],
@@ -237,6 +297,7 @@ class SimpleAnimationFormat {
     };
     _addShapeLevelExtras(json, shape);
     _addShapeKeyframes(json, shape, multiLayer: true);
+    _addGroupId(json, shape, groupNames);
     return json;
   }
 
@@ -720,6 +781,7 @@ class _Parse {
     'defs',
     'shapes',
     'skeleton',
+    'groups',
   };
   static const _canvasKnownKeys = {'width', 'height', 'fps', 'background'};
   static const _shapeKnownKeys = {
@@ -753,6 +815,18 @@ class _Parse {
     'roundTopRight',
     'roundBottomRight',
     'roundBottomLeft',
+    'groupId',
+  };
+  static const _groupKnownKeys = {
+    'name',
+    'color',
+    'visible',
+    'collapsed',
+    'x',
+    'y',
+    'rotation',
+    'scaleX',
+    'scaleY',
   };
   static const _boneKnownKeys = {
     'name',
@@ -784,6 +858,15 @@ class _Parse {
 
   late AnimationProject project;
   final _usedShapeNames = <String>{};
+
+  /// Groupes d'éléments (v6) : nom du fichier → groupe créé. Les formes
+  /// référencent un groupe par son NOM (`groupId`), résolu après la création
+  /// des groupes (l'ordre des clés JSON n'est pas garanti).
+  final _groupsByName = <String, ShapeGroup>{};
+
+  /// Formes en attente de rattachement : (chemin, forme, nom de groupe).
+  final _pendingShapeGroups =
+      <({String path, VectorShape shape, String groupName})>[];
 
   // Palette « theme » (alias → couleur) et définitions réutilisables (vasf-2).
   final _palette = <String, int>{};
@@ -860,8 +943,9 @@ class _Parse {
         version != SimpleAnimationFormat.version2 &&
         version != SimpleAnimationFormat.version3 &&
         version != SimpleAnimationFormat.version4 &&
-        version != SimpleAnimationFormat.version5) {
-      problem('version : 1, 2, 3, 4 ou 5 attendu (trouvé $version)');
+        version != SimpleAnimationFormat.version5 &&
+        version != SimpleAnimationFormat.version6) {
+      problem('version : 1, 2, 3, 4, 5 ou 6 attendu (trouvé $version)');
     }
     _checkUnknownFields('racine', json, _topKnownKeys);
     _parseTheme(json['theme']);
@@ -912,7 +996,9 @@ class _Parse {
       backgroundValue: background,
     );
 
+    _parseGroups(json['groups']);
     _parseShapes(json['shapes']);
+    _resolveShapeGroups();
     if (json['skeleton'] != null) {
       _parseSkeleton(json['skeleton']);
     } else if (pendingShapeBinds.isNotEmpty) {
@@ -926,6 +1012,63 @@ class _Parse {
       pendingShapeBinds.clear();
     }
     return project;
+  }
+
+  /// Groupes d'éléments (v6) : `groups` = tableau d'objets nommés. Un nom
+  /// en double est refusé (les formes s'y rattachent par nom).
+  void _parseGroups(Object? raw) {
+    if (raw == null) return;
+    final list = listOf('groups', raw);
+    if (list == null) return;
+    for (var i = 0; i < list.length; i++) {
+      final path = 'groups[$i]';
+      final json = mapOf(path, list[i]);
+      if (json == null) continue;
+      _checkUnknownFields(path, json, _groupKnownKeys);
+      final name = strAt('$path.name', json['name'], fallback: '');
+      if (name.trim().isEmpty) {
+        problem('$path.name : nom de groupe non vide attendu');
+        continue;
+      }
+      if (_groupsByName.containsKey(name)) {
+        problem('$path.name : groupe « $name » déjà défini (noms uniques)');
+        continue;
+      }
+      final group = ShapeGroup(
+        name: name,
+        colorValue: colorRef(
+          '$path.color',
+          json['color'],
+          fallback: 0xFF2DD4BF,
+        ),
+        visible: boolAt('$path.visible', json['visible'], fallback: true),
+        collapsed: boolAt('$path.collapsed', json['collapsed'], fallback: false),
+        offsetX: numAt('$path.x', json['x'], fallback: 0),
+        offsetY: numAt('$path.y', json['y'], fallback: 0),
+        rotation: _degToRad(numAt('$path.rotation', json['rotation'], fallback: 0)),
+        scaleX: numAt('$path.scaleX', json['scaleX'], fallback: 1),
+        scaleY: numAt('$path.scaleY', json['scaleY'], fallback: 1),
+      );
+      _groupsByName[name] = group;
+      project.groups.add(group);
+    }
+  }
+
+  /// Rattache les formes à leur groupe (résolution par NOM, après création
+  /// des groupes). Un nom inconnu est une erreur explicite.
+  void _resolveShapeGroups() {
+    for (final pending in _pendingShapeGroups) {
+      final group = _groupsByName[pending.groupName];
+      if (group == null) {
+        problem(
+          '${pending.path}.groupId : groupe « ${pending.groupName} » inconnu '
+          '(déclarer une entrée « groups » de ce nom)',
+        );
+        continue;
+      }
+      pending.shape.groupId = group.id;
+    }
+    _pendingShapeGroups.clear();
   }
 
   void _parseShapes(Object? raw) {
@@ -1040,6 +1183,20 @@ class _Parse {
       basePointsCenter: basePointsCenter,
     );
     _applyShapeCycle(path, json, shape);
+    // Groupe d'éléments (v6) : référence par NOM, résolue après la création
+    // de tous les groupes (l'ordre des clés JSON n'est pas garanti).
+    final groupRaw = json['groupId'];
+    if (groupRaw != null) {
+      if (groupRaw is String && groupRaw.trim().isNotEmpty) {
+        _pendingShapeGroups.add((
+          path: path,
+          shape: shape,
+          groupName: groupRaw.trim(),
+        ));
+      } else {
+        problem('$path.groupId : nom de groupe attendu (chaîne non vide)');
+      }
+    }
     project.shapes.add(shape);
   }
 
