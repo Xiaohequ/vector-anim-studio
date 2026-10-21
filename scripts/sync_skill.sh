@@ -3,8 +3,8 @@
 # PROPRE dépôt public (Xiaohequ/keyformstudio-animation-json, publié sur
 # ClawHub). Ce dépôt-ci reste la source de vérité de la spec et des exemples.
 #
-#   scripts/sync_skill.sh            copie docs/ -> dépôt du skill, puis
-#                                    dépôt du skill -> workspace de l'agent
+#   scripts/sync_skill.sh            copie docs/ -> dépôt du skill (le workspace
+#                                    de l'agent, lui, installe via ClawHub)
 #   scripts/sync_skill.sh --check    vérifie seulement (code retour 1 si dérive)
 #   scripts/sync_skill.sh --pull     copie dépôt du skill -> docs/ (édition faite
 #                                    côté skill, à relire avant commit)
@@ -35,15 +35,6 @@ if [ ! -d "$SKILL_REPO" ]; then
   printf '  ou définir SKILL_REPO=/chemin/vers/%s\n' "$NAME" >&2
   exit 2
 fi
-
-# Copie récursive sans rsync (absent de l'image nanobot).
-copy_tree() {
-  local from="$1" to="$2"
-  rm -rf "$to"
-  mkdir -p "$to"
-  (cd "$from" && tar -cf - --exclude='__pycache__' --exclude='*.pyc' .) \
-    | (cd "$to" && tar -xf -)
-}
 
 # 1. references/ du dépôt du skill doit refléter docs/ : c'est le miroir publié
 #    de la spec. Le skill ne publie QUE la spec et l'exemple complet ; les
@@ -97,12 +88,12 @@ if [ "$MODE" = "pull" ]; then
   exit 0
 fi
 
-# push : docs/ -> dépôt du skill, puis dépôt du skill -> workspace de l'agent.
+# push : docs/ -> dépôt du skill. Le workspace de l'agent n'est PAS touché :
+# il installe le skill depuis ClawHub (`clawhub install <slug>`), sinon la
+# copie locale masquerait la version publiée.
 for base in $PUBLISHED; do
   cp "$ROOT/docs/$base" "$SKILL_REPO/references/$base"
 done
 printf '✔ docs/ copié vers %s/references\n' "$SKILL_REPO"
-
-mkdir -p "$WORKSPACE/skills"
-copy_tree "$SKILL_REPO" "$DST"
-printf '✔ skill copié vers %s\n' "$DST"
+printf '→ publier puis, côté agent : clawhub install %s --workdir %s\n' \
+  "$NAME" "$WORKSPACE"
