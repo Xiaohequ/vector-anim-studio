@@ -49,7 +49,6 @@ vector_anim_studio/
 ├─ docs/PLAN.md                         # décisions techniques
 ├─ docs/vasf-1-format.md                # spec du format d'échange VASF (source de vérité)
 ├─ scripts/flutter_docker.sh            # CLI Flutter via le conteneur cirruslabs
-├─ scripts/sync_skill.sh                # synchronise le skill (dépôt séparé + workspace)
 └─ tmp/                                 # artefacts de build (non versionné)
 ```
 
@@ -71,20 +70,9 @@ Le build Android de référence est fait par **GitHub Actions** (`.github/workfl
 
 Le skill `keyformstudio-animation-json` apprend à un agent à générer et valider un fichier VASF importable. Il vit dans son **propre dépôt public** — https://github.com/Xiaohequ/keyformstudio-animation-json — et est publié sur ClawHub.
 
-Ce dépôt-ci reste la source de vérité : `docs/vasf-1-format.md` et `docs/vasf-example.json` (un exemple unique couvrant toutes les fonctionnalités) sont recopiés dans `references/` du dépôt du skill. Les fichiers `docs/vasf-*-example.json` restent des fixtures des tests Flutter.
+Ce dépôt-ci reste la source de vérité du format : `docs/vasf-1-format.md` (spec) et `docs/vasf-example.json` (exemple unique couvrant toutes les fonctionnalités). Les fichiers `docs/vasf-*-example.json` restent des fixtures des tests Flutter.
 
-```bash
-# Vérifier la cohérence (references/ du skill = docs/, frontmatter, validateur)
-scripts/sync_skill.sh --check
-
-# Recopier docs/ vers le dépôt du skill, puis vers le workspace de l'agent
-scripts/sync_skill.sh
-
-# Rapatrier une édition faite côté skill (à relire avant commit)
-scripts/sync_skill.sh --pull
-```
-
-Le dépôt du skill est cherché dans `$SKILL_REPO`, sinon dans un dossier voisin (`../keyformstudio-animation-json`). Le frontmatter de son `SKILL.md` porte `version` (skill), `vasf` (version de format couverte) et `app` (version d'appli de référence) ; son historique est dans son `CHANGELOG.md`. Une évolution du format touche `docs/`, le code et les tests dans le **même commit**, puis on lance `sync_skill.sh` et on publie une nouvelle version du skill. La CI de ce dépôt exécute `sync_skill.sh --check` à chaque build.
+Une évolution du format touche `docs/`, le code et les tests dans le **même commit** ; la spec et l'exemple sont ensuite recopiés dans le dépôt du skill, qui publie une nouvelle version sur ClawHub.
 
 ## Contraintes d'environnement
 

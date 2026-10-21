@@ -62,10 +62,6 @@ jobs:
       - name: Version de Flutter
         run: flutter --version
 
-      - name: Cohérence du skill VASF
-        working-directory: .
-        run: scripts/sync_skill.sh --check
-
       - name: Version de l'application
         id: version
         working-directory: .
