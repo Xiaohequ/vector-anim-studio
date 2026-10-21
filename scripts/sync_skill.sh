@@ -48,7 +48,7 @@ copy_tree() {
 # 1. references/ du dépôt du skill doit refléter docs/ : c'est le miroir publié
 #    de la spec. Le skill ne publie QUE la spec et l'exemple complet ; les
 #    fichiers d'exemples séparés de docs/ restent des fixtures des tests Flutter.
-PUBLISHED="vasf-1-format.md vasf-example.json"
+PUBLISHED="vasf-example.json"
 for base in $PUBLISHED; do
   if [ ! -f "$ROOT/docs/$base" ]; then
     printf '✘ docs/%s manquant\n' "$base" >&2
@@ -62,8 +62,8 @@ for base in $PUBLISHED; do
   fi
 done
 
-# 2. Le frontmatter du skill doit déclarer version / vasf / app.
-for key in version vasf app; do
+# 2. Le frontmatter du skill doit déclarer les clés attendues.
+for key in version description license homepage; do
   if ! grep -q "^$key:" "$SKILL_REPO/SKILL.md"; then
     printf '✘ frontmatter : clé « %s » absente de SKILL.md\n' "$key" >&2
     fail=1
