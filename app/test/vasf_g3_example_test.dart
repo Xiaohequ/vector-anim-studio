@@ -18,7 +18,7 @@ void main() {
   testWidgets('exemple G3 : couleur, morph, chaîne 3 os, move (rendu mesuré)', (
     tester,
   ) async {
-    final raw = File('../docs/vasf-3-example.json').readAsStringSync();
+    final raw = File('test/fixtures/vasf-3-example.json').readAsStringSync();
     final project = SimpleAnimationFormat.fromJson(
       jsonDecode(raw) as Map<String, dynamic>,
       fallbackName: 'exemple',

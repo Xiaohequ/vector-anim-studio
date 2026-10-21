@@ -16,7 +16,7 @@ void main() {
   testWidgets('exemple G2 : pivot de la porte au bord gauche (rendu mesuré)', (
     tester,
   ) async {
-    final raw = File('../docs/vasf-2-g2-example.json').readAsStringSync();
+    final raw = File('test/fixtures/vasf-2-g2-example.json').readAsStringSync();
     final project = SimpleAnimationFormat.fromJson(
       jsonDecode(raw) as Map<String, dynamic>,
       fallbackName: 'exemple',

@@ -9,10 +9,10 @@ v0.9.0, l'**animation squelette** (rig maître).
 - **Skill agent dans son propre dépôt (21/10)** : `keyformstudio-animation-json`
   vit dans https://github.com/Xiaohequ/keyformstudio-animation-json (public, MIT)
   et est publié sur ClawHub ; le workspace de l'agent l'installe via
-  `clawhub install`. Ce dépôt-ci reste la source de vérité du format
-  (`docs/vasf-1-format.md`, `docs/vasf-example.json`). Une évolution du format
-  touche docs + code + tests dans le MÊME commit, puis la spec et l'exemple sont
-  recopiés dans le dépôt du skill et une nouvelle version est publiée.
+  `clawhub install`. La référence du format et l'exemple vivent dans ce dépôt de
+  skill ; ce dépôt-ci ne garde que le code et les tests (fixtures dans
+  `app/test/fixtures/`). Une évolution du format touche code + tests dans le
+  MÊME commit, puis le skill est mis à jour et republié.
 - **v0.38.4 (18/10)** : timeline — le défilement ne reconstruit plus tout le
   Studio. Le coût restant n'était pas dans la timeline mais dans son câblage :
   chaque pixel de défilement appelait `onZoomChanged`, que le Studio branchait
@@ -139,7 +139,7 @@ v0.9.0, l'**animation squelette** (rig maître).
   points, translation d'os, IK chaînes N os, schéma DB v6). v0.14.0
   (import par fichier, reciblage, rendu CI) et v0.13.2 (persistance
   pivot/axes/bézier, schéma v5) validées appareil le 27/09.
-- Détails techniques : `docs/PLAN.md` · Notes de version : `RELEASE_NOTES.md`
+- Notes de version : `RELEASE_NOTES.md`
 
 ---
 

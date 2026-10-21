@@ -5,8 +5,9 @@ import '../models/animation.dart';
 import '../models/skeleton.dart';
 
 /// Format d'échange « vasf » : un JSON SIMPLE, pensé pour être ÉCRIT par un
-/// agent IA (ou à la main), converti vers/depuis le projet interne. Spécification
-/// complète et exemples : `docs/vasf-1-format.md`.
+/// agent IA (ou à la main), converti vers/depuis le projet interne.
+/// Spécification complète et exemples : skill `keyformstudio-animation-json`
+/// (https://github.com/Xiaohequ/keyformstudio-animation-json).
 ///
 /// Contrats : temps en secondes, couleurs « #RRGGBB » (ou alias « $nom » de la
 /// palette `theme`), angles en DEGRÉS monde (y vers le bas, positif = horaire),

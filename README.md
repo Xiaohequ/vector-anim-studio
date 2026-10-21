@@ -46,8 +46,6 @@ vector_anim_studio/
 │  │  ├─ engine/export_service.dart     # MP4, GIF, PNG, JSON
 │  │  └─ ui/                            # home_screen, studio_screen, shape_editor_screen, timeline_view, palette
 │  └─ test/                             # repository, timeline layout, modèle, widgets
-├─ docs/PLAN.md                         # décisions techniques
-├─ docs/vasf-1-format.md                # spec du format d'échange VASF (source de vérité)
 ├─ scripts/flutter_docker.sh            # CLI Flutter via le conteneur cirruslabs
 └─ tmp/                                 # artefacts de build (non versionné)
 ```
@@ -68,11 +66,9 @@ Le build Android de référence est fait par **GitHub Actions** (`.github/workfl
 
 ## Skill agent VASF
 
-Le skill `keyformstudio-animation-json` apprend à un agent à générer et valider un fichier VASF importable. Il vit dans son **propre dépôt public** — https://github.com/Xiaohequ/keyformstudio-animation-json — et est publié sur ClawHub.
+Le skill `keyformstudio-animation-json` apprend à un agent à générer et valider un fichier VASF importable. Il vit dans son **propre dépôt public** — https://github.com/Xiaohequ/keyformstudio-animation-json — et est publié sur ClawHub ; le workspace de l'agent l'installe via `clawhub install`.
 
-Ce dépôt-ci reste la source de vérité du format : `docs/vasf-1-format.md` (spec) et `docs/vasf-example.json` (exemple unique couvrant toutes les fonctionnalités). Les fichiers `docs/vasf-*-example.json` restent des fixtures des tests Flutter.
-
-Une évolution du format touche `docs/`, le code et les tests dans le **même commit** ; la spec et l'exemple sont ensuite recopiés dans le dépôt du skill, qui publie une nouvelle version sur ClawHub.
+La référence du format (champs, défauts, limites) et un exemple complet vivent dans ce dépôt de skill, pas ici. Une évolution du format touche le code et les tests de ce dépôt dans le **même commit**, puis le skill est mis à jour et republié.
 
 ## Contraintes d'environnement
 
