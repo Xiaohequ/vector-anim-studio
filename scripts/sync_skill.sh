@@ -45,14 +45,18 @@ copy_tree() {
     | (cd "$to" && tar -xf -)
 }
 
-# 1. references/ du dépôt du skill doit refléter docs/ (mêmes fichiers, même
-#    contenu) : c'est le miroir publié de la spec.
-for f in "$ROOT"/docs/vasf-*.md "$ROOT"/docs/vasf-*.json; do
-  base="$(basename "$f")"
-  if [ ! -f "$SKILL_REPO/references/$base" ]; then
+# 1. references/ du dépôt du skill doit refléter docs/ : c'est le miroir publié
+#    de la spec. Le skill ne publie QUE la spec et l'exemple complet ; les
+#    fichiers d'exemples séparés de docs/ restent des fixtures des tests Flutter.
+PUBLISHED="vasf-1-format.md vasf-example.json"
+for base in $PUBLISHED; do
+  if [ ! -f "$ROOT/docs/$base" ]; then
+    printf '✘ docs/%s manquant\n' "$base" >&2
+    fail=1
+  elif [ ! -f "$SKILL_REPO/references/$base" ]; then
     printf '✘ references/%s manquant dans le dépôt du skill\n' "$base" >&2
     fail=1
-  elif ! diff -q "$f" "$SKILL_REPO/references/$base" >/dev/null; then
+  elif ! diff -q "$ROOT/docs/$base" "$SKILL_REPO/references/$base" >/dev/null; then
     printf '✘ references/%s diffère de docs/%s\n' "$base" "$base" >&2
     fail=1
   fi
@@ -66,10 +70,10 @@ for key in version vasf app; do
   fi
 done
 
-# 3. Le validateur du skill doit accepter l'exemple VASF-6.
+# 3. Le validateur du skill doit accepter l'exemple publié.
 if ! python3 "$SKILL_REPO/scripts/validate_vasf.py" \
-    "$ROOT/docs/vasf-6-example.json" >/dev/null; then
-  printf '✘ validate_vasf.py refuse docs/vasf-6-example.json\n' >&2
+    "$ROOT/docs/vasf-example.json" >/dev/null; then
+  printf '✘ validate_vasf.py refuse docs/vasf-example.json\n' >&2
   fail=1
 fi
 
@@ -86,16 +90,16 @@ if [ "$fail" -ne 0 ]; then
 fi
 
 if [ "$MODE" = "pull" ]; then
-  for f in "$SKILL_REPO"/references/*; do
-    cp "$f" "$ROOT/docs/$(basename "$f")"
+  for base in $PUBLISHED; do
+    cp "$SKILL_REPO/references/$base" "$ROOT/docs/$base"
   done
   printf '✔ docs/ rapatrié depuis %s — relire puis committer\n' "$SKILL_REPO"
   exit 0
 fi
 
 # push : docs/ -> dépôt du skill, puis dépôt du skill -> workspace de l'agent.
-for f in "$ROOT"/docs/vasf-*.md "$ROOT"/docs/vasf-*.json; do
-  cp "$f" "$SKILL_REPO/references/$(basename "$f")"
+for base in $PUBLISHED; do
+  cp "$ROOT/docs/$base" "$SKILL_REPO/references/$base"
 done
 printf '✔ docs/ copié vers %s/references\n' "$SKILL_REPO"
 

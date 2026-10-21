@@ -71,7 +71,7 @@ Le build Android de référence est fait par **GitHub Actions** (`.github/workfl
 
 Le skill `keyformstudio-animation-json` apprend à un agent à générer et valider un fichier VASF importable. Il vit dans son **propre dépôt public** — https://github.com/Xiaohequ/keyformstudio-animation-json — et est publié sur ClawHub.
 
-Ce dépôt-ci reste la source de vérité : `docs/vasf-1-format.md` et `docs/vasf-*.json` sont la spec et les exemples officiels, recopiés dans `references/` du dépôt du skill.
+Ce dépôt-ci reste la source de vérité : `docs/vasf-1-format.md` et `docs/vasf-example.json` (un exemple unique couvrant toutes les fonctionnalités) sont recopiés dans `references/` du dépôt du skill. Les fichiers `docs/vasf-*-example.json` restent des fixtures des tests Flutter.
 
 ```bash
 # Vérifier la cohérence (references/ du skill = docs/, frontmatter, validateur)
